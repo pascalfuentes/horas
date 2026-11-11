@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 /**
  * Espelho em Drizzle das migrations SQL em `migrations/`.
@@ -257,9 +257,18 @@ export const timeProject = sqliteTable(
     color: text("color").notNull().default("#3b82f6"),
     archived: integer("archived", { mode: "boolean" }).notNull().default(false),
     createdAt: text("createdAt").notNull(),
+    /** Valor por hora. NULL = usa o padrão do workspace (migration 0007). */
+    hourlyRate: real("hourlyRate"),
   },
   (t) => [uniqueIndex("time_project_workspace_name_idx").on(t.workspaceId, t.name)],
 );
+
+/** Moeda e taxa padrão do workspace — ver migration 0007. */
+export const timeSettings = sqliteTable("time_settings", {
+  workspaceId: text("workspaceId").primaryKey().references(() => organization.id, { onDelete: "cascade" }),
+  currency: text("currency").notNull().default("BRL"),
+  defaultRate: real("defaultRate").notNull().default(0),
+});
 
 export const timeEntry = sqliteTable(
   "time_entry",

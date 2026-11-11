@@ -51,6 +51,9 @@ export async function handleHoras(
     project: q.get("project"),
     project_id: q.get("project_id"),
     q: q.get("q"),
+    billable: q.get("billable"),
+    tag: q.get("tag"),
+    client: q.get("client"),
   };
 
   try {
@@ -63,10 +66,17 @@ export async function handleHoras(
 
     if (recurso === "summary" && !id && metodo === "GET") return json(await store.summary(filtro));
 
+    if (recurso === "tags" && !id && metodo === "GET") return json(await store.listTags());
+
+    if (recurso === "settings" && !id) {
+      if (metodo === "GET") return json(await store.getSettings());
+      if (metodo === "PATCH") return json(await store.updateSettings(await corpo(request)));
+    }
+
     if (recurso === "export.csv" && !id && metodo === "GET") {
       const entradas = await store.listEntries({ ...filtro, limit: 5000 });
       const linhas = [
-        ["id", "descricao", "projeto", "cliente", "tags", "faturavel", "inicio", "fim", "horas"].join(","),
+        ["id", "descricao", "projeto", "cliente", "tags", "faturavel", "inicio", "fim", "horas", "valor"].join(","),
         ...entradas.map((e) =>
           [
             e.id,
@@ -78,6 +88,7 @@ export async function handleHoras(
             e.start,
             e.end ?? "",
             (e.duration_seconds / 3600).toFixed(2),
+            e.amount.toFixed(2),
           ].join(","),
         ),
       ];

@@ -95,6 +95,47 @@
   }
 
   /**
+   * Valor em dinheiro na moeda do workspace.
+   * @param {number} n
+   * @param {string} currency Código ISO 4217.
+   * @returns {string}
+   */
+  function money(n, currency) {
+    try {
+      return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: currency || 'BRL' }).format(n || 0);
+    } catch (e) {
+      return (n || 0).toFixed(2);
+    }
+  }
+
+  /**
+   * Lê uma duração digitada: "1:30", "1h30", "1h 30m", "45m", "1,5" (horas) ou "90" (minutos).
+   * @param {string} text
+   * @returns {number|null} Segundos, ou null se não deu para entender.
+   */
+  function parseDuration(text) {
+    const t = String(text || '').trim().toLowerCase().replace(',', '.');
+    if (!t) return null;
+    let m = t.match(/^(\d+):(\d{1,2})(?::(\d{1,2}))?$/);
+    if (m) return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3] || 0);
+    m = t.match(/^(?:(\d+(?:\.\d+)?)\s*h)?\s*(?:(\d+)\s*(?:m|min)?)?$/);
+    if (m && /h|m/.test(t) && (m[1] || m[2])) return Math.round(Number(m[1] || 0) * 3600) + Number(m[2] || 0) * 60;
+    if (/^\d+\.\d+$/.test(t)) return Math.round(Number(t) * 3600);
+    if (/^\d+$/.test(t)) return Number(t) * 60;
+    return null;
+  }
+
+  /**
+   * Segundos -> "1:30" (para campo de duração).
+   * @param {number} s
+   * @returns {string}
+   */
+  function hm(s) {
+    const m = Math.round(s / 60);
+    return Math.floor(m / 60) + ':' + pad(m % 60);
+  }
+
+  /**
    * Data local -> "YYYY-MM-DD".
    * @param {Date} d
    * @returns {string}
@@ -170,6 +211,99 @@
     return s;
   }
 
+  /**
+   * Diálogo de lançamento: manual (sem `entry`) ou edição. Usado no timer e
+   * no relatório detalhado.
+   * @param {{entry?: object, projects: object[], tags?: string[], defaults?: {description?: string, project_id?: number|null}, onDone: function(): Promise<void>}} opts
+   * @returns {void}
+   */
+  function entryDialog(opts) {
+    const entry = opts.entry;
+    const defaults = opts.defaults || {};
+    const start = entry ? new Date(entry.start) : new Date(Date.now() - 3600000);
+    const end = entry ? new Date(entry.end) : new Date();
+    const t = function (d) { return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+    const f = {
+      desc: /** @type {HTMLInputElement} */ (el('input', { type: 'text', id: 'hd-desc', maxlength: '500', value: entry ? entry.description : defaults.description || '' })),
+      proj: projectSelect(opts.projects, entry ? entry.project_id : defaults.project_id || null),
+      tags: /** @type {HTMLInputElement} */ (el('input', { type: 'text', id: 'hd-tags', list: 'hd-taglist', placeholder: 'separadas por vírgula', autocomplete: 'off', value: entry ? entry.tags.join(', ') : '' })),
+      date: /** @type {HTMLInputElement} */ (el('input', { type: 'date', id: 'hd-date', required: true, value: dayKey(start) })),
+      from: /** @type {HTMLInputElement} */ (el('input', { type: 'time', id: 'hd-from', required: true, value: t(start) })),
+      to: /** @type {HTMLInputElement} */ (el('input', { type: 'time', id: 'hd-to', required: true, value: t(end) })),
+      dur: /** @type {HTMLInputElement} */ (el('input', { type: 'text', id: 'hd-dur', inputmode: 'text', placeholder: '1:30, 1h30 ou 90', autocomplete: 'off' })),
+      bill: /** @type {HTMLInputElement} */ (el('input', { type: 'checkbox', id: 'hd-bill', checked: entry ? entry.billable : false })),
+    };
+    f.proj.id = 'hd-proj';
+
+    /** Início e fim como datas; fim antes do início = terminou depois da meia-noite. @returns {Date[]} */
+    function range() {
+      const s = new Date(f.date.value + 'T' + f.from.value);
+      const e = new Date(f.date.value + 'T' + f.to.value);
+      if (e <= s) e.setDate(e.getDate() + 1);
+      return [s, e];
+    }
+    const syncDur = function () { const r = range(); if (!isNaN(r[1] - r[0])) f.dur.value = hm((r[1] - r[0]) / 1000); };
+    syncDur();
+    [f.from, f.to, f.date].forEach(function (i) { i.addEventListener('change', syncDur); });
+    // Digitar a duração move o FIM, mantendo o início — como no Clockify.
+    f.dur.addEventListener('change', function () {
+      const secs = parseDuration(f.dur.value);
+      if (!secs || secs >= 86400) { toast('Duração inválida. Exemplos: 1:30, 1h30, 45m, 90.', true); syncDur(); return; }
+      f.to.value = t(new Date(range()[0].getTime() + secs * 1000));
+      syncDur();
+    });
+
+    /** @returns {object} */
+    function payload() {
+      const r = range();
+      return {
+        description: f.desc.value,
+        project_id: Number(f.proj.value),
+        tags: f.tags.value.split(','),
+        billable: f.bill.checked,
+        start: r[0].toISOString(),
+        end: r[1].toISOString(),
+      };
+    }
+
+    const dlg = /** @type {HTMLDialogElement} */ (el('dialog', { class: 'hr-dialog' }));
+    const close = function () { dlg.close(); dlg.remove(); };
+    const field = function (label, input) { return el('div', { class: 'field' }, [el('label', { for: input.id, text: label }), input]); };
+    const finish = async function () { close(); await opts.onDone(); };
+
+    dlg.appendChild(el('form', { class: 'stack', onsubmit: safe(async function (ev) {
+      ev.preventDefault();
+      if (entry) await api('/entries/' + entry.id, 'PATCH', payload());
+      else await api('/entries', 'POST', payload());
+      await finish();
+    }) }, [
+      el('h2', { text: entry ? 'Editar lançamento' : 'Lançamento manual' }),
+      field('Descrição', f.desc),
+      field('Projeto', f.proj),
+      el('div', { class: 'hr-grid4' }, [field('Dia', f.date), field('Início', f.from), field('Fim', f.to), field('Duração', f.dur)]),
+      field('Tags', f.tags),
+      el('datalist', { id: 'hd-taglist' }, (opts.tags || []).map(function (tag) { return el('option', { value: tag }); })),
+      el('label', { class: 'hr-check' }, [f.bill, ' Faturável']),
+      el('div', { class: 'hr-dialog-foot' }, [
+        entry && el('button', { type: 'button', class: 'btn-danger btn-sm', text: 'Excluir', onclick: safe(async function () {
+          if (!confirm('Excluir este lançamento? Não dá para desfazer.')) return;
+          await api('/entries/' + entry.id, 'DELETE');
+          await finish();
+        }) }),
+        entry && el('button', { type: 'button', class: 'btn-ghost btn-sm', text: 'Duplicar', title: 'Cria outro lançamento com estes dados', onclick: safe(async function () {
+          await api('/entries', 'POST', payload());
+          await finish();
+        }) }),
+        el('span', { class: 'spacer' }),
+        el('button', { type: 'button', class: 'btn-ghost', text: 'Cancelar', onclick: close }),
+        el('button', { type: 'submit', text: 'Salvar' }),
+      ]),
+    ]));
+    dlg.addEventListener('cancel', function () { dlg.remove(); });
+    document.body.appendChild(dlg);
+    dlg.showModal();
+  }
+
   /* ------------------------------------------------------------------ */
   /* Tela: Tempo                                                         */
   /* ------------------------------------------------------------------ */
@@ -177,13 +311,16 @@
   /** @returns {Promise<void>} */
   async function viewTempo() {
     /** @type {{projects: object[], running: object|null, entries: object[], status: object|null}} */
-    const state = { projects: [], running: null, entries: [], status: null };
+    const state = { projects: [], running: null, entries: [], status: null, tags: [] };
     let ticker = 0;
+    /** Quantos dias para trás a lista mostra; "Carregar mais" soma 30. */
+    let windowDays = 30;
 
     const desc = /** @type {HTMLInputElement} */ (el('input', { type: 'text', placeholder: 'No que você está trabalhando?', maxlength: '500', 'aria-label': 'Descrição' }));
     const projSlot = el('div', { class: 'hr-proj' });
     const bill = /** @type {HTMLInputElement} */ (el('input', { type: 'checkbox', id: 'hr-bill' }));
-    const clockEl = el('div', { class: 'hr-clock', text: '0:00:00', 'aria-live': 'off' });
+    const clockEl = el('button', { type: 'button', class: 'hr-clock', text: '0:00:00', title: 'Corrigir a hora de início', onclick: function () { editStart(); } });
+    const more = el('button', { type: 'button', class: 'btn-ghost btn-sm hr-more', text: 'Carregar mais 30 dias', onclick: safe(async function () { windowDays += 30; await load(); }) });
     const btn = el('button', { type: 'button', class: 'hr-go', text: 'Iniciar' });
     const totals = el('p', { class: 'muted hr-totals' });
     const list = el('div', { class: 'hr-days' });
@@ -200,6 +337,7 @@
         if (document.activeElement !== desc) desc.value = r.description;
         bill.checked = r.billable;
       }
+      clockEl.disabled = !r;
       btn.textContent = r ? 'Parar' : 'Iniciar';
       btn.classList.toggle('hr-stop', !!r);
       clearInterval(ticker);
@@ -228,7 +366,7 @@
       totals.textContent = st ? 'Hoje: ' + human(st.today_seconds) + '  ·  Esta semana: ' + human(st.week_seconds) : '';
       const done = state.entries.filter(function (e) { return !e.running; });
       if (!done.length) {
-        list.replaceChildren(el('p', { class: 'empty', text: 'Nenhum lançamento nos últimos 30 dias. Inicie o timer acima ou peça para a sua IA lançar por você.' }));
+        list.replaceChildren(el('p', { class: 'empty', text: 'Nenhum lançamento nos últimos ' + windowDays + ' dias. Inicie o timer acima ou peça para a sua IA lançar por você.' }));
         return;
       }
       /** @type {Object<string, object[]>} */
@@ -272,64 +410,49 @@
     }
 
     /**
-     * Diálogo de lançamento manual (sem `entry`) ou de edição.
+     * Abre o diálogo de lançamento manual (sem `entry`) ou de edição.
      * @param {object} [entry]
      * @returns {void}
      */
     function openDialog(entry) {
-      const start = entry ? new Date(entry.start) : new Date(Date.now() - 3600000);
-      const end = entry ? new Date(entry.end) : new Date();
-      const f = {
-        desc: /** @type {HTMLInputElement} */ (el('input', { type: 'text', id: 'hd-desc', maxlength: '500', value: entry ? entry.description : desc.value })),
-        proj: projectSelect(state.projects, entry ? entry.project_id : Number(projEl().value) || null),
-        tags: /** @type {HTMLInputElement} */ (el('input', { type: 'text', id: 'hd-tags', placeholder: 'separadas por vírgula', value: entry ? entry.tags.join(', ') : '' })),
-        date: /** @type {HTMLInputElement} */ (el('input', { type: 'date', id: 'hd-date', required: true, value: dayKey(start) })),
-        from: /** @type {HTMLInputElement} */ (el('input', { type: 'time', id: 'hd-from', required: true, value: pad(start.getHours()) + ':' + pad(start.getMinutes()) })),
-        to: /** @type {HTMLInputElement} */ (el('input', { type: 'time', id: 'hd-to', required: true, value: pad(end.getHours()) + ':' + pad(end.getMinutes()) })),
-        bill: /** @type {HTMLInputElement} */ (el('input', { type: 'checkbox', id: 'hd-bill', checked: entry ? entry.billable : false })),
-      };
-      f.proj.id = 'hd-proj';
+      entryDialog({
+        entry: entry,
+        projects: state.projects,
+        tags: state.tags,
+        defaults: { description: desc.value, project_id: Number(projEl().value) || null },
+        onDone: load,
+      });
+    }
+
+    /**
+     * Corrige a hora de início do timer rodando (esqueci de iniciar na hora).
+     * @returns {void}
+     */
+    function editStart() {
+      const r = state.running;
+      if (!r) return;
+      const s = new Date(r.start);
+      const date = /** @type {HTMLInputElement} */ (el('input', { type: 'date', id: 'hs-date', required: true, value: dayKey(s) }));
+      const time = /** @type {HTMLInputElement} */ (el('input', { type: 'time', id: 'hs-time', required: true, value: pad(s.getHours()) + ':' + pad(s.getMinutes()) }));
       const dlg = /** @type {HTMLDialogElement} */ (el('dialog', { class: 'hr-dialog' }));
       const close = function () { dlg.close(); dlg.remove(); };
-      const field = function (label, input) { return el('div', { class: 'field' }, [el('label', { for: input.id, text: label }), input]); };
-
-      const form = el('form', { class: 'stack', onsubmit: safe(async function (ev) {
+      dlg.appendChild(el('form', { class: 'stack', onsubmit: safe(async function (ev) {
         ev.preventDefault();
-        const s = new Date(f.date.value + 'T' + f.from.value);
-        const e = new Date(f.date.value + 'T' + f.to.value);
-        if (e <= s) e.setDate(e.getDate() + 1); // terminou depois da meia-noite
-        const body = {
-          description: f.desc.value,
-          project_id: Number(f.proj.value),
-          tags: f.tags.value.split(','),
-          billable: f.bill.checked,
-          start: s.toISOString(),
-          end: e.toISOString(),
-        };
-        if (entry) await api('/entries/' + entry.id, 'PATCH', body);
-        else await api('/entries', 'POST', body);
+        await api('/entries/' + r.id, 'PATCH', { start: new Date(date.value + 'T' + time.value).toISOString() });
         close();
         await load();
       }) }, [
-        el('h2', { text: entry ? 'Editar lançamento' : 'Lançamento manual' }),
-        field('Descrição', f.desc),
-        field('Projeto', f.proj),
-        el('div', { class: 'hr-grid3' }, [field('Dia', f.date), field('Início', f.from), field('Fim', f.to)]),
-        field('Tags', f.tags),
-        el('label', { class: 'hr-check' }, [f.bill, ' Faturável']),
+        el('h2', { text: 'Quando você começou?' }),
+        el('div', { class: 'hr-grid2' }, [
+          el('div', { class: 'field' }, [el('label', { for: 'hs-date', text: 'Dia' }), date]),
+          el('div', { class: 'field' }, [el('label', { for: 'hs-time', text: 'Início' }), time]),
+        ]),
         el('div', { class: 'hr-dialog-foot' }, [
-          entry && el('button', { type: 'button', class: 'btn-danger btn-sm', text: 'Excluir', onclick: safe(async function () {
-            if (!confirm('Excluir este lançamento? Não dá para desfazer.')) return;
-            await api('/entries/' + entry.id, 'DELETE');
-            close();
-            await load();
-          }) }),
           el('span', { class: 'spacer' }),
           el('button', { type: 'button', class: 'btn-ghost', text: 'Cancelar', onclick: close }),
           el('button', { type: 'submit', text: 'Salvar' }),
         ]),
-      ]);
-      dlg.appendChild(form);
+      ]));
       dlg.addEventListener('cancel', function () { dlg.remove(); });
       document.body.appendChild(dlg);
       dlg.showModal();
@@ -340,12 +463,14 @@
       const got = await Promise.all([
         api('/projects'),
         api('/status'),
-        api('/entries?from=' + dayKey(day(-30)) + '&limit=1000'),
+        api('/entries?from=' + dayKey(day(-windowDays)) + '&limit=2000'),
+        api('/tags'),
       ]);
       state.projects = got[0];
       state.status = got[1];
       state.running = got[1].running;
       state.entries = got[2];
+      state.tags = got[3].map(function (t) { return t.tag; });
       paintBar();
       paintList();
     }
@@ -372,7 +497,8 @@
         totals,
         CAN_WRITE && el('button', { type: 'button', class: 'btn-ghost btn-sm', text: '+ Lançamento manual', onclick: function () { openDialog(); } }),
       ]),
-      list
+      list,
+      el('div', { class: 'hr-more-wrap' }, [more])
     );
 
     await load();
@@ -398,20 +524,50 @@
       d30: { label: 'Últimos 30 dias', range: function () { return [day(-29), today]; } },
       ano: { label: 'Este ano', range: function () { return [new Date(today.getFullYear(), 0, 1), today]; } },
     };
+    /** Agrupamentos do resumo: rótulo, lista no JSON e como nomear cada linha. */
+    const groups = {
+      project: { label: 'Projeto', key: 'by_project', name: function (g) { return g.client ? g.project + ' · ' + g.client : g.project; } },
+      client: { label: 'Cliente', key: 'by_client', name: function (g) { return g.client; } },
+      tag: { label: 'Tag', key: 'by_tag', name: function (g) { return g.tag; } },
+      description: { label: 'Descrição', key: 'by_description', name: function (g) { return g.project ? g.description + ' · ' + g.project : g.description; } },
+    };
+
+    const got = await Promise.all([api('/projects?archived=1'), api('/tags')]);
+    const projects = got[0];
+    const tags = got[1].map(function (t) { return t.tag; });
+    const clients = projects.map(function (p) { return p.client; }).filter(function (c, i, a) { return c && a.indexOf(c) === i; }).sort();
+
+    /**
+     * `<select>` simples de filtro; a primeira opção (valor vazio) é "todos".
+     * @param {string} label
+     * @param {string} all
+     * @param {Array<string[]>} options Pares [valor, texto].
+     * @returns {HTMLSelectElement}
+     */
+    function filter(label, all, options) {
+      return /** @type {HTMLSelectElement} */ (el('select', { 'aria-label': label }, [el('option', { value: '', text: all })].concat(options.map(function (o) { return el('option', { value: o[0], text: o[1] }); }))));
+    }
 
     const preset = /** @type {HTMLSelectElement} */ (el('select', { 'aria-label': 'Período' }, Object.keys(presets).map(function (k) { return el('option', { value: k, text: presets[k].label }); }).concat([el('option', { value: 'custom', text: 'Personalizado' })])));
     const from = /** @type {HTMLInputElement} */ (el('input', { type: 'date', 'aria-label': 'De' }));
     const to = /** @type {HTMLInputElement} */ (el('input', { type: 'date', 'aria-label': 'Até' }));
-    const projSlot = el('span', {});
+    const proj = filter('Projeto', 'Todos os projetos', [['0', 'Sem projeto']].concat(projects.map(function (p) { return [String(p.id), p.name]; })));
+    const client = filter('Cliente', 'Todos os clientes', clients.map(function (c) { return [c, c]; }));
+    const tag = filter('Tag', 'Todas as tags', tags.map(function (t) { return [t, '#' + t]; }));
+    const bill = filter('Faturável', 'Faturável e não', [['1', 'Só faturável'], ['0', 'Só não faturável']]);
+    const groupBy = /** @type {HTMLSelectElement} */ (el('select', { 'aria-label': 'Agrupar por' }, Object.keys(groups).map(function (k) { return el('option', { value: k, text: 'Agrupar por ' + groups[k].label.toLowerCase() }); })));
     const out = el('div', {});
-    const projects = await api('/projects?archived=1');
-    projSlot.appendChild(projectSelect(projects, null, 'Todos os projetos'));
-    const proj = /** @type {HTMLSelectElement} */ (projSlot.firstChild);
-    proj.options[0].value = '';
+    let mode = 'resumo';
+    const tabs = el('div', { class: 'hr-tabs', role: 'tablist' });
 
     /** @returns {string} */
     function query() {
-      return '?from=' + from.value + '&to=' + to.value + (proj.value ? '&project_id=' + proj.value : '');
+      const p = new URLSearchParams({ from: from.value, to: to.value });
+      if (proj.value) p.set('project_id', proj.value);
+      if (client.value) p.set('client', client.value);
+      if (tag.value) p.set('tag', tag.value);
+      if (bill.value) p.set('billable', bill.value);
+      return '?' + p.toString();
     }
 
     /** @returns {void} */
@@ -440,7 +596,7 @@
       return el('div', { class: 'hr-chart' + (dense ? ' hr-chart-dense' : ''), role: 'img', 'aria-label': 'Horas por dia no período' }, days.map(function (k) {
         const s = map[k] || 0;
         const p = k.split('-').map(Number);
-        const label = new Date(p[0], p[1] - 1, p[2]).toLocaleDateString('pt-BR', dense ? { day: 'numeric' } : { weekday: 'short', day: 'numeric' });
+        const label = days.length > 62 ? '' : new Date(p[0], p[1] - 1, p[2]).toLocaleDateString('pt-BR', dense ? { day: 'numeric' } : { weekday: 'short', day: 'numeric' });
         return el('div', { class: 'hr-col', title: dayLabel(k) + ': ' + human(s) }, [
           el('small', { text: s && !dense ? human(s) : '' }),
           el('div', { class: 'hr-colbar', style: 'height:' + Math.max(s ? 3 : 0, (s / max) * 100) + '%' }),
@@ -450,55 +606,99 @@
     }
 
     /**
-     * @param {string} title
+     * @param {string|Node} title
      * @param {string[]} head
      * @param {Array<Array<Node|string>>} rows
+     * @param {string} [note]
      * @returns {HTMLElement}
      */
-    function table(title, head, rows) {
+    function table(title, head, rows, note) {
       return el('div', { class: 'card' }, [
-        el('h2', { text: title }),
+        typeof title === 'string' ? el('h2', { text: title }) : title,
+        note ? el('span', { class: 'muted', text: note }) : null,
         rows.length ? el('div', { class: 'table-wrap' }, [el('table', {}, [
           el('thead', {}, [el('tr', {}, head.map(function (h) { return el('th', { text: h }); }))]),
           el('tbody', {}, rows.map(function (r) { return el('tr', {}, r.map(function (c) { return el('td', { class: 'wrap' }, [c]); })); })),
-        ])]) : el('p', { class: 'empty', text: 'Nada neste período.' }),
+        ])]) : el('p', { class: 'empty', text: 'Nada neste período com estes filtros.' }),
       ]);
+    }
+
+    /**
+     * @param {object} s Resposta de /summary.
+     * @returns {HTMLElement}
+     */
+    function stats(s) {
+      const stat = function (label, value) { return el('div', { class: 'card hr-stat' }, [el('small', { class: 'muted', text: label }), el('strong', { text: value })]); };
+      return el('div', { class: 'hr-stats' }, [
+        stat('Total', human(s.total_seconds)),
+        stat('Faturável', human(s.billable_seconds)),
+        stat('Valor', money(s.billable_amount, s.currency)),
+        stat('Lançamentos', String(s.entries)),
+      ]);
+    }
+
+    /** @returns {Promise<void>} */
+    async function loadResumo() {
+      const s = await api('/summary' + query());
+      const g = groups[groupBy.value];
+      out.replaceChildren(
+        stats(s),
+        el('div', { class: 'card' }, [el('h2', { text: 'Por dia' }), chart(s.by_day)]),
+        table(el('div', { class: 'hr-card-head' }, [el('h2', { text: 'Por ' + g.label.toLowerCase() }), groupBy]), [g.label, 'Tempo', 'Valor', '%'], s[g.key].map(function (r) {
+          const pct = s.total_seconds ? Math.round((r.seconds / s.total_seconds) * 100) : 0;
+          const color = r.color || 'var(--accent)';
+          return [
+            el('span', {}, [r.color ? el('span', { class: 'hr-dot', style: 'background:' + r.color }) : null, (r.color ? ' ' : '') + g.name(r)]),
+            human(r.seconds),
+            r.amount ? money(r.amount, s.currency) : '—',
+            el('span', { class: 'hr-pct' }, [el('span', { style: 'width:' + pct + '%;background:' + color }), el('small', { text: pct + '%' })]),
+          ];
+        }), groupBy.value === 'tag' ? 'Um lançamento com várias tags conta em cada uma.' : '')
+      );
+    }
+
+    /** @returns {Promise<void>} */
+    async function loadDetalhado() {
+      const got2 = await Promise.all([api('/summary' + query()), api('/entries' + query() + '&limit=1000')]);
+      const s = got2[0];
+      const entries = got2[1];
+      out.replaceChildren(
+        stats(s),
+        table('Lançamentos', ['Dia', 'Descrição', 'Projeto', 'Horário', 'Duração', 'Valor', ''], entries.map(function (e) {
+          return [
+            new Date(e.start).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }),
+            el('span', {}, [e.description || '(sem descrição)', e.tags.length ? el('small', { class: 'muted', text: ' ' + e.tags.map(function (t) { return '#' + t; }).join(' ') }) : null]),
+            el('span', {}, [el('span', { class: 'hr-dot', style: 'background:' + (e.project_color || 'var(--border)') }), ' ' + (e.project || 'Sem projeto')]),
+            e.running ? hhmm(e.start) + ' – agora' : hhmm(e.start) + ' – ' + hhmm(e.end),
+            clock(e.duration_seconds),
+            e.billable ? money(e.amount, s.currency) : '—',
+            CAN_WRITE && !e.running ? el('button', { type: 'button', class: 'btn-ghost btn-sm', text: 'Editar', onclick: function () { entryDialog({ entry: e, projects: projects, tags: tags, onDone: load }); } }) : '',
+          ];
+        }), entries.length >= 1000 ? 'Mostrando os 1000 mais recentes do período. O total acima considera todos.' : '')
+      );
     }
 
     /** @returns {Promise<void>} */
     async function load() {
       if (!from.value || !to.value) return;
-      const s = await api('/summary' + query());
-      const stat = function (label, value) { return el('div', { class: 'card hr-stat' }, [el('small', { class: 'muted', text: label }), el('strong', { text: value })]); };
-      out.replaceChildren(
-        el('div', { class: 'hr-stats' }, [
-          stat('Total', human(s.total_seconds)),
-          stat('Faturável', human(s.billable_seconds)),
-          stat('Lançamentos', String(s.entries)),
-        ]),
-        el('div', { class: 'card' }, [el('h2', { text: 'Por dia' }), chart(s.by_day)]),
-        table('Por projeto', ['Projeto', 'Tempo', '%'], s.by_project.map(function (p) {
-          const pct = s.total_seconds ? Math.round((p.seconds / s.total_seconds) * 100) : 0;
-          return [
-            el('span', {}, [el('span', { class: 'hr-dot', style: 'background:' + p.color }), ' ' + p.project]),
-            human(p.seconds),
-            el('span', { class: 'hr-pct' }, [el('span', { style: 'width:' + pct + '%;background:' + p.color }), el('small', { text: pct + '%' })]),
-          ];
-        })),
-        table('Por descrição', ['Descrição', 'Projeto', 'Lançamentos', 'Tempo'], s.by_description.slice(0, 30).map(function (d) {
-          return [d.description, d.project || '—', String(d.entries), human(d.seconds)];
-        }))
-      );
+      tabs.replaceChildren.apply(tabs, [['resumo', 'Resumo'], ['detalhado', 'Detalhado']].map(function (t) {
+        return el('button', { type: 'button', role: 'tab', class: 'btn-ghost btn-sm', 'aria-selected': String(mode === t[0]), text: t[1], onclick: function () { mode = t[0]; reload(); } });
+      }));
+      if (mode === 'resumo') await loadResumo();
+      else await loadDetalhado();
     }
 
     const reload = safe(load);
     preset.addEventListener('change', function () { applyPreset(); reload(); });
     [from, to].forEach(function (i) { i.addEventListener('change', function () { preset.value = 'custom'; reload(); }); });
-    proj.addEventListener('change', reload);
+    [proj, client, tag, bill, groupBy].forEach(function (i) { i.addEventListener('change', reload); });
 
     root.replaceChildren(
       el('div', { class: 'card hr-filters' }, [
-        preset, from, to, projSlot,
+        preset, from, to, proj,
+        clients.length ? client : null,
+        tags.length ? tag : null,
+        bill,
         el('span', { class: 'spacer' }),
         el('button', { type: 'button', class: 'btn-ghost btn-sm', text: 'Exportar CSV', onclick: safe(async function () {
           const res = await fetch(BASE + '/export.csv' + query(), { headers: { 'x-timezone': TZ }, credentials: 'same-origin' });
@@ -508,6 +708,7 @@
           URL.revokeObjectURL(a.getAttribute('href'));
         }) }),
       ]),
+      tabs,
       out
     );
     applyPreset();
@@ -522,27 +723,41 @@
   async function viewProjetos() {
     const body = el('tbody', {});
     const name = /** @type {HTMLInputElement} */ (el('input', { type: 'text', id: 'np-name', required: true, maxlength: '80' }));
-    const client = /** @type {HTMLInputElement} */ (el('input', { type: 'text', id: 'np-client', maxlength: '80' }));
+    const client = /** @type {HTMLInputElement} */ (el('input', { type: 'text', id: 'np-client', maxlength: '80', list: 'np-clients', autocomplete: 'off' }));
+    const rate = /** @type {HTMLInputElement} */ (el('input', { type: 'number', id: 'np-rate', min: '0', step: '0.01', placeholder: 'padrão' }));
+    const clientList = el('datalist', { id: 'np-clients' });
+    const currency = /** @type {HTMLSelectElement} */ (el('select', { id: 'st-currency' }, [['BRL', 'Real (R$)'], ['USD', 'Dólar (US$)'], ['EUR', 'Euro (€)'], ['GBP', 'Libra (£)']].map(function (c) { return el('option', { value: c[0], text: c[1] }); })));
+    const defRate = /** @type {HTMLInputElement} */ (el('input', { type: 'number', id: 'st-rate', min: '0', step: '0.01' }));
+    let settings = { currency: 'BRL', default_rate: 0 };
 
     /** @returns {Promise<void>} */
     async function load() {
-      const projects = await api('/projects?archived=1');
+      const got = await Promise.all([api('/projects?archived=1'), api('/settings')]);
+      const projects = got[0];
+      settings = got[1];
+      if (!currency.querySelector('option[value="' + settings.currency + '"]')) currency.appendChild(el('option', { value: settings.currency, text: settings.currency }));
+      currency.value = settings.currency;
+      if (document.activeElement !== defRate) defRate.value = settings.default_rate ? String(settings.default_rate) : '';
+      clientList.replaceChildren.apply(clientList, projects.map(function (p) { return p.client; }).filter(function (c, i, a) { return c && a.indexOf(c) === i; }).map(function (c) { return el('option', { value: c }); }));
       if (!projects.length) {
-        body.replaceChildren(el('tr', {}, [el('td', { colspan: '5', class: 'empty', text: 'Nenhum projeto ainda.' })]));
+        body.replaceChildren(el('tr', {}, [el('td', { colspan: '6', class: 'empty', text: 'Nenhum projeto ainda.' })]));
         return;
       }
       body.replaceChildren.apply(body, projects.map(function (p) {
         const patch = function (data) { return safe(async function () { await api('/projects/' + p.id, 'PATCH', data()); await load(); }); };
         const color = /** @type {HTMLInputElement} */ (el('input', { type: 'color', value: p.color, disabled: !CAN_WRITE, 'aria-label': 'Cor de ' + p.name }));
         const nm = /** @type {HTMLInputElement} */ (el('input', { type: 'text', value: p.name, maxlength: '80', disabled: !CAN_WRITE, 'aria-label': 'Nome' }));
-        const cl = /** @type {HTMLInputElement} */ (el('input', { type: 'text', value: p.client, maxlength: '80', placeholder: '—', disabled: !CAN_WRITE, 'aria-label': 'Cliente' }));
+        const cl = /** @type {HTMLInputElement} */ (el('input', { type: 'text', value: p.client, maxlength: '80', placeholder: '—', list: 'np-clients', disabled: !CAN_WRITE, 'aria-label': 'Cliente' }));
+        const rt = /** @type {HTMLInputElement} */ (el('input', { type: 'number', min: '0', step: '0.01', value: p.hourly_rate === null ? '' : String(p.hourly_rate), placeholder: settings.default_rate ? String(settings.default_rate) : 'padrão', disabled: !CAN_WRITE, 'aria-label': 'Valor por hora de ' + p.name, title: 'Vazio = usa o valor padrão do workspace' }));
         color.addEventListener('change', patch(function () { return { color: color.value }; }));
         nm.addEventListener('change', patch(function () { return { name: nm.value }; }));
         cl.addEventListener('change', patch(function () { return { client: cl.value }; }));
+        rt.addEventListener('change', patch(function () { return { hourly_rate: rt.value === '' ? null : Number(rt.value) }; }));
         return el('tr', { class: p.archived ? 'hr-archived' : '' }, [
           el('td', {}, [color]),
           el('td', {}, [nm, p.archived ? el('span', { class: 'badge', text: 'Arquivado' }) : null]),
           el('td', {}, [cl]),
+          el('td', {}, [rt]),
           el('td', { text: human(p.total_seconds) }),
           el('td', {}, [CAN_WRITE && el('span', { class: 'row-actions' }, [
             el('button', { type: 'button', class: 'btn-ghost btn-sm', text: p.archived ? 'Reativar' : 'Arquivar', onclick: patch(function () { return { archived: !p.archived }; }) }),
@@ -556,18 +771,28 @@
       }));
     }
 
+    const saveSettings = safe(async function () {
+      await api('/settings', 'PATCH', { currency: currency.value, default_rate: defRate.value === '' ? 0 : Number(defRate.value) });
+      toast('Faturamento atualizado.');
+      await load();
+    });
+    currency.addEventListener('change', saveSettings);
+    defRate.addEventListener('change', saveSettings);
+    currency.disabled = defRate.disabled = !CAN_WRITE;
+
     root.replaceChildren(
+      clientList,
       CAN_WRITE && el('div', { class: 'card' }, [
         el('h2', { text: 'Novo projeto' }),
         el('form', { class: 'row', onsubmit: safe(async function (ev) {
           ev.preventDefault();
-          await api('/projects', 'POST', { name: name.value, client: client.value });
-          name.value = '';
-          client.value = '';
+          await api('/projects', 'POST', { name: name.value, client: client.value, hourly_rate: rate.value === '' ? null : Number(rate.value) });
+          name.value = client.value = rate.value = '';
           await load();
         }) }, [
           el('div', { class: 'field' }, [el('label', { for: 'np-name', text: 'Nome' }), name]),
           el('div', { class: 'field' }, [el('label', { for: 'np-client', text: 'Cliente (opcional)' }), client]),
+          el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'np-rate', text: 'Valor/hora' }), rate]),
           el('div', { class: 'field hr-field-btn' }, [el('button', { type: 'submit', text: 'Criar' })]),
         ]),
       ]),
@@ -575,9 +800,17 @@
         el('h2', { text: 'Projetos do workspace' }),
         el('span', { class: 'muted', text: 'Compartilhados entre os membros. O tempo mostrado é só o seu.' }),
         el('div', { class: 'table-wrap' }, [el('table', { class: 'hr-projects' }, [
-          el('thead', {}, [el('tr', {}, ['Cor', 'Nome', 'Cliente', 'Seu tempo', ''].map(function (h) { return el('th', { text: h }); }))]),
+          el('thead', {}, [el('tr', {}, ['Cor', 'Nome', 'Cliente', 'Valor/hora', 'Seu tempo', ''].map(function (h) { return el('th', { text: h }); }))]),
           body,
         ])]),
+      ]),
+      el('div', { class: 'card' }, [
+        el('h2', { text: 'Faturamento' }),
+        el('span', { class: 'muted', text: 'O valor de um lançamento faturável é horas × valor/hora do projeto. Projetos sem valor próprio usam o padrão abaixo. Mudar um valor recalcula tudo que já foi lançado.' }),
+        el('div', { class: 'row' }, [
+          el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'st-currency', text: 'Moeda' }), currency]),
+          el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'st-rate', text: 'Valor/hora padrão' }), defRate]),
+        ]),
       ])
     );
     await load();

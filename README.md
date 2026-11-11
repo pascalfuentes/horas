@@ -14,10 +14,11 @@ Astro 7 (SSR)  ·  Cloudflare Workers  ·  D1  ·  Better Auth  ·  MCP (Streama
 | | |
 |---|---|
 | **Timer** | iniciar, parar, continuar um lançamento; um timer por pessoa, sincronizado entre abas e com a IA |
-| **Lançamento manual** | dia, início e fim; editar e excluir |
-| **Projetos** | por workspace, com cliente, cor e arquivamento |
-| **Relatórios** | por dia, projeto e descrição; período livre; exportação em CSV |
-| **MCP** | 11 ferramentas em `/mcp`, autenticadas por token pessoal |
+| **Lançamento manual** | dia, início, fim ou duração digitada (`1h30`, `1:30`, `90`); editar, duplicar e excluir |
+| **Projetos** | por workspace, com cliente, cor, valor por hora e arquivamento |
+| **Faturamento** | moeda e valor/hora padrão do workspace; valor calculado em cada lançamento faturável |
+| **Relatórios** | resumo (por projeto, cliente, tag ou descrição) e detalhado; filtros por projeto, cliente, tag e faturável; CSV |
+| **MCP** | 13 ferramentas em `/mcp`, autenticadas por token pessoal |
 | **API REST** | as mesmas operações em `/api/v1/…` |
 | **Contas** | e-mail e senha, Google, GitHub, 2FA, sessões por dispositivo |
 | **Workspaces** | um pessoal por conta, convites e papéis (`owner`, `admin`, `editor`, `viewer`) |
@@ -60,9 +61,9 @@ usam `https://SEU-DOMINIO/mcp/hrs_…` — o token vai na URL, então trate-a co
 senha.
 
 Ferramentas: `get_status`, `list_entries`, `summary_report`, `list_projects`,
-`start_timer`, `stop_timer`, `add_entry`, `update_entry`, `delete_entry`,
-`create_project`, `update_project`. Quem é `viewer` no workspace só recebe as
-quatro primeiras.
+`list_tags`, `get_settings`, `start_timer`, `stop_timer`, `add_entry`,
+`update_entry`, `delete_entry`, `create_project`, `update_project`. Quem é
+`viewer` no workspace só recebe as seis primeiras.
 
 ### API REST
 
@@ -74,11 +75,13 @@ curl https://SEU-DOMINIO/api/v1/status -H "Authorization: Bearer hrs_…"
 |---|---|---|
 | GET | `/status` | timer rodando, total de hoje e da semana |
 | POST | `/timer/start` · `/timer/stop` | corpo opcional: `description`, `project`, `tags`, `billable`, `start`/`end` |
-| GET · POST | `/entries` | filtros: `from`, `to`, `project`, `project_id`, `q`, `limit` |
+| GET · POST | `/entries` | filtros: `from`, `to`, `project`, `project_id`, `client`, `tag`, `billable`, `q`, `limit` |
 | GET · PATCH · DELETE | `/entries/:id` | |
 | GET · POST | `/projects` | `?archived=1` inclui arquivados |
 | PATCH · DELETE | `/projects/:id` | |
-| GET | `/summary` | mesmos filtros de `/entries` |
+| GET | `/summary` | mesmos filtros de `/entries`; devolve totais, valor e grupos por projeto, cliente, tag, dia e descrição |
+| GET | `/tags` | tags já usadas |
+| GET · PATCH | `/settings` | `currency` e `default_rate` do workspace |
 | GET | `/export.csv` | mesmos filtros de `/entries` |
 
 Datas: ISO-8601. Sem offset (`2026-11-11T09:00`), valem no fuso do token — o
@@ -120,6 +123,7 @@ e `npx wrangler deploy` como deploy.
 
 ```
 migrations/0006_horas.sql         tabelas time_project, time_entry, api_token
+migrations/0007_faturamento.sql   valor por hora do projeto e ajustes do workspace
 src/lib/horas.ts                  núcleo: toda regra de tempo, amarrada a (workspace, pessoa)
 src/lib/horas-api.ts              roteador JSON, o mesmo para web e token
 src/lib/horas-mcp.ts              ferramentas MCP
@@ -142,6 +146,9 @@ Decisões que valem saber:
   hora.
 - **Um timer por pessoa por workspace**, garantido por índice único parcial no
   banco, não só na aplicação.
+- **O valor de um lançamento não é gravado.** É horas × taxa do projeto (ou a
+  padrão do workspace) calculado na leitura; mudar uma taxa recalcula o que já
+  foi lançado.
 - **MCP stateless.** Cada requisição monta o servidor e responde em JSON; não
   há sessão para guardar, que é o que um Worker quer.
 
@@ -150,6 +157,7 @@ Decisões que valem saber:
 - OAuth para o MCP (hoje é token pessoal). Vale fazer se a ideia for aparecer
   em diretórios de conectores.
 - Relatório do time: cada pessoa vê só as próprias horas, mesmo o dono.
-- Valor por hora e faturamento; o campo "faturável" é só uma marcação.
+- Planilha semanal (timesheet), calendário e tarefas dentro de projetos.
+- Conversão entre moedas: a moeda do workspace é só formatação.
 - O módulo de exemplo "Anotações" do template continua no código (a bateria de
   testes de permissão depende dele), só saiu do menu.

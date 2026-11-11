@@ -43,6 +43,9 @@ const filtroDePeriodo = {
   from: z.string().optional().describe(`Start of the period, inclusive. ${DIA}`),
   to: z.string().optional().describe(`End of the period, inclusive when given as a date. ${DIA}`),
   project: z.string().optional().describe("Only this project (exact name, case-insensitive)."),
+  client: z.string().optional().describe("Only projects of this client (exact name, case-insensitive)."),
+  tag: z.string().optional().describe("Only entries carrying this tag."),
+  billable: z.boolean().optional().describe("true = only billable entries, false = only non-billable."),
 };
 
 export function criarServidorMcp(store: Store, podeEscrever: boolean): McpServer {
@@ -84,7 +87,8 @@ export function criarServidorMcp(store: Store, podeEscrever: boolean): McpServer
     "summary_report",
     {
       title: "Summary report",
-      description: "Totals for a period: overall, billable, per project, per day and per description. Use this for questions like 'how much did I work on X last week'.",
+      description:
+        "Totals for a period: overall time, billable time and billable amount (in the workspace currency), broken down per project, client, tag, day and description. Use this for questions like 'how much did I work on X last week' or 'how much should I invoice client Y this month'.",
       inputSchema: filtroDePeriodo,
       annotations: { readOnlyHint: true },
     },
@@ -95,11 +99,31 @@ export function criarServidorMcp(store: Store, podeEscrever: boolean): McpServer
     "list_projects",
     {
       title: "List projects",
-      description: "Projects in the workspace, with the user's total tracked time on each.",
+      description: "Projects in the workspace, with client, hourly rate (null = workspace default) and the user's total tracked time on each.",
       inputSchema: { include_archived: z.boolean().optional() },
       annotations: { readOnlyHint: true },
     },
     (a) => responder(() => store.listProjects({ includeArchived: a.include_archived })),
+  );
+
+  server.registerTool(
+    "list_tags",
+    {
+      title: "List tags",
+      description: "Tags the user has already used, most used first. Check this before tagging so existing tags are reused instead of creating near-duplicates.",
+      annotations: { readOnlyHint: true },
+    },
+    () => responder(() => store.listTags()),
+  );
+
+  server.registerTool(
+    "get_settings",
+    {
+      title: "Billing settings",
+      description: "Workspace currency and the default hourly rate applied to projects without their own rate.",
+      annotations: { readOnlyHint: true },
+    },
+    () => responder(() => store.getSettings()),
   );
 
   if (!podeEscrever) return server;
@@ -176,6 +200,7 @@ export function criarServidorMcp(store: Store, podeEscrever: boolean): McpServer
         name: z.string().min(1).max(80),
         client: z.string().max(80).optional(),
         color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional().describe("Hex color like #3b82f6."),
+        hourly_rate: z.number().min(0).max(1_000_000).nullable().optional().describe("Hourly rate in the workspace currency. null falls back to the workspace default rate."),
       },
     },
     (a) => responder(() => store.createProject(a)),
@@ -185,13 +210,14 @@ export function criarServidorMcp(store: Store, podeEscrever: boolean): McpServer
     "update_project",
     {
       title: "Update project",
-      description: "Renames, recolors, sets the client of, or archives/unarchives a project.",
+      description: "Renames, recolors, sets the client or hourly rate of, or archives/unarchives a project. Changing the rate re-prices every billable entry of the project.",
       inputSchema: {
         id: z.number().int().describe("Project id, from list_projects."),
         name: z.string().min(1).max(80).optional(),
         client: z.string().max(80).optional(),
         color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
         archived: z.boolean().optional(),
+        hourly_rate: z.number().min(0).max(1_000_000).nullable().optional().describe("Hourly rate in the workspace currency. null falls back to the workspace default rate."),
       },
     },
     ({ id, ...patch }) => responder(() => store.updateProject(id, patch)),
