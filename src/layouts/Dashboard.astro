@@ -1,0 +1,142 @@
+---
+import Alert from "~/components/Alert.astro";
+import ConvitesPendentes from "~/components/ConvitesPendentes.astro";
+import { APP_NAME } from "~/config";
+import { convitesPendentesPara } from "~/lib/membros";
+import { ROLE_LABELS, podeAdministrarPlataforma, pode, PERMISSIONS } from "~/lib/permissions";
+import { workspacesDoUsuario } from "~/lib/workspaces";
+import "~/styles/global.css";
+
+interface Props {
+  title: string;
+  heading: string;
+  description?: string;
+}
+
+const { title, heading, description } = Astro.props;
+const user = Astro.locals.user!;
+const atual = Astro.locals.membership;
+const superadmin = podeAdministrarPlataforma(user.role);
+const path = Astro.url.pathname;
+const params = Astro.url.searchParams;
+
+// Para o seletor. Uma consulta por página renderizada é barata e evita que a
+// lista fique velha depois de criar ou sair de um workspace.
+const meusWorkspaces = await workspacesDoUsuario(Astro.locals.env, user.id);
+
+// Convite só existia no link do e-mail. Quem apagou a mensagem ficava sem
+// caminho nenhum, mesmo já estando logado — daí o aviso no topo do painel.
+// Em `/workspaces` ele é omitido porque lá a lista completa já aparece inteira.
+const mostrarConvites = path !== "/workspaces";
+const convitesPendentes = mostrarConvites
+  ? await convitesPendentesPara(Astro.locals.env, user.email)
+  : [];
+
+const grupos = [
+  ...(atual
+    ? [
+        {
+          grupo: atual.workspaceNome,
+          itens: [
+            ...(pode(atual.role, PERMISSIONS.CONTENT_READ)
+              ? [
+                  { href: `/w/${atual.workspaceSlug}/tempo`, label: "Tempo" },
+                  { href: `/w/${atual.workspaceSlug}/relatorios`, label: "Relatórios" },
+                  { href: `/w/${atual.workspaceSlug}/projetos`, label: "Projetos" },
+                  { href: `/w/${atual.workspaceSlug}/integracoes`, label: "API e MCP" },
+                ]
+              : []),
+            ...(pode(atual.role, PERMISSIONS.MEMBERS_READ)
+              ? [{ href: `/w/${atual.workspaceSlug}/membros`, label: "Membros" }]
+              : []),
+            ...(pode(atual.role, PERMISSIONS.WORKSPACE_READ)
+              ? [{ href: `/w/${atual.workspaceSlug}/configuracoes`, label: "Configurações" }]
+              : []),
+          ],
+        },
+      ]
+    : []),
+  {
+    grupo: "Conta",
+    itens: [
+      { href: "/dashboard/perfil", label: "Meus dados" },
+      { href: "/dashboard/seguranca", label: "Segurança" },
+    ],
+  },
+  ...(superadmin
+    ? [
+        {
+          grupo: "Plataforma",
+          itens: [
+            { href: "/dashboard/admin/usuarios", label: "Usuários" },
+            { href: "/dashboard/admin/auditoria", label: "Auditoria" },
+          ],
+        },
+      ]
+    : []),
+];
+---
+
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <span class="brand">{APP_NAME}</span>
+        <span class="spacer"></span>
+        <span class="who">
+          {user.name}<br />
+          {atual
+            ? <span class="badge">{ROLE_LABELS[atual.role]} · {atual.workspaceNome}</span>
+            : superadmin
+              ? <span class="badge badge-admin">Superadmin da plataforma</span>
+              : <span class="badge">Conta</span>}
+        </span>
+        <form method="post" action="/api/sair" class="inline-form">
+          <button class="btn-ghost btn-sm" type="submit">Sair</button>
+        </form>
+      </header>
+
+      <div class="app-body">
+        <nav class="sidenav" aria-label="Navegação principal">
+          <details class="seletor-ws" open={!atual}>
+            <summary>{atual ? atual.workspaceNome : "Escolher workspace"}</summary>
+            {meusWorkspaces.map((w) => (
+              <a href={`/w/${w.workspaceSlug}/tempo`} aria-current={w.workspaceSlug === atual?.workspaceSlug ? "true" : undefined}>
+                {w.workspaceNome}
+                <small class="muted"> · {ROLE_LABELS[w.role]}</small>
+              </a>
+            ))}
+            <a href="/workspaces">+ Novo workspace</a>
+          </details>
+
+          {grupos.map((g) => (
+            <>
+              <div class="group">{g.grupo}</div>
+              {g.itens.map((item) => (
+                <a href={item.href} aria-current={path === item.href ? "page" : undefined}>{item.label}</a>
+              ))}
+            </>
+          ))}
+        </nav>
+
+        <main class="content">
+          <div class="page-head">
+            <h1>{heading}</h1>
+            {description && <p class="muted">{description}</p>}
+          </div>
+          <Alert error={params.get("e")} success={params.get("ok")} />
+          <ConvitesPendentes convites={convitesPendentes} verificado={user.emailVerified} limite={3} />
+          <slot />
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

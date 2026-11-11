@@ -1,0 +1,36 @@
+---
+import Auth from "~/layouts/Auth.astro";
+
+export const prerender = false;
+
+const token = Astro.url.searchParams.get("token") ?? "";
+// O Better Auth redireciona para cá com `?error=...` quando o token já expirou.
+const brokenLink = !token || Astro.url.searchParams.has("error");
+---
+
+<Auth
+  title="Definir nova senha"
+  heading="Definir nova senha"
+  subheading={brokenLink ? undefined : "Escolha uma senha de pelo menos 10 caracteres."}
+>
+  {brokenLink ? (
+    <>
+      <p class="alert alert-error">Este link é inválido ou já expirou.</p>
+      <a class="btn btn-block" href="/esqueci-senha">Pedir um novo link</a>
+    </>
+  ) : (
+    <form method="post" action="/api/redefinir-senha" class="stack">
+      <input type="hidden" name="token" value={token} />
+      <div class="field">
+        <label for="senha">Nova senha</label>
+        <input id="senha" name="senha" type="password" minlength="10" autocomplete="new-password" required autofocus />
+        <span class="hint">Mínimo de 10 caracteres.</span>
+      </div>
+      <div class="field">
+        <label for="confirma">Confirmar nova senha</label>
+        <input id="confirma" name="confirma" type="password" minlength="10" autocomplete="new-password" required />
+      </div>
+      <button class="btn-block" type="submit">Salvar nova senha</button>
+    </form>
+  )}
+</Auth>

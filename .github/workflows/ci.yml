@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      # Roda contra o wrangler.jsonc do template (wrangler.local.jsonc não está
+      # no Git), então tudo aqui é local: nenhuma credencial da Cloudflare é
+      # necessária e nada toca produção.
+      - name: Preparar ambiente de teste
+        run: |
+          {
+            echo "BETTER_AUTH_SECRET=\"$(openssl rand -base64 32)\""
+            echo 'BETTER_AUTH_URL="http://localhost:4321"'
+            echo "SETUP_SECRET=\"$(openssl rand -hex 16)\""
+            echo 'RESEND_API_KEY=""'
+            echo 'EMAIL_FROM="CI <no-reply@exemplo.com>"'
+          } > .dev.vars
+
+      - name: Typecheck
+        run: npm run check
+
+      - name: Build
+        run: npm run build
+
+      - name: Migrations no banco local
+        run: npm run db:local
+
+      - name: Subir o servidor
+        run: |
+          npm run dev > /tmp/dev.log 2>&1 &
+          for i in $(seq 1 60); do
+            if [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4321/login)" = "200" ]; then
+              echo "servidor no ar após ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::o servidor não subiu em 60s"; cat /tmp/dev.log; exit 1
+
+      - name: Bateria de ponta a ponta
+        run: npm run smoke
+
+      - name: Log do servidor (quando algo falha)
+        if: failure()
+        run: cat /tmp/dev.log || true

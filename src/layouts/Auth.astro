@@ -1,0 +1,34 @@
+---
+import Alert from "~/components/Alert.astro";
+import "~/styles/global.css";
+
+interface Props {
+  title: string;
+  heading: string;
+  subheading?: string;
+}
+
+const { title, heading, subheading } = Astro.props;
+const params = Astro.url.searchParams;
+---
+
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <main class="auth-shell">
+      <div class="auth-card">
+        <h1>{heading}</h1>
+        {subheading && <p class="muted">{subheading}</p>}
+        <Alert error={params.get("e")} success={params.get("ok")} />
+        <slot />
+      </div>
+    </main>
+  </body>
+</html>

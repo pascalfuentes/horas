@@ -1,0 +1,17 @@
+---
+import { messageFor } from "~/lib/http";
+
+interface Props {
+  /** Código de erro vindo de `?e=` */
+  error?: string | null;
+  /** Código de sucesso vindo de `?ok=` */
+  success?: string | null;
+}
+
+const { error, success } = Astro.props;
+const errorText = messageFor(error ?? null);
+const successText = messageFor(success ?? null);
+---
+
+{errorText && <p class="alert alert-error" role="alert">{errorText}</p>}
+{successText && <p class="alert alert-success" role="status">{successText}</p>}

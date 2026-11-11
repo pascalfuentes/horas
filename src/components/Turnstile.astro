@@ -1,0 +1,46 @@
+---
+/**
+ * Widget do Cloudflare Turnstile.
+ *
+ * Só renderiza quando as DUAS chaves existem. Se aparecesse só com a sitekey,
+ * a pessoa resolveria o desafio e o servidor não checaria nada — proteção de
+ * mentira é pior que proteção nenhuma, porque parece que está lá.
+ *
+ * Sem chaves (o caso do desenvolvimento local), o widget some e
+ * `verifyTurnstile` deixa passar. Os dois lados combinam sempre.
+ *
+ * A renderização é EXPLÍCITA. Dois detalhes que custaram caro aqui:
+ *
+ * 1. Só `?onload=` não basta — o script CONTINUA fazendo a varredura
+ *    automática por `.cf-turnstile` além de chamar o callback. As duas
+ *    renderizações colidiam ("skipped implicit render because a widget
+ *    already exists"), o iframe do desafio nunca aparecia e nenhum token era
+ *    gerado. Como o servidor exige o token, o login ficava impossível.
+ *    `&render=explicit` desliga a varredura automática.
+ *
+ * 2. O `onload` não dispara se o script já tiver carregado, daí a checagem de
+ *    `window.turnstile` — e o `data-rendered` impede renderizar duas vezes.
+ */
+const { PUBLIC_TURNSTILE_SITE_KEY: siteKey, TURNSTILE_SECRET_KEY: secret } = Astro.locals.env;
+const enabled = Boolean(siteKey && secret);
+---
+{enabled && (
+  <>
+    <div class="cf-turnstile" data-sitekey={siteKey} style="margin-bottom:14px; min-height:65px"></div>
+
+    <script is:inline>
+      window.renderTurnstile = function () {
+        document.querySelectorAll(".cf-turnstile").forEach(function (el) {
+          if (el.dataset.rendered) return;
+          el.dataset.rendered = "1";
+          window.turnstile.render(el, { sitekey: el.dataset.sitekey, theme: "auto" });
+        });
+      };
+      // Se o script já tiver carregado, o `onload` não dispara mais.
+      if (window.turnstile) window.renderTurnstile();
+    </script>
+
+    <script is:inline async defer
+      src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=renderTurnstile"></script>
+  </>
+)}

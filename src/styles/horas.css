@@ -1,0 +1,82 @@
+/* Controle de tempo. Usa só os tokens de global.css — claro e escuro vêm de lá. */
+:root { --go: #16a34a; --stop: #dc2626; }
+
+[hidden] { display: none !important; }
+
+.hr-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; vertical-align: baseline; }
+.spacer { flex: 1; }
+.hr-check { display: inline-flex; align-items: center; gap: 6px; font-size: 0.875rem; color: var(--text-muted); white-space: nowrap; cursor: pointer; }
+.hr-check input { width: 16px; height: 16px; margin: 0; }
+
+/* Barra do timer */
+.hr-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; position: sticky; top: 8px; z-index: 5; }
+.hr-bar > input[type="text"] { flex: 1 1 150px; min-width: 0; }
+.hr-bar .hr-proj { flex: 0 1 160px; min-width: 120px; }
+.hr-bar .hr-proj select { width: 100%; }
+.hr-clock { font-family: var(--mono); font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 6.2ch; text-align: right; }
+button.hr-go { background: var(--go); border-color: var(--go); color: #fff; min-width: 88px; }
+button.hr-go.hr-stop { background: var(--stop); border-color: var(--stop); }
+
+.hr-sub { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 2px 16px; flex-wrap: wrap; }
+.hr-totals { margin: 0; }
+
+/* Lista por dia */
+.hr-day { padding-bottom: 6px; }
+.hr-day > header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.hr-day ul { list-style: none; margin: 0; padding: 0; }
+.hr-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+.hr-what { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.hr-what > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hr-what small { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hr-when { font-size: 0.8125rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hr-dur { font-family: var(--mono); font-variant-numeric: tabular-nums; min-width: 7ch; text-align: right; }
+
+/* Diálogo */
+.hr-dialog { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); color: var(--text); padding: 22px; width: min(460px, calc(100vw - 32px)); box-shadow: var(--shadow); }
+.hr-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
+.hr-dialog h2 { margin-bottom: 4px; }
+.hr-dialog .field input, .hr-dialog .field select { width: 100%; }
+.hr-grid3 { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 10px; }
+.hr-dialog-foot { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+input[type="date"], input[type="time"] { font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; min-width: 0; }
+
+/* Relatórios */
+.hr-filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.hr-filters select { width: auto; }
+.hr-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.hr-stat { display: flex; flex-direction: column; gap: 2px; }
+.hr-stat strong { font-size: 1.5rem; letter-spacing: -0.02em; }
+.hr-chart { display: flex; align-items: stretch; gap: 6px; height: 200px; margin-top: 12px; }
+.hr-chart-dense { gap: 2px; }
+.hr-col { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; }
+.hr-col small { font-size: 0.6875rem; white-space: nowrap; height: 1.1em; }
+.hr-colbar { width: 100%; max-width: 44px; background: var(--accent); border-radius: 4px 4px 0 0; opacity: 0.85; }
+.hr-col:hover .hr-colbar { opacity: 1; }
+.hr-pct { display: flex; align-items: center; gap: 8px; min-width: 120px; }
+.hr-pct > span { height: 8px; border-radius: 4px; min-width: 2px; max-width: 80px; flex: 0 0 auto; }
+
+/* Projetos */
+.hr-projects input[type="text"] { width: 100%; min-width: 120px; }
+.hr-projects input[type="color"] { width: 32px; height: 32px; padding: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); cursor: pointer; }
+.hr-projects td:nth-child(2) { display: flex; align-items: center; gap: 8px; }
+.hr-archived { opacity: 0.55; }
+.row > .hr-field-btn { flex: 0 0 auto; min-width: 0; align-self: flex-end; }
+
+/* Integrações */
+.hr-code { position: relative; }
+.hr-code pre { margin: 8px 0 0; padding: 14px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); overflow-x: auto; font-family: var(--mono); font-size: 0.8125rem; line-height: 1.5; white-space: pre; }
+.hr-code button { position: absolute; top: 16px; right: 8px; }
+.hr-reveal { border-color: var(--success-border); background: var(--success-bg); }
+.hr-reveal code { display: block; margin: 8px 0; padding: 10px; word-break: break-all; background: var(--surface); border: 1px solid var(--border); font-size: 0.875rem; }
+
+.hr-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: var(--radius); box-shadow: var(--shadow); z-index: 50; max-width: calc(100vw - 32px); font-size: 0.875rem; }
+.hr-toast-erro { background: var(--stop); color: #fff; }
+
+@media (max-width: 640px) {
+  .hr-bar { position: static; }
+  .hr-clock { flex: 1; text-align: left; }
+  .hr-when { display: none; }
+  .hr-stats { grid-template-columns: 1fr; }
+  .hr-grid3 { grid-template-columns: 1fr 1fr; }
+  .hr-grid3 > :first-child { grid-column: 1 / -1; }
+}

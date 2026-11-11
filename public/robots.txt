@@ -1,0 +1,4 @@
+# Sistema de autenticação: nada aqui deveria ser indexado.
+# As páginas também trazem <meta name="robots" content="noindex">.
+User-agent: *
+Disallow: /

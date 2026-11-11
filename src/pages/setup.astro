@@ -1,0 +1,59 @@
+---
+import Auth from "~/layouts/Auth.astro";
+import { contarAdminsPlataforma } from "~/lib/plataforma";
+
+export const prerender = false;
+
+// Só existe enquanto não houver superadmin. Com cadastro aberto, "banco vazio"
+// seria uma corrida: alguém se cadastra antes e o posto fica inalcançável.
+if ((await contarAdminsPlataforma(Astro.locals.env)) > 0) return Astro.redirect("/login");
+
+const hasSecret = Boolean(Astro.locals.env.SETUP_SECRET);
+---
+
+<Auth
+  title="Primeiro administrador"
+  heading="Primeiro administrador"
+  subheading="Ainda não existe um superadmin. Crie a conta que vai administrar a plataforma."
+>
+  {hasSecret ? (
+    <form method="post" action="/api/setup" class="stack">
+      <div class="field">
+        <label for="secret">SETUP_SECRET</label>
+        <input id="secret" name="secret" type="password" required autofocus autocomplete="off" />
+        <span class="hint">O valor que está em <code>.dev.vars</code> ou nos secrets do Worker.</span>
+      </div>
+
+      <div class="field">
+        <label for="nome">Nome</label>
+        <input id="nome" name="nome" type="text" autocomplete="name" required />
+      </div>
+
+      <div class="field">
+        <label for="email">E-mail</label>
+        <input id="email" name="email" type="email" autocomplete="username" required />
+      </div>
+
+      <div class="field">
+        <label for="senha">Senha</label>
+        <input id="senha" name="senha" type="password" minlength="10" autocomplete="new-password" required />
+        <span class="hint">Mínimo de 10 caracteres.</span>
+      </div>
+
+      <div class="field">
+        <label for="confirma">Confirmar senha</label>
+        <input id="confirma" name="confirma" type="password" minlength="10" autocomplete="new-password" required />
+      </div>
+
+      <button class="btn-block" type="submit">Criar administrador</button>
+      <p class="muted">
+        <small>Depois de criar, remova <code>SETUP_SECRET</code> do ambiente.</small>
+      </p>
+    </form>
+  ) : (
+    <p class="alert alert-error">
+      <span><code>SETUP_SECRET</code> não está configurada. Defina em <code>.dev.vars</code> (dev)
+      ou com <code>wrangler secret put SETUP_SECRET</code> (produção) e recarregue.</span>
+    </p>
+  )}
+</Auth>

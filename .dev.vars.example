@@ -1,0 +1,20 @@
+# Copie para `.dev.vars` (fica fora do Git) antes de rodar `npm run dev`.
+
+# Obrigatório. Gere com: openssl rand -base64 32
+BETTER_AUTH_SECRET="troque-isto-openssl-rand-base64-32"
+
+# URL base da aplicação. Em dev é o servidor do Astro.
+BETTER_AUTH_URL="http://localhost:4321"
+
+# Usado UMA única vez, em /setup, para criar o primeiro admin.
+# Depois que existir um usuário, /setup para de funcionar para sempre.
+SETUP_SECRET="troque-isto-tambem"
+
+# E-mail. Sem RESEND_API_KEY, os e-mails são impressos no console —
+# suficiente para testar convite e reset de senha localmente.
+RESEND_API_KEY=""
+EMAIL_FROM="Horas <no-reply@exemplo.com>"
+
+# Cloudflare Turnstile (opcional). Sem as chaves, o widget é ignorado.
+PUBLIC_TURNSTILE_SITE_KEY=""
+TURNSTILE_SECRET_KEY=""

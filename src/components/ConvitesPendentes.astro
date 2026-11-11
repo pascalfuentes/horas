@@ -1,0 +1,68 @@
+---
+import type { ConvitePendente } from "~/lib/membros";
+import { ROLE_LABELS } from "~/lib/permissions";
+
+interface Props {
+  convites: ConvitePendente[];
+  /**
+   * Sem e-mail confirmado o plugin recusa o aceite. Melhor não oferecer o botão
+   * do que oferecer um que falha — a mesma escolha da página `/convite/[id]`.
+   */
+  verificado: boolean;
+  /** Quantos mostrar antes de mandar para a lista completa. 0 = todos. */
+  limite?: number;
+}
+
+const { convites, verificado, limite = 0 } = Astro.props;
+const mostrados = limite > 0 ? convites.slice(0, limite) : convites;
+const restantes = convites.length - mostrados.length;
+---
+
+{convites.length > 0 && (
+  <div class="alert alert-info convites" role="status">
+    <strong>
+      {convites.length === 1
+        ? "Você tem um convite esperando"
+        : `Você tem ${convites.length} convites esperando`}
+    </strong>
+
+    {!verificado && (
+      <p class="muted">
+        <small>
+          Confirme seu e-mail para poder aceitar. <a href="/verificar-email">Confirmar agora</a>
+        </small>
+      </p>
+    )}
+
+    <ul>
+      {mostrados.map((c) => (
+        <li>
+          <span class="wrap">
+            <strong>{c.workspaceNome}</strong>
+            <small class="muted">
+              {" "}· como {ROLE_LABELS[c.role]}
+              {c.convidadoPor && <> · de {c.convidadoPor}</>}
+            </small>
+          </span>
+          {verificado && (
+            <span class="row-actions">
+              <form method="post" action="/api/convite/aceitar" class="inline-form">
+                <input type="hidden" name="id" value={c.id} />
+                <button class="btn-sm" type="submit">Aceitar</button>
+              </form>
+              <form method="post" action="/api/convite/aceitar" class="inline-form">
+                <input type="hidden" name="id" value={c.id} />
+                <input type="hidden" name="acao" value="recusar" />
+                <button class="btn-ghost btn-sm" type="submit">Recusar</button>
+              </form>
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
+
+    {restantes > 0 && (
+      <a href="/workspaces">Ver os outros {restantes}</a>
+    )}
+  </div>
+)}

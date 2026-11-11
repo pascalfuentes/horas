@@ -1,0 +1,53 @@
+---
+import { desc } from "drizzle-orm";
+
+import Dashboard from "~/layouts/Dashboard.astro";
+import { auditLog } from "~/db/schema";
+import { AUDIT_LABELS, type AuditAction } from "~/lib/audit";
+import { getDb } from "~/lib/auth";
+import { formatDateTime } from "~/lib/format";
+
+export const prerender = false;
+
+const eventos = await getDb(Astro.locals.env)
+  .select()
+  .from(auditLog)
+  .orderBy(desc(auditLog.createdAt))
+  .limit(200)
+  .all();
+
+const descrever = (acao: string) => AUDIT_LABELS[acao as AuditAction] ?? acao;
+---
+
+<Dashboard
+  title="Auditoria"
+  heading="Auditoria"
+  description="Quem fez o quê, com quem e quando. Últimos 200 eventos."
+>
+  <div class="card">
+    <h2>Eventos</h2>
+    {eventos.length === 0 ? (
+      <p class="empty">Nada registrado ainda.</p>
+    ) : (
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Quando</th><th>Quem</th><th>O quê</th><th>Alvo</th><th>Detalhes</th><th>IP</th></tr>
+          </thead>
+          <tbody>
+            {eventos.map((e) => (
+              <tr>
+                <td>{formatDateTime(e.createdAt)}</td>
+                <td class="wrap">{e.actorEmail ?? <span class="muted">sistema</span>}</td>
+                <td class="wrap">{descrever(e.action)}</td>
+                <td class="wrap">{e.targetEmail ?? "—"}</td>
+                <td class="wrap"><small class="muted">{e.details ?? "—"}</small></td>
+                <td>{e.ip ?? "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </div>
+</Dashboard>

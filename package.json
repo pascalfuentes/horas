@@ -1,0 +1,36 @@
+{
+  "name": "horas",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "postinstall": "node scripts/cf.mjs types || true",
+    "novo-projeto": "node scripts/novo-projeto.mjs",
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro build && node scripts/cf.mjs dev",
+    "deploy": "astro build && node scripts/cf.mjs deploy",
+    "check": "astro check",
+    "smoke": "./scripts/smoke.sh",
+    "db:local": "node scripts/d1.mjs",
+    "db:remote": "node scripts/d1.mjs --remote",
+    "db:sql": "node scripts/d1.mjs --sql",
+    "cf": "node scripts/cf.mjs",
+    "cf-typegen": "node scripts/cf.mjs types"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^14.3.1",
+    "astro": "^7.3.2",
+    "better-auth": "^1.7.5",
+    "@modelcontextprotocol/sdk": "^1.32.0",
+    "drizzle-orm": "^0.45.2",
+    "uqr": "^0.1.3",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@types/node": "^22.20.3",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.132.0"
+  }
+}

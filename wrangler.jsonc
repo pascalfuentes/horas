@@ -1,0 +1,43 @@
+// Versão do TEMPLATE.
+//
+// O database_id é um placeholder reconhecível. Ele tem formato válido de
+// propósito, para um clone rodar localmente (`npm run db:local && npm run dev`)
+// sem configurar nada — mas `npm run db:remote` recusa enquanto ele estiver
+// aqui, senão migrations de um projeto novo cairiam no banco de produção de
+// outro sem reclamar.
+//
+// `npm run novo-projeto` grava os valores reais em wrangler.local.jsonc, que
+// fica fora do Git e vence sobre este arquivo.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "horas",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+
+  // Pública de propósito: a sitekey do Turnstile é renderizada no HTML.
+  // A chave secreta correspondente é um secret (`wrangler secret put`).
+  // Vazia = sem Turnstile; o widget some e a verificação é ignorada.
+  "vars": {
+    "OPERADOR_NOME": "",
+    "OPERADOR_CONTATO": "",
+    "PUBLIC_TURNSTILE_SITE_KEY": ""
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "horas_db",
+      "database_id": "00000000-0000-4000-8000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ]
+
+  // Secrets (NUNCA no repositório — use `wrangler secret put <NOME>`):
+  //   BETTER_AUTH_SECRET   openssl rand -base64 32
+  //   BETTER_AUTH_URL      https://seu-dominio.com
+  //   RESEND_API_KEY       opcional — sem ele, e-mails vão para o log
+  //   EMAIL_FROM           "Nome <no-reply@seu-dominio.com>"
+  //   SETUP_SECRET         usado uma única vez para criar o primeiro admin
+  //   TURNSTILE_SECRET_KEY opcional (a sitekey pública fica em "vars" acima)
+}

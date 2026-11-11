@@ -1,0 +1,34 @@
+import type { APIRoute } from "astro";
+
+import { AUDIT, audit } from "~/lib/audit";
+import { actor, denyConta } from "~/lib/guards";
+import { codeFromAuthError, fail, ok, str } from "~/lib/http";
+
+export const prerender = false;
+
+export const POST: APIRoute = async ({ request, locals }) => {
+  const denied = denyConta(locals);
+  if (denied) return denied;
+
+  const form = await request.formData();
+  const token = str(form, "token");
+  if (!token) return fail("/dashboard/seguranca", "campos");
+
+  try {
+    // O Better Auth só revoga sessões do próprio usuário por esta rota.
+    await locals.auth.api.revokeSession({ body: { token }, headers: request.headers });
+  } catch (error) {
+    return fail("/dashboard/seguranca", codeFromAuthError(error));
+  }
+
+  const me = actor(locals);
+  await audit(locals.env, {
+    action: AUDIT.SELF_SESSION_REVOKED,
+    actorId: me.id,
+    actorEmail: me.email,
+    targetId: me.id,
+    request,
+  });
+
+  return ok("/dashboard/seguranca", "ok_sessao");
+};

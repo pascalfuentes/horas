@@ -1,0 +1,127 @@
+---
+import Dashboard from "~/layouts/Dashboard.astro";
+import { APP_NAME } from "~/config";
+import { listarTokens } from "~/lib/api-tokens";
+import { formatDateTime } from "~/lib/format";
+import { PERMISSIONS, pode } from "~/lib/permissions";
+import "~/styles/horas.css";
+
+export const prerender = false;
+
+const ws = Astro.locals.membership!;
+const tokens = await listarTokens(Astro.locals.env, {
+  userId: Astro.locals.user!.id,
+  workspaceId: ws.workspaceId,
+});
+const origem = Astro.url.origin;
+const nomeMcp = APP_NAME.toLowerCase();
+const leitura = !pode(ws.role, PERMISSIONS.CONTENT_WRITE);
+
+const exemplos = [
+  {
+    id: "ex-claude-code",
+    titulo: "Claude Code",
+    nota: "Rode no terminal.",
+    codigo: `claude mcp add --transport http ${nomeMcp} ${origem}/mcp --header "Authorization: Bearer SEU_TOKEN"`,
+  },
+  {
+    id: "ex-url",
+    titulo: "Claude (conector personalizado) e outros clientes que só aceitam uma URL",
+    nota: "Em Configurações → Conectores → Adicionar conector personalizado, cole esta URL. O token vai na própria URL, então trate-a como uma senha.",
+    codigo: `${origem}/mcp/SEU_TOKEN`,
+  },
+  {
+    id: "ex-json",
+    titulo: "Cursor, VS Code e clientes com arquivo de configuração",
+    nota: "Formato mcpServers padrão.",
+    codigo: JSON.stringify(
+      { mcpServers: { [nomeMcp]: { url: `${origem}/mcp`, headers: { Authorization: "Bearer SEU_TOKEN" } } } },
+      null,
+      2,
+    ),
+  },
+  {
+    id: "ex-curl",
+    titulo: "API REST",
+    nota: "Para scripts e automações. Rotas: /status, /entries, /timer/start, /timer/stop, /projects, /summary, /export.csv.",
+    codigo: `curl ${origem}/api/v1/status -H "Authorization: Bearer SEU_TOKEN"\n\ncurl -X POST ${origem}/api/v1/timer/start \\\n  -H "Authorization: Bearer SEU_TOKEN" -H "Content-Type: application/json" \\\n  -d '{"description": "Reunião de kickoff", "project": "Cliente X"}'`,
+  },
+];
+---
+
+<Dashboard
+  title={`Integrações — ${ws.workspaceNome}`}
+  heading="API e MCP"
+  description="Conecte o Claude ou outra IA para iniciar timers, lançar horas e tirar relatórios por você."
+>
+  <div id="horas-app" data-view="integracoes" data-tokens={`/api/w/${ws.workspaceSlug}/tokens`}>
+    {leitura && (
+      <p class="alert alert-info">
+        <span>Seu papel aqui é somente leitura: um token seu consegue consultar, mas não lançar horas.</span>
+      </p>
+    )}
+
+    <div class="card">
+      <h2>Novo token</h2>
+      <span class="muted">
+        Cada token vale para você neste workspace. Crie um por aplicativo — assim dá para revogar um sem derrubar os outros.
+      </span>
+      <form id="novo-token" class="row">
+        <div class="field">
+          <label for="nome">Onde vai usar</label>
+          <input id="nome" name="nome" type="text" maxlength="60" placeholder="Ex.: Claude no notebook" required />
+        </div>
+        <div class="field hr-field-btn"><button type="submit">Gerar token</button></div>
+      </form>
+      <div id="token-novo" class="alert hr-reveal" hidden>
+        <div>
+          <strong>Copie agora — ele não aparece de novo.</strong>
+          <code id="token-valor"></code>
+          <button type="button" class="btn-sm" data-copy="token-valor">Copiar token</button>
+          <small class="muted"> Os exemplos abaixo já estão preenchidos com ele.</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Seus tokens ({tokens.length})</h2>
+      {tokens.length === 0 ? (
+        <p class="empty">Nenhum token ainda.</p>
+      ) : (
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Nome</th><th>Token</th><th>Fuso</th><th>Criado em</th><th>Último uso</th><th></th></tr></thead>
+            <tbody>
+              {tokens.map((t) => (
+                <tr>
+                  <td class="wrap"><strong>{t.name}</strong></td>
+                  <td><code>{t.prefix}…</code></td>
+                  <td>{t.timezone}</td>
+                  <td>{formatDateTime(new Date(t.createdAt))}</td>
+                  <td>{t.lastUsedAt ? formatDateTime(new Date(t.lastUsedAt)) : "nunca"}</td>
+                  <td><button type="button" class="btn-danger btn-sm" data-revogar={t.id}>Revogar</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+
+    <div class="card">
+      <h2>Como conectar</h2>
+      <span class="muted">
+        O servidor MCP fica em <code>{origem}/mcp</code>. Depois de conectar, experimente pedir:
+        “comece um timer para a revisão do site no projeto Acme” ou “quanto trabalhei essa semana?”.
+      </span>
+      {exemplos.map((ex) => (
+        <div class="hr-code">
+          <p style="margin: 16px 0 0"><strong>{ex.titulo}</strong><br /><small class="muted">{ex.nota}</small></p>
+          <pre id={ex.id} data-token>{ex.codigo}</pre>
+          <button type="button" class="btn-ghost btn-sm" data-copy={ex.id}>Copiar</button>
+        </div>
+      ))}
+    </div>
+  </div>
+  <script is:inline src="/app/horas.js" defer></script>
+</Dashboard>

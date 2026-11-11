@@ -1,0 +1,11 @@
+---
+import Auth from "~/layouts/Auth.astro";
+export const prerender = false;
+---
+<Auth title="Página não encontrada" heading="Página não encontrada" subheading="O endereço que você abriu não existe aqui.">
+  <p class="muted">
+    Se você chegou por um link de convite ou de recuperação de senha, ele provavelmente já expirou
+    ou foi usado. Peça um novo.
+  </p>
+  <a class="btn btn-block" href="/login">Ir para o login</a>
+</Auth>

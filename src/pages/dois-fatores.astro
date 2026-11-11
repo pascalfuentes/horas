@@ -1,0 +1,61 @@
+---
+import Auth from "~/layouts/Auth.astro";
+import { safeNext } from "~/lib/http";
+
+export const prerender = false;
+
+/**
+ * Segundo fator no login. Chega-se aqui com a senha já aceita: o Better Auth
+ * ainda não abriu sessão, só deixou um cookie temporário. Por isso a página é
+ * pública no middleware — não há sessão para exigir ainda.
+ */
+const next = safeNext(Astro.url.searchParams.get("next") ?? "");
+---
+
+<Auth
+  title="Verificação em duas etapas"
+  heading="Confirme que é você"
+  subheading="Digite o código de seis dígitos do seu app autenticador."
+>
+  <form method="post" action="/api/dois-fatores" class="stack">
+    <input type="hidden" name="acao" value="totp" />
+    <input type="hidden" name="next" value={next} />
+
+    <div class="field">
+      <label for="codigo">Código</label>
+      <input id="codigo" name="codigo" type="text" inputmode="numeric" autocomplete="one-time-code"
+             pattern="[0-9]{6}" maxlength="6" required autofocus
+             style="font-size:1.3rem;letter-spacing:0.35em;text-align:center" />
+    </div>
+
+    <label style="display:flex;gap:8px;align-items:center;font-size:0.8125rem;cursor:pointer">
+      <input type="checkbox" name="confiar" value="1" style="width:auto" />
+      Confiar neste dispositivo por 30 dias
+    </label>
+
+    <button class="btn-block" type="submit">Entrar</button>
+  </form>
+
+  <details style="margin-top:18px">
+    <summary style="cursor:pointer;font-size:0.875rem">Perdi o acesso ao app</summary>
+    <p class="muted" style="margin:10px 0">
+      <small>
+        Use um dos códigos de recuperação que você guardou ao ativar. Cada um serve uma vez só.
+      </small>
+    </p>
+    <form method="post" action="/api/dois-fatores" class="stack">
+      <input type="hidden" name="acao" value="backup" />
+      <input type="hidden" name="next" value={next} />
+      <div class="field">
+        <label for="backup">Código de recuperação</label>
+        <input id="backup" name="codigo" type="text" autocomplete="off" required />
+      </div>
+      <button class="btn-ghost" type="submit">Usar código de recuperação</button>
+    </form>
+    <p class="muted" style="margin-top:10px">
+      <small>Sem o celular e sem os códigos, só um administrador consegue devolver seu acesso.</small>
+    </p>
+  </details>
+
+  <p class="auth-foot"><a href="/login">Voltar ao login</a></p>
+</Auth>
