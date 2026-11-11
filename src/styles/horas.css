@@ -97,6 +97,12 @@ td .hr-pct small { color: var(--text-muted); }
 .row > .hr-field-btn { flex: 0 0 auto; min-width: 0; align-self: flex-end; }
 .row > .hr-field-sm { min-width: 0; flex: 0 0 160px; }
 
+/* ----- Waiting for the server ----- */
+div[aria-busy="true"] { opacity: 0.55; transition: opacity 0.15s; pointer-events: none; }
+.hr-waiting { display: flex; align-items: center; gap: 10px; margin: 0; padding: 20px 4px; color: var(--text-muted); }
+.hr-waiting::before { content: ""; width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: busy-spin 0.7s linear infinite; flex: none; }
+@media (prefers-reduced-motion: reduce) { .hr-waiting::before { animation-duration: 2.4s; } }
+
 /* ----- Import & export ----- */
 input[type="file"] { font: inherit; font-size: 0.9375rem; width: 100%; padding: 9px 12px; background: var(--surface); border: 1px dashed var(--border-strong); border-radius: var(--radius); color: var(--text); }
 input[type="file"]::file-selector-button { font: inherit; font-weight: 500; margin-right: 12px; padding: 6px 14px; border: 0; border-radius: 999px; background: var(--surface-2); color: var(--text); cursor: pointer; }

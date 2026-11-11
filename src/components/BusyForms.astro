@@ -1,0 +1,57 @@
+---
+/**
+ * Waiting state for ordinary HTML forms (login, sign-up, settings, members…).
+ *
+ * These forms post and reload the page, which can take a moment. On submit the
+ * button is disabled and says so, which also stops a double submit. The lock
+ * is released if the page comes back from the browser's history, or after a
+ * few seconds when the submit turned out to be a file download and the page
+ * never navigated.
+ */
+---
+
+<script is:inline>
+  (function () {
+    /**
+     * Restores the buttons of a form to their normal state.
+     * @param {HTMLFormElement} form
+     * @returns {void}
+     */
+    function release(form) {
+      var buttons = form.querySelectorAll("button[data-busy-label]");
+      for (var i = 0; i < buttons.length; i++) {
+        buttons[i].disabled = false;
+        buttons[i].removeAttribute("aria-busy");
+        buttons[i].textContent = buttons[i].getAttribute("data-busy-label");
+        buttons[i].removeAttribute("data-busy-label");
+      }
+    }
+
+    document.addEventListener("submit", function (ev) {
+      var form = ev.target;
+      // Forms handled by the app script manage their own waiting state.
+      if (!form || form.tagName !== "FORM" || !form.getAttribute("action")) return;
+      // Wait a tick: a button disabled during the event would be left out of the submission.
+      setTimeout(function () {
+        if (ev.defaultPrevented) return;
+        var buttons = form.querySelectorAll('button[type="submit"], button:not([type])');
+        for (var i = 0; i < buttons.length; i++) {
+          var b = buttons[i];
+          if (b.disabled) continue;
+          b.setAttribute("data-busy-label", b.textContent);
+          b.disabled = true;
+          if (b === ev.submitter || buttons.length === 1) {
+            b.setAttribute("aria-busy", "true");
+            b.textContent = b.getAttribute("data-busy") || "Please wait…";
+          }
+        }
+        setTimeout(function () { release(form); }, 8000);
+      }, 0);
+    });
+
+    window.addEventListener("pageshow", function () {
+      var forms = document.querySelectorAll("form");
+      for (var i = 0; i < forms.length; i++) release(forms[i]);
+    });
+  })();
+</script>

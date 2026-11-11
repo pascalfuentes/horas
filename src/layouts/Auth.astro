@@ -1,4 +1,5 @@
 ---
+import BusyForms from "~/components/BusyForms.astro";
 import Theme from "~/components/Theme.astro";
 import Alert from "~/components/Alert.astro";
 import "~/styles/global.css";
@@ -22,6 +23,7 @@ const params = Astro.url.searchParams;
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>{title}</title>
     <Theme />
+    <BusyForms />
   </head>
   <body>
     <main class="auth-shell">

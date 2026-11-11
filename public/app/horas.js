@@ -183,15 +183,86 @@
     setTimeout(function () { t.remove(); }, 3500);
   }
 
+  /** What a button says while its action is waiting for the server. */
+  const BUSY_LABELS = {
+    'Start': 'Starting…', 'Stop': 'Stopping…', 'Save': 'Saving…', 'Delete': 'Deleting…', 'Duplicate': 'Duplicating…',
+    'Create': 'Creating…', 'Archive': 'Archiving…', 'Restore': 'Restoring…', 'Revoke': 'Revoking…',
+    'Generate token': 'Generating…', 'Export CSV': 'Exporting…', 'Load 30 more days': 'Loading…',
+    'Download backup (JSON)': 'Preparing…', 'Download entries (CSV)': 'Preparing…', 'Copy': 'Copying…',
+  };
+
   /**
-   * Wraps an async handler: an error becomes a notice instead of vanishing into the console.
-   * @param {function(...any): Promise<any>} fn
+   * The buttons to lock while a handler runs: the one that was clicked (or the
+   * form's submit button), plus every other button in the same form or dialog,
+   * so a second action cannot start in the middle of the first.
+   * @param {Event|undefined} ev
+   * @returns {{main: HTMLButtonElement, all: HTMLButtonElement[]}|null}
+   */
+  function busyTargets(ev) {
+    if (!ev || !ev.type || !ev.currentTarget || !ev.currentTarget.querySelector) return null;
+    const el0 = /** @type {HTMLElement} */ (ev.currentTarget);
+    const main = ev.type === 'submit' ? el0.querySelector('button[type="submit"]') : (ev.type === 'click' && el0.tagName === 'BUTTON' ? el0 : null);
+    if (!main) return null;
+    const scope = main.closest('form') || main.closest('.row-actions') || main.parentElement;
+    const all = scope ? Array.prototype.slice.call(scope.querySelectorAll('button')) : [main];
+    return { main: /** @type {HTMLButtonElement} */ (main), all: all.indexOf(main) === -1 ? all.concat([main]) : all };
+  }
+
+  /**
+   * Puts buttons in the waiting state and returns a function that undoes it.
+   * The label is only restored if nothing else changed it meanwhile (the timer
+   * button, for instance, is relabelled by the screen itself after a start).
+   * @param {{main: HTMLButtonElement, all: HTMLButtonElement[]}} targets
+   * @returns {function(): void}
+   */
+  function setBusy(targets) {
+    const main = targets.main;
+    const label = main.textContent;
+    const plain = main.children.length === 0;
+    const busy = main.getAttribute('data-busy') || BUSY_LABELS[label] || (/^Import /.test(label) ? 'Importing…' : 'Working…');
+    const locked = targets.all.filter(function (b) { return !b.disabled; });
+    locked.forEach(function (b) { b.disabled = true; });
+    main.setAttribute('aria-busy', 'true');
+    if (plain) main.textContent = busy;
+    return function () {
+      locked.forEach(function (b) { b.disabled = false; });
+      main.removeAttribute('aria-busy');
+      if (plain && main.textContent === busy) main.textContent = label;
+    };
+  }
+
+  /**
+   * Wraps an async handler. While it waits for the server, the button that
+   * started it is disabled and says so; an error becomes a notice instead of
+   * vanishing into the console.
+   * @param {function(...any): (Promise<any>|any)} fn
    * @returns {function(...any): void}
    */
   function safe(fn) {
     return function () {
-      fn.apply(null, arguments).catch(function (e) { toast(e.message, true); });
+      const targets = busyTargets(arguments[0]);
+      // A second click while the first is still waiting does nothing.
+      if (targets && targets.main.getAttribute('aria-busy') === 'true') return;
+      const release = targets ? setBusy(targets) : function () {};
+      let pending;
+      try {
+        pending = Promise.resolve(fn.apply(null, arguments));
+      } catch (e) {
+        pending = Promise.reject(e);
+      }
+      pending.catch(function (e) { toast(e.message, true); }).then(release);
     };
+  }
+
+  /**
+   * Shows a waiting message inside a container while something loads.
+   * @param {HTMLElement} container
+   * @param {string} message
+   * @returns {void}
+   */
+  function waiting(container, message) {
+    container.setAttribute('aria-busy', 'true');
+    container.replaceChildren(el('p', { class: 'hr-waiting', role: 'status', text: message }));
   }
 
   /**
@@ -689,8 +760,15 @@
       tabs.replaceChildren.apply(tabs, [['summary', 'Summary'], ['detailed', 'Detailed']].map(function (t) {
         return el('button', { type: 'button', role: 'tab', class: 'btn-ghost btn-sm', 'aria-selected': String(mode === t[0]), text: t[1], onclick: function () { mode = t[0]; reload(); } });
       }));
-      if (mode === 'summary') await loadSummary();
-      else await loadDetailed();
+      // First load shows a message; later ones dim the old numbers until the new ones arrive.
+      if (!out.children.length) waiting(out, 'Loading your report…');
+      out.setAttribute('aria-busy', 'true');
+      try {
+        if (mode === 'summary') await loadSummary();
+        else await loadDetailed();
+      } finally {
+        out.removeAttribute('aria-busy');
+      }
     }
 
     const reload = safe(load);
@@ -959,8 +1037,18 @@
       out.replaceChildren();
       if (!f) return;
       if (f.size > 3000000) throw new Error('File too large. The limit is 3 MB; split it by period.');
-      content = await f.text();
-      show(await send(true));
+      waiting(out, 'Reading ' + f.name + ' and checking it against your entries…');
+      file.disabled = order.disabled = true;
+      try {
+        content = await f.text();
+        show(await send(true));
+      } catch (e) {
+        out.replaceChildren();
+        throw e;
+      } finally {
+        out.removeAttribute('aria-busy');
+        file.disabled = order.disabled = false;
+      }
     });
     file.addEventListener('change', preview);
     order.addEventListener('change', preview);

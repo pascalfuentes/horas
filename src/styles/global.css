@@ -209,6 +209,10 @@ button, .btn {
 }
 button:hover, .btn:hover { background: var(--accent-hover); }
 button:disabled { opacity: 0.4; cursor: not-allowed; }
+/* Waiting for the server: the button keeps its colour and shows a spinner. */
+button[aria-busy="true"]:disabled { opacity: 0.75; cursor: progress; }
+button[aria-busy="true"]::before { content: ""; width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: busy-spin 0.7s linear infinite; flex: none; }
+@keyframes busy-spin { to { transform: rotate(360deg); } }
 .btn-block { width: 100%; }
 /* Outline: secondary action. */
 .btn-ghost { background: var(--surface); color: var(--text); border-color: var(--ink); }
