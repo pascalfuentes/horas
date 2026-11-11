@@ -19,12 +19,12 @@ export type AppEnv = Env & {
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;
   // Aparecem na política de privacidade. Públicos, então ficam em `vars`.
-  OPERADOR_NOME?: string;
-  OPERADOR_CONTATO?: string;
+  OPERATOR_NAME?: string;
+  OPERATOR_CONTACT?: string;
 };
 
 /** Provedores sociais efetivamente configurados neste ambiente. */
-export function provedoresSociais(value: AppEnv): Array<"google" | "github"> {
+export function socialProviders(value: AppEnv): Array<"google" | "github"> {
   const lista: Array<"google" | "github"> = [];
   if (value.GOOGLE_CLIENT_ID && value.GOOGLE_CLIENT_SECRET) lista.push("google");
   if (value.GITHUB_CLIENT_ID && value.GITHUB_CLIENT_SECRET) lista.push("github");

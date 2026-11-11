@@ -1,19 +1,19 @@
 ---
-import ConvitesPendentes from "~/components/ConvitesPendentes.astro";
+import PendingInvites from "~/components/PendingInvites.astro";
 import Dashboard from "~/layouts/Dashboard.astro";
-import { convitesPendentesPara } from "~/lib/membros";
+import { pendingInvitesFor } from "~/lib/members";
 import { ROLE_DESCRIPTIONS, ROLE_LABELS } from "~/lib/permissions";
-import { workspacesDoUsuario } from "~/lib/workspaces";
+import { userWorkspaces } from "~/lib/workspaces";
 
 export const prerender = false;
 
 const eu = Astro.locals.user!;
-const meus = await workspacesDoUsuario(Astro.locals.env, eu.id);
+const meus = await userWorkspaces(Astro.locals.env, eu.id);
 
 // Aqui a lista vem inteira: esta é a página que responde "de onde eu
 // participo", e um convite pendente faz parte dessa resposta. O layout omite o
 // aviso do topo nesta rota justamente para não duplicar.
-const convites = await convitesPendentesPara(Astro.locals.env, eu.email);
+const convites = await pendingInvitesFor(Astro.locals.env, eu.email);
 ---
 
 <Dashboard
@@ -22,17 +22,17 @@ const convites = await convitesPendentesPara(Astro.locals.env, eu.email);
   description="Cada workspace tem os próprios dados, membros e permissões."
 >
   {convites.length > 0 && (
-    <ConvitesPendentes convites={convites} verificado={eu.emailVerified} />
+    <PendingInvites convites={convites} verificado={eu.emailVerified} />
   )}
 
   <div class="card">
     <h2>Criar workspace</h2>
-    <span class="muted">Você entra como dono e pode convidar quem quiser depois.</span>
+    <span class="muted">Você entra como dono e can convidar quem quiser depois.</span>
 
     <form method="post" action="/api/workspaces" class="row">
       <div class="field">
         <label for="nome">Nome</label>
-        <input id="nome" name="nome" type="text" maxlength="60" required />
+        <input id="nome" name="name" type="text" maxlength="60" required />
       </div>
       <div><button type="submit">Criar</button></div>
     </form>
@@ -46,7 +46,7 @@ const convites = await convitesPendentesPara(Astro.locals.env, eu.email);
         <tbody>
           {meus.map((w) => (
             <tr>
-              <td class="wrap"><strong>{w.workspaceNome}</strong><br /><small class="muted">/w/{w.workspaceSlug}</small></td>
+              <td class="wrap"><strong>{w.workspaceName}</strong><br /><small class="muted">/w/{w.workspaceSlug}</small></td>
               <td><span class={`badge ${w.role === "owner" ? "badge-admin" : ""}`}>{ROLE_LABELS[w.role]}</span></td>
               <td class="wrap"><small class="muted">{ROLE_DESCRIPTIONS[w.role]}</small></td>
               <td><a class="btn btn-ghost btn-sm" href={`/w/${w.workspaceSlug}`}>Abrir</a></td>

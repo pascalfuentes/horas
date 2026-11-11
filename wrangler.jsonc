@@ -6,7 +6,7 @@
 // aqui, senão migrations de um projeto novo cairiam no banco de produção de
 // outro sem reclamar.
 //
-// `npm run novo-projeto` grava os valores reais em wrangler.local.jsonc, que
+// `npm run new-project` grava os valores reais em wrangler.local.jsonc, que
 // fica fora do Git e vence sobre este arquivo.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -19,8 +19,8 @@
   // A chave secreta correspondente é um secret (`wrangler secret put`).
   // Vazia = sem Turnstile; o widget some e a verificação é ignorada.
   "vars": {
-    "OPERADOR_NOME": "",
-    "OPERADOR_CONTATO": "",
+    "OPERATOR_NAME": "",
+    "OPERATOR_CONTACT": "",
     "PUBLIC_TURNSTILE_SITE_KEY": ""
   },
 

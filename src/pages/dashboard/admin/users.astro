@@ -1,0 +1,148 @@
+---
+import { desc } from "drizzle-orm";
+
+import Dashboard from "~/layouts/Dashboard.astro";
+import { PLATFORM_ROLES, user as userTable, type PlatformRole } from "~/db/schema";
+import { getDb } from "~/lib/auth";
+import { formatDateTime } from "~/lib/format";
+import { PLATFORM_ROLE_LABELS } from "~/lib/permissions";
+
+export const prerender = false;
+
+const db = getDb(Astro.locals.env);
+const eu = Astro.locals.user!;
+
+const usuarios = await db
+  .select({
+    id: userTable.id,
+    name: userTable.name,
+    email: userTable.email,
+    role: userTable.role,
+    banned: userTable.banned,
+    twoFactorEnabled: userTable.twoFactorEnabled,
+    createdAt: userTable.createdAt,
+  })
+  .from(userTable)
+  .orderBy(desc(userTable.createdAt))
+  .limit(500)
+  .all();
+
+// Só para a interface — a garantia de verdade é o trigger em
+// migrations/0001_invariants.sql, que aborta a transação.
+const adminsAtivos = usuarios.filter((u) => u.role === "admin" && !u.banned).length;
+const ultimoAdmin = (u: (typeof usuarios)[number]) =>
+  u.role === "admin" && !u.banned && adminsAtivos === 1;
+---
+
+<Dashboard
+  title="Usuários"
+  heading="Usuários"
+  description={`${usuarios.length} conta${usuarios.length === 1 ? "" : "s"} · ${adminsAtivos} administrador${adminsAtivos === 1 ? "" : "es"} ativo${adminsAtivos === 1 ? "" : "s"}`}
+>
+  {adminsAtivos === 1 && (
+    <p class="alert alert-info">
+      <span>
+        Existe apenas um administrador ativo. O banco não permite rebaixá-lo nem desativá-lo —
+        promova outra pessoa antes.
+      </span>
+    </p>
+  )}
+
+  <div class="card">
+    <h2>Contas</h2>
+    <span class="muted">
+      Desativar preserva o histórico; é preferível a apagar. "Destravar" remove a verificação
+      em duas etapas de quem perdeu o celular <em>e</em> os códigos de recuperação — a pessoa
+      volta a entrar só com a senha e configura de novo.
+    </span>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Pessoa</th><th>Papel</th><th>Situação</th><th>2FA</th><th>Criada em</th><th>Ações</th></tr>
+        </thead>
+        <tbody>
+          {usuarios.map((u) => (
+            <tr>
+              <td class="wrap">
+                <strong>{u.name}</strong><br />
+                <small class="muted">{u.email}</small>
+                {u.id === eu.id && <> <span class="badge">você</span></>}
+              </td>
+
+              <td>
+                <form method="post" action="/api/admin/users" class="inline-form">
+                  <input type="hidden" name="action" value="role" />
+                  <input type="hidden" name="userId" value={u.id} />
+                  <input type="hidden" name="email" value={u.email} />
+                  <select name="role" disabled={u.id === eu.id || ultimoAdmin(u)}>
+                    {PLATFORM_ROLES.map((r) => (
+                      <option value={r} selected={r === u.role}>{PLATFORM_ROLE_LABELS[r]}</option>
+                    ))}
+                  </select>
+                  <button class="btn-ghost btn-sm" type="submit" disabled={u.id === eu.id || ultimoAdmin(u)}>
+                    Aplicar
+                  </button>
+                </form>
+              </td>
+
+              <td>
+                {u.banned
+                  ? <span class="badge">desativado</span>
+                  : <span class="badge badge-ok">ativo</span>}
+              </td>
+
+              <td>
+                {u.twoFactorEnabled ? (
+                  <form method="post" action="/api/admin/users" class="inline-form">
+                    <input type="hidden" name="action" value="reset-2fa" />
+                    <input type="hidden" name="userId" value={u.id} />
+                    <input type="hidden" name="email" value={u.email} />
+                    <span class="badge badge-ok">ativo</span>
+                    <button class="btn-danger btn-sm" type="submit"
+                            title="Use quando a pessoa perder o celular e os códigos de recuperação">
+                      Destravar
+                    </button>
+                  </form>
+                ) : (
+                  <span class="badge">não</span>
+                )}
+              </td>
+
+              <td>{formatDateTime(u.createdAt)}</td>
+
+              <td>
+                <div class="row-actions">
+                  {u.banned ? (
+                    <form method="post" action="/api/admin/users" class="inline-form">
+                      <input type="hidden" name="action" value="enable" />
+                      <input type="hidden" name="userId" value={u.id} />
+                      <input type="hidden" name="email" value={u.email} />
+                      <button class="btn-ghost btn-sm" type="submit">Reativar</button>
+                    </form>
+                  ) : (
+                    <form method="post" action="/api/admin/users" class="inline-form">
+                      <input type="hidden" name="action" value="disable" />
+                      <input type="hidden" name="userId" value={u.id} />
+                      <input type="hidden" name="email" value={u.email} />
+                      <button class="btn-danger btn-sm" type="submit" disabled={u.id === eu.id || ultimoAdmin(u)}>
+                        Desativar
+                      </button>
+                    </form>
+                  )}
+
+                  <form method="post" action="/api/admin/users" class="inline-form">
+                    <input type="hidden" name="action" value="revoke-sessions" />
+                    <input type="hidden" name="userId" value={u.id} />
+                    <input type="hidden" name="email" value={u.email} />
+                    <button class="btn-ghost btn-sm" type="submit">Encerrar sessões</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</Dashboard>

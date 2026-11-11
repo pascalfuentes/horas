@@ -1,4 +1,4 @@
-import { podeAdministrarPlataforma, pode, type Permission } from "~/lib/permissions";
+import { canAdministerPlatform, can, type Permission } from "~/lib/permissions";
 
 export { isLastAdminError } from "~/lib/errors";
 
@@ -20,7 +20,7 @@ export { isLastAdminError } from "~/lib/errors";
  * o papel dela em qualquer workspace — inclusive quem é só `viewer`. "Somente
  * leitura" vale para os dados de negócio, não para a própria senha.
  */
-export function denyConta(locals: App.Locals): Response | null {
+export function denyAccount(locals: App.Locals): Response | null {
   if (!locals.user) return new Response("Não autenticado", { status: 401 });
   return null;
 }
@@ -35,7 +35,7 @@ export function denyConta(locals: App.Locals): Response | null {
 export function deny(locals: App.Locals, permission: Permission): Response | null {
   if (!locals.user) return new Response("Não autenticado", { status: 401 });
   if (!locals.membership) return new Response("Workspace não encontrado", { status: 404 });
-  if (!pode(locals.membership.role, permission)) {
+  if (!can(locals.membership.role, permission)) {
     return new Response("Sem permissão", { status: 403 });
   }
   return null;
@@ -47,9 +47,9 @@ export function deny(locals: App.Locals, permission: Permission): Response | nul
  * Ser superadmin não dá passe livre dentro de workspace alheio: para agir num
  * workspace é preciso ser membro dele, como qualquer pessoa.
  */
-export function denyPlataforma(locals: App.Locals): Response | null {
+export function denyPlatform(locals: App.Locals): Response | null {
   if (!locals.user) return new Response("Não autenticado", { status: 401 });
-  if (!podeAdministrarPlataforma(locals.user.role)) {
+  if (!canAdministerPlatform(locals.user.role)) {
     return new Response("Sem permissão", { status: 403 });
   }
   return null;
@@ -62,6 +62,6 @@ export function actor(locals: App.Locals): { id: string; email: string; role: st
 }
 
 /** O workspace do contexto, tipado como não-nulo. Só use depois de `deny()`. */
-export function workspaceAtual(locals: App.Locals) {
+export function currentWorkspace(locals: App.Locals) {
   return locals.membership!;
 }

@@ -15,7 +15,7 @@ import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-or
  * instalação. Não decide nada dentro de workspace nenhum.
  *
  * WORKSPACE (`member.role`) é quem decide ler e escrever. É por workspace, então
- * a mesma pessoa pode ser `owner` num e `viewer` noutro.
+ * a mesma pessoa can ser `owner` num e `viewer` noutro.
  */
 export const PLATFORM_ROLES = ["admin", "user"] as const;
 export type PlatformRole = (typeof PLATFORM_ROLES)[number];
@@ -213,7 +213,7 @@ export const auditLog = sqliteTable(
     details: text("details"),
     ip: text("ip"),
     /**
-     * SET NULL, não CASCADE: apagar um workspace não pode apagar o registro de
+     * SET NULL, não CASCADE: apagar um workspace não can apagar o registro de
      * que ele existiu e de quem fez o quê nele.
      */
     workspaceId: text("workspaceId").references(() => organization.id, { onDelete: "set null" }),

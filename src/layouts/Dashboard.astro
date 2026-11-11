@@ -1,10 +1,10 @@
 ---
 import Alert from "~/components/Alert.astro";
-import ConvitesPendentes from "~/components/ConvitesPendentes.astro";
+import PendingInvites from "~/components/PendingInvites.astro";
 import { APP_NAME } from "~/config";
-import { convitesPendentesPara } from "~/lib/membros";
-import { ROLE_LABELS, podeAdministrarPlataforma, pode, PERMISSIONS } from "~/lib/permissions";
-import { workspacesDoUsuario } from "~/lib/workspaces";
+import { pendingInvitesFor } from "~/lib/members";
+import { ROLE_LABELS, canAdministerPlatform, can, PERMISSIONS } from "~/lib/permissions";
+import { userWorkspaces } from "~/lib/workspaces";
 import "~/styles/global.css";
 
 interface Props {
@@ -16,41 +16,41 @@ interface Props {
 const { title, heading, description } = Astro.props;
 const user = Astro.locals.user!;
 const atual = Astro.locals.membership;
-const superadmin = podeAdministrarPlataforma(user.role);
+const superadmin = canAdministerPlatform(user.role);
 const path = Astro.url.pathname;
 const params = Astro.url.searchParams;
 
 // Para o seletor. Uma consulta por página renderizada é barata e evita que a
 // lista fique velha depois de criar ou sair de um workspace.
-const meusWorkspaces = await workspacesDoUsuario(Astro.locals.env, user.id);
+const meusWorkspaces = await userWorkspaces(Astro.locals.env, user.id);
 
 // Convite só existia no link do e-mail. Quem apagou a mensagem ficava sem
 // caminho nenhum, mesmo já estando logado — daí o aviso no topo do painel.
 // Em `/workspaces` ele é omitido porque lá a lista completa já aparece inteira.
 const mostrarConvites = path !== "/workspaces";
 const convitesPendentes = mostrarConvites
-  ? await convitesPendentesPara(Astro.locals.env, user.email)
+  ? await pendingInvitesFor(Astro.locals.env, user.email)
   : [];
 
 const grupos = [
   ...(atual
     ? [
         {
-          grupo: atual.workspaceNome,
+          grupo: atual.workspaceName,
           itens: [
-            ...(pode(atual.role, PERMISSIONS.CONTENT_READ)
+            ...(can(atual.role, PERMISSIONS.CONTENT_READ)
               ? [
-                  { href: `/w/${atual.workspaceSlug}/tempo`, label: "Tempo" },
-                  { href: `/w/${atual.workspaceSlug}/relatorios`, label: "Relatórios" },
-                  { href: `/w/${atual.workspaceSlug}/projetos`, label: "Projetos" },
-                  { href: `/w/${atual.workspaceSlug}/integracoes`, label: "API e MCP" },
+                  { href: `/w/${atual.workspaceSlug}/time`, label: "Tempo" },
+                  { href: `/w/${atual.workspaceSlug}/reports`, label: "Relatórios" },
+                  { href: `/w/${atual.workspaceSlug}/projects`, label: "Projetos" },
+                  { href: `/w/${atual.workspaceSlug}/integrations`, label: "API e MCP" },
                 ]
               : []),
-            ...(pode(atual.role, PERMISSIONS.MEMBERS_READ)
-              ? [{ href: `/w/${atual.workspaceSlug}/membros`, label: "Membros" }]
+            ...(can(atual.role, PERMISSIONS.MEMBERS_READ)
+              ? [{ href: `/w/${atual.workspaceSlug}/members`, label: "Membros" }]
               : []),
-            ...(pode(atual.role, PERMISSIONS.WORKSPACE_READ)
-              ? [{ href: `/w/${atual.workspaceSlug}/configuracoes`, label: "Configurações" }]
+            ...(can(atual.role, PERMISSIONS.WORKSPACE_READ)
+              ? [{ href: `/w/${atual.workspaceSlug}/settings`, label: "Configurações" }]
               : []),
           ],
         },
@@ -59,8 +59,8 @@ const grupos = [
   {
     grupo: "Conta",
     itens: [
-      { href: "/dashboard/perfil", label: "Meus dados" },
-      { href: "/dashboard/seguranca", label: "Segurança" },
+      { href: "/dashboard/profile", label: "Meus dados" },
+      { href: "/dashboard/security", label: "Segurança" },
     ],
   },
   ...(superadmin
@@ -68,8 +68,8 @@ const grupos = [
         {
           grupo: "Plataforma",
           itens: [
-            { href: "/dashboard/admin/usuarios", label: "Usuários" },
-            { href: "/dashboard/admin/auditoria", label: "Auditoria" },
+            { href: "/dashboard/admin/users", label: "Usuários" },
+            { href: "/dashboard/admin/audit", label: "Auditoria" },
           ],
         },
       ]
@@ -91,10 +91,10 @@ const grupos = [
       <nav class="sidenav" aria-label="Navegação principal">
         <a class="brand" href="/dashboard"><span class="logo" aria-hidden="true"></span>{APP_NAME}</a>
         <details class="seletor-ws" open={!atual}>
-          <summary>{atual ? atual.workspaceNome : "Escolher workspace"}</summary>
+          <summary>{atual ? atual.workspaceName : "Escolher workspace"}</summary>
           {meusWorkspaces.map((w) => (
-            <a href={`/w/${w.workspaceSlug}/tempo`} aria-current={w.workspaceSlug === atual?.workspaceSlug ? "true" : undefined}>
-              {w.workspaceNome}
+            <a href={`/w/${w.workspaceSlug}/time`} aria-current={w.workspaceSlug === atual?.workspaceSlug ? "true" : undefined}>
+              {w.workspaceName}
               <small class="muted"> · {ROLE_LABELS[w.role]}</small>
             </a>
           ))}
@@ -121,19 +121,19 @@ const grupos = [
             <span>
               {user.name}<br />
               {atual
-                ? <span class="badge">{ROLE_LABELS[atual.role]} · {atual.workspaceNome}</span>
+                ? <span class="badge">{ROLE_LABELS[atual.role]} · {atual.workspaceName}</span>
                 : superadmin
                   ? <span class="badge badge-admin">Superadmin da plataforma</span>
                   : <span class="badge">Conta</span>}
             </span>
             <span class="avatar" aria-hidden="true">{user.name.trim().charAt(0).toUpperCase()}</span>
-            <form method="post" action="/api/sair" class="inline-form">
+            <form method="post" action="/api/logout" class="inline-form">
               <button class="btn-ghost btn-sm" type="submit">Sair</button>
             </form>
           </div>
         </div>
         <Alert error={params.get("e")} success={params.get("ok")} />
-        <ConvitesPendentes convites={convitesPendentes} verificado={user.emailVerified} limite={3} />
+        <PendingInvites convites={convitesPendentes} verificado={user.emailVerified} limite={3} />
         <slot />
       </main>
     </div>

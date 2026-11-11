@@ -1,7 +1,7 @@
 import type { WorkspaceRole } from "~/db/schema";
 import type { AppEnv } from "~/lib/env";
-import { DEFAULT_TZ, tzValido } from "~/lib/horas";
-import { ehPapelDeWorkspace } from "~/lib/permissions";
+import { DEFAULT_TZ, isValidTz } from "~/lib/horas";
+import { isWorkspaceRole } from "~/lib/permissions";
 import { generateToken, hashToken } from "~/lib/tokens";
 
 /**
@@ -15,10 +15,10 @@ import { generateToken, hashToken } from "~/lib/tokens";
  * vale na hora, sem precisar lembrar de revogar token.
  */
 
-export const TOKEN_PREFIXO = "hrs_";
+export const TOKEN_PREFIX = "hrs_";
 const MAX_TOKENS_POR_PESSOA = 20;
 
-export type TokenListado = {
+export type ListedToken = {
   id: string;
   name: string;
   prefix: string;
@@ -27,7 +27,7 @@ export type TokenListado = {
   lastUsedAt: string | null;
 };
 
-export type Portador = {
+export type Bearer = {
   tokenId: string;
   userId: string;
   workspaceId: string;
@@ -35,29 +35,29 @@ export type Portador = {
   tz: string;
 };
 
-export async function listarTokens(env: AppEnv, dono: { userId: string; workspaceId: string }): Promise<TokenListado[]> {
+export async function listTokens(env: AppEnv, dono: { userId: string; workspaceId: string }): Promise<ListedToken[]> {
   const r = await env.DB.prepare(
     `SELECT "id", "name", "prefix", "timezone", "createdAt", "lastUsedAt"
        FROM "api_token" WHERE "userId" = ?1 AND "workspaceId" = ?2 ORDER BY "createdAt" DESC`,
   )
     .bind(dono.userId, dono.workspaceId)
-    .all<TokenListado>();
+    .all<ListedToken>();
   return r.results ?? [];
 }
 
 /** Cria o token e devolve o valor em claro — a única vez que ele existe fora do hash. */
-export async function criarToken(
+export async function createToken(
   env: AppEnv,
   input: { userId: string; workspaceId: string; name: string; timezone?: string },
-): Promise<{ id: string; token: string } | { erro: string }> {
+): Promise<{ id: string; token: string } | { error: string }> {
   const total = await env.DB.prepare(`SELECT COUNT(*) AS n FROM "api_token" WHERE "userId" = ?1`)
     .bind(input.userId)
     .first<{ n: number }>();
   if ((total?.n ?? 0) >= MAX_TOKENS_POR_PESSOA) {
-    return { erro: `Limite de ${MAX_TOKENS_POR_PESSOA} tokens. Revogue algum que não usa mais.` };
+    return { error: `Limite de ${MAX_TOKENS_POR_PESSOA} tokens. Revogue algum que não usa mais.` };
   }
 
-  const token = TOKEN_PREFIXO + generateToken();
+  const token = TOKEN_PREFIX + generateToken();
   const id = crypto.randomUUID();
   await env.DB.prepare(
     `INSERT INTO "api_token" ("id", "userId", "workspaceId", "name", "tokenHash", "prefix", "timezone", "createdAt")
@@ -70,7 +70,7 @@ export async function criarToken(
       input.name.trim().slice(0, 60) || "Sem nome",
       await hashToken(token),
       token.slice(0, 10),
-      tzValido(input.timezone) ? input.timezone : DEFAULT_TZ,
+      isValidTz(input.timezone) ? input.timezone : DEFAULT_TZ,
       new Date().toISOString(),
     )
     .run();
@@ -78,7 +78,7 @@ export async function criarToken(
 }
 
 /** Só revoga token da própria pessoa naquele workspace. */
-export async function revogarToken(env: AppEnv, input: { id: string; userId: string; workspaceId: string }): Promise<boolean> {
+export async function revokeToken(env: AppEnv, input: { id: string; userId: string; workspaceId: string }): Promise<boolean> {
   const r = await env.DB.prepare(`DELETE FROM "api_token" WHERE "id" = ?1 AND "userId" = ?2 AND "workspaceId" = ?3`)
     .bind(input.id, input.userId, input.workspaceId)
     .run();
@@ -86,7 +86,7 @@ export async function revogarToken(env: AppEnv, input: { id: string; userId: str
 }
 
 /** Extrai o token de `Authorization: Bearer …`. */
-export function tokenDoCabecalho(request: Request): string | null {
+export function tokenFromHeader(request: Request): string | null {
   const m = (request.headers.get("authorization") ?? "").match(/^Bearer\s+(\S+)$/i);
   return m ? m[1] : null;
 }
@@ -97,8 +97,8 @@ export function tokenDoCabecalho(request: Request): string | null {
  * O JOIN com `member` é a autorização: sem membership não há resultado. Conta
  * banida também não passa.
  */
-export async function autenticarToken(env: AppEnv, token: string | null): Promise<Portador | null> {
-  if (!token || !token.startsWith(TOKEN_PREFIXO) || token.length > 200) return null;
+export async function authenticateToken(env: AppEnv, token: string | null): Promise<Bearer | null> {
+  if (!token || !token.startsWith(TOKEN_PREFIX) || token.length > 200) return null;
 
   // A busca é pelo hash (índice único), então não há comparação de segredo
   // byte a byte que vaze tempo.
@@ -112,7 +112,7 @@ export async function autenticarToken(env: AppEnv, token: string | null): Promis
     .bind(await hashToken(token))
     .first<{ tokenId: string; userId: string; workspaceId: string; timezone: string; lastUsedAt: string | null; role: string }>();
 
-  if (!linha || !ehPapelDeWorkspace(linha.role)) return null;
+  if (!linha || !isWorkspaceRole(linha.role)) return null;
 
   // "Último uso" com precisão de minuto: evita uma escrita no banco por chamada.
   const agora = new Date();

@@ -39,7 +39,7 @@ npm run dev
 
 Abra <http://localhost:4321>. Sem superadmin você cai em `/setup` — use o
 `SETUP_SECRET` do `.dev.vars`. Depois disso a home vira a landing page e
-qualquer pessoa cria conta em `/cadastro`. Sem `RESEND_API_KEY`, os e-mails
+qualquer pessoa cria conta em `/signup`. Sem `RESEND_API_KEY`, os e-mails
 (verificação, convite, senha) são impressos no terminal.
 
 ```bash
@@ -90,7 +90,7 @@ do navegador que o criou. `from`/`to` aceitam `YYYY-MM-DD`.
 ## Publicar (GitHub + Cloudflare)
 
 ```bash
-npm run novo-projeto        # cria o banco D1 e grava wrangler.local.jsonc (fora do Git)
+npm run new-project        # cria o banco D1 e grava wrangler.local.jsonc (fora do Git)
 npm run db:remote
 
 npm run cf -- secret put BETTER_AUTH_SECRET   # openssl rand -base64 32

@@ -5,7 +5,7 @@ import { HorasError, type Store } from "~/lib/horas";
  *
  * É o MESMO para a web (sessão por cookie, em `/api/w/<slug>/horas/…`) e para
  * a API pública (token, em `/api/v1/…`). Quem chama já resolveu a pessoa, o
- * workspace e se ela pode escrever; aqui só se decide a rota.
+ * workspace e se ela can escrever; aqui só se decide a rota.
  */
 
 const json = (data: unknown, status = 200) =>
@@ -14,7 +14,7 @@ const json = (data: unknown, status = 200) =>
     headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
   });
 
-export const erroJson = (mensagem: string, status: number) => json({ error: mensagem }, status);
+export const jsonError = (mensagem: string, status: number) => json({ error: mensagem }, status);
 
 async function corpo(request: Request): Promise<Record<string, unknown>> {
   const texto = await request.text();
@@ -58,9 +58,9 @@ export async function handleHoras(
 
   try {
     if (metodo !== "GET" && !podeEscrever) {
-      return erroJson("Seu papel neste workspace é somente leitura.", 403);
+      return jsonError("Seu papel neste workspace é somente leitura.", 403);
     }
-    if (partes.length > 2) return erroJson("Rota não encontrada.", 404);
+    if (partes.length > 2) return jsonError("Rota não encontrada.", 404);
 
     if (recurso === "status" && !id && metodo === "GET") return json(await store.status());
 
@@ -121,10 +121,10 @@ export async function handleHoras(
       if (id === "stop") return json({ stopped: await store.stopTimer(await corpo(request)) });
     }
 
-    return erroJson("Rota não encontrada.", 404);
+    return jsonError("Rota não encontrada.", 404);
   } catch (erro) {
-    if (erro instanceof HorasError) return erroJson(erro.message, erro.status);
+    if (erro instanceof HorasError) return jsonError(erro.message, erro.status);
     console.error("horas-api:", erro);
-    return erroJson("Erro interno.", 500);
+    return jsonError("Erro interno.", 500);
   }
 }

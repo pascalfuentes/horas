@@ -1,6 +1,6 @@
 ---
-import { APP_NAME, operador } from "~/config";
-import { contarAdminsPlataforma } from "~/lib/plataforma";
+import { APP_NAME, operator } from "~/config";
+import { countPlatformAdmins } from "~/lib/platform";
 import "~/styles/global.css";
 
 export const prerender = false;
@@ -10,9 +10,9 @@ if (Astro.locals.user) return Astro.redirect("/dashboard");
 // Sem superadmin = instalação nova, manda para o bootstrap.
 // Com cadastro aberto, "banco vazio" não serviria como condição: bastava
 // alguém se cadastrar antes para o posto ficar inalcançável.
-if ((await contarAdminsPlataforma(Astro.locals.env)) === 0) return Astro.redirect("/setup");
+if ((await countPlatformAdmins(Astro.locals.env)) === 0) return Astro.redirect("/setup");
 
-const autor = operador(Astro.locals.env).nome;
+const autor = operator(Astro.locals.env).nome;
 const descricao =
   "Controle de tempo gratuito que conversa com a sua IA. Inicie timers, lance horas e peça relatórios pelo Claude ou qualquer cliente MCP.";
 
@@ -48,7 +48,7 @@ const ferramentas = ["get_status", "start_timer", "stop_timer", "add_entry", "su
           <a href="#mcp">MCP</a>
           <a href="#recursos">Recursos</a>
           <a href="/login">Entrar</a>
-          <a class="btn btn-coral" href="/cadastro">Criar conta</a>
+          <a class="btn btn-coral" href="/signup">Criar conta</a>
         </nav>
       </header>
 
@@ -62,7 +62,7 @@ const ferramentas = ["get_status", "start_timer", "stop_timer", "add_entry", "su
             “comecei a revisão do site” e o timer já está rodando.
           </p>
           <div class="lp-cta">
-            <a class="btn" href="/cadastro">Começar de graça</a>
+            <a class="btn" href="/signup">Começar de graça</a>
             <a class="btn btn-ghost" href="/login">Já tenho conta</a>
           </div>
         </div>
@@ -114,13 +114,13 @@ const ferramentas = ["get_status", "start_timer", "stop_timer", "add_entry", "su
       <section class="lp-final">
         <h2>Comece a marcar seu tempo hoje.</h2>
         <p>Gratuito. Sem anúncios, sem rastreadores.</p>
-        <a class="btn btn-dark" href="/cadastro">Criar conta</a>
+        <a class="btn btn-dark" href="/signup">Criar conta</a>
       </section>
     </main>
 
     <footer class="lp-foot">
       <span>Feito por {autor} · Astro, Cloudflare Workers e D1</span>
-      <a href="/privacidade">Privacidade</a>
+      <a href="/privacy">Privacidade</a>
     </footer>
   </body>
 </html>

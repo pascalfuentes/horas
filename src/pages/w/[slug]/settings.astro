@@ -1,0 +1,80 @@
+---
+import Dashboard from "~/layouts/Dashboard.astro";
+import { countOwners } from "~/lib/members";
+import { PERMISSIONS, can } from "~/lib/permissions";
+
+export const prerender = false;
+
+const ws = Astro.locals.membership!;
+if (!can(ws.role, PERMISSIONS.WORKSPACE_READ)) {
+  return Astro.redirect(`/w/${ws.workspaceSlug}?e=no_permission`);
+}
+
+const podeEditar = can(ws.role, PERMISSIONS.WORKSPACE_WRITE);
+const podeExcluir = can(ws.role, PERMISSIONS.WORKSPACE_DELETE);
+const ehUnicoOwner = ws.role === "owner" && (await countOwners(Astro.locals.env, ws.workspaceId)) === 1;
+---
+
+<Dashboard title={`Configurações — ${ws.workspaceName}`} heading="Configurações" description={`/w/${ws.workspaceSlug}`}>
+  <div class="card">
+    <h2>Nome</h2>
+    <span class="muted">
+      O endereço (<code>/w/{ws.workspaceSlug}</code>) não muda junto: trocá-lo quebraria
+      todo link já compartilhado deste workspace, inclusive os que estão em e-mails.
+    </span>
+
+    {podeEditar ? (
+      <form method="post" action={`/api/w/${ws.workspaceSlug}/workspace`} class="row">
+        <input type="hidden" name="action" value="rename" />
+        <div class="field">
+          <label for="nome">Nome do workspace</label>
+          <input id="nome" name="name" type="text" value={ws.workspaceName} maxlength="60" required />
+        </div>
+        <div><button type="submit">Salvar</button></div>
+      </form>
+    ) : (
+      <p class="muted">Seu papel aqui não permite mudar as configurações.</p>
+    )}
+  </div>
+
+  <div class="card">
+    <h2>Sair deste workspace</h2>
+    <span class="muted">
+      Você perde o acesso ao conteúdo dele. Para voltar, alguém precisa convidar você de novo.
+    </span>
+
+    {ehUnicoOwner ? (
+      <p class="alert alert-info">
+        <span>
+          Você é a única pessoa dona daqui. Passe a propriedade para outra pessoa em
+          <a href={`/w/${ws.workspaceSlug}/members`}> Membros</a> antes de sair — senão o
+          workspace ficaria sem dono.
+        </span>
+      </p>
+    ) : (
+      <form method="post" action={`/api/w/${ws.workspaceSlug}/members`} class="inline-form">
+        <input type="hidden" name="action" value="leave" />
+        <button class="btn-danger btn-sm" type="submit">Sair do workspace</button>
+      </form>
+    )}
+  </div>
+
+  {podeExcluir && (
+    <div class="card">
+      <h2>Excluir o workspace</h2>
+      <span class="muted">
+        Apaga o conteúdo, os convites e a participação de todo mundo. <strong>Não tem volta.</strong>
+        A trilha de auditoria fica, registrando que ele existiu e quem fez o quê nele.
+      </span>
+
+      <form method="post" action={`/api/w/${ws.workspaceSlug}/workspace`} class="stack" style="max-width:520px">
+        <input type="hidden" name="action" value="delete" />
+        <div class="field">
+          <label for="confirmacao">Digite <strong>{ws.workspaceName}</strong> para confirmar</label>
+          <input id="confirmacao" name="confirmation" type="text" autocomplete="off" required />
+        </div>
+        <div><button class="btn-danger" type="submit">Excluir definitivamente</button></div>
+      </form>
+    </div>
+  )}
+</Dashboard>

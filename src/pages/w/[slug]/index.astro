@@ -1,6 +1,6 @@
 ---
 import Dashboard from "~/layouts/Dashboard.astro";
-import { ROLE_DESCRIPTIONS, ROLE_LABELS, PERMISSIONS, pode } from "~/lib/permissions";
+import { ROLE_DESCRIPTIONS, ROLE_LABELS, PERMISSIONS, can } from "~/lib/permissions";
 
 export const prerender = false;
 
@@ -8,19 +8,19 @@ export const prerender = false;
 // aqui com `membership` nulo é impossível.
 const ws = Astro.locals.membership!;
 const permissoes: Array<[string, boolean]> = [
-  ["Ler o conteúdo", pode(ws.role, PERMISSIONS.CONTENT_READ)],
-  ["Criar e editar conteúdo", pode(ws.role, PERMISSIONS.CONTENT_WRITE)],
-  ["Ver membros", pode(ws.role, PERMISSIONS.MEMBERS_READ)],
-  ["Convidar e gerenciar membros", pode(ws.role, PERMISSIONS.MEMBERS_WRITE)],
-  ["Mudar configurações", pode(ws.role, PERMISSIONS.WORKSPACE_WRITE)],
-  ["Excluir o workspace", pode(ws.role, PERMISSIONS.WORKSPACE_DELETE)],
+  ["Ler o conteúdo", can(ws.role, PERMISSIONS.CONTENT_READ)],
+  ["Criar e editar conteúdo", can(ws.role, PERMISSIONS.CONTENT_WRITE)],
+  ["Ver membros", can(ws.role, PERMISSIONS.MEMBERS_READ)],
+  ["Convidar e gerenciar membros", can(ws.role, PERMISSIONS.MEMBERS_WRITE)],
+  ["Mudar configurações", can(ws.role, PERMISSIONS.WORKSPACE_WRITE)],
+  ["Excluir o workspace", can(ws.role, PERMISSIONS.WORKSPACE_DELETE)],
 ];
 ---
 
-<Dashboard title={ws.workspaceNome} heading={ws.workspaceNome} description="Início do workspace.">
+<Dashboard title={ws.workspaceName} heading={ws.workspaceName} description="Início do workspace.">
   <div class="card">
     <h2>Seu papel aqui</h2>
-    <span class="muted">O papel é por workspace — você pode ter outro em outro lugar.</span>
+    <span class="muted">O papel é por workspace — você can ter outro em outro lugar.</span>
     <p>
       <span class={`badge ${ws.role === "owner" ? "badge-admin" : ""}`}>{ROLE_LABELS[ws.role]}</span>
       <br /><small class="muted">{ROLE_DESCRIPTIONS[ws.role]}</small>
@@ -28,7 +28,7 @@ const permissoes: Array<[string, boolean]> = [
   </div>
 
   <div class="card">
-    <h2>O que você pode fazer aqui</h2>
+    <h2>O que você can fazer aqui</h2>
     <span class="muted">Derivado da matriz em <code>src/lib/permissions.ts</code>.</span>
     <ul>
       {permissoes.map(([rotulo, permitido]) => (

@@ -1,0 +1,165 @@
+---
+import { renderSVG } from "uqr";
+
+import Dashboard from "~/layouts/Dashboard.astro";
+import { APP_NAME } from "~/config";
+import { callAuth } from "~/lib/auth";
+import { str } from "~/lib/http";
+
+export const prerender = false;
+
+/**
+ * Configuração do 2FA — e, para quem já tem, geração de novos códigos.
+ *
+ * O segredo e os códigos de recuperação são devolvidos UMA ÚNICA VEZ, na
+ * resposta do Better Auth. Redirecionar os perderia, e passá-los pela
+ * querystring seria jogar segredo no histórico do navegador e nos logs. Por
+ * isso o POST renderiza a própria página com o resultado, em vez de redirecionar.
+ */
+
+const obrigatorio = Astro.url.searchParams.has("obrigatorio");
+const jaAtivo = Boolean((Astro.locals.user as { twoFactorEnabled?: boolean }).twoFactorEnabled);
+
+let erro = "";
+let totpURI = "";
+let codigos: string[] = [];
+
+if (Astro.request.method === "POST") {
+  const senha = str(await Astro.request.formData(), "password");
+  if (!senha) {
+    erro = "Informe sua senha.";
+  } else {
+    try {
+      const res = await callAuth(
+        Astro.locals.auth,
+        Astro.request,
+        jaAtivo ? "/two-factor/generate-backup-codes" : "/two-factor/enable",
+        jaAtivo ? { password: senha } : { password: senha, method: "totp" },
+      );
+      const corpo = (await res.json().catch(() => null)) as
+        | { totpURI?: string; backupCodes?: string[] }
+        | null;
+
+      if (!res.ok) erro = "Senha incorreta.";
+      else {
+        totpURI = corpo?.totpURI ?? "";
+        codigos = corpo?.backupCodes ?? [];
+      }
+    } catch {
+      erro = "Não foi possível continuar. Tente de novo.";
+    }
+  }
+}
+
+const segredo = totpURI ? (new URL(totpURI).searchParams.get("secret") ?? "") : "";
+/**
+ * O uqr emite o SVG só com `viewBox`, sem `width`/`height` — em nenhuma das
+ * opções. Dentro de um container `width: max-content`, um SVG sem dimensão
+ * intrínseca colapsa para 0×0: o QR existia no HTML e não aparecia na tela.
+ * Injetamos o tamanho na própria tag, para o SVG não depender de CSS nenhum.
+ */
+const qr = totpURI
+  ? renderSVG(totpURI, { border: 1 }).replace(
+      "<svg ",
+      '<svg width="220" height="220" style="display:block" ',
+    )
+  : "";
+const mostrandoResultado = codigos.length > 0;
+---
+
+<Dashboard
+  title="Verificação em duas etapas"
+  heading={jaAtivo ? "Novos códigos de recuperação" : "Verificação em duas etapas"}
+  description={
+    jaAtivo
+      ? "Gerar novos códigos invalida todos os antigos na hora."
+      : "Um código de seis dígitos, além da senha, toda vez que você entrar."
+  }
+>
+  {obrigatorio && !mostrandoResultado && (
+    <p class="alert alert-info">
+      <span>
+        Sua conta é de administrador, e administradores precisam da verificação em duas
+        etapas. Você volta a navegar normalmente assim que terminar esta configuração.
+      </span>
+    </p>
+  )}
+
+  {erro && <p class="alert alert-error" role="alert">{erro}</p>}
+
+  {!mostrandoResultado && (
+    <div class="card">
+      <h2>{jaAtivo ? "Gerar novos códigos" : "Ativar"}</h2>
+      <span class="muted">
+        {jaAtivo
+          ? "Use isto se você gastou os códigos antigos ou acha que alguém os viu."
+          : "Você vai precisar de um app autenticador no celular — Google Authenticator, Authy, 1Password ou o gerenciador de senhas que já usa."}
+      </span>
+
+      <form method="post" class="row">
+        <div class="field">
+          <label for="senha">Confirme sua senha</label>
+          <input id="senha" name="password" type="password" autocomplete="current-password" required autofocus />
+        </div>
+        <div><button type="submit">Continuar</button></div>
+      </form>
+      <span class="hint muted">
+        <small>A senha evita que alguém mexa nisto numa sessão sua esquecida aberta.</small>
+      </span>
+    </div>
+  )}
+
+  {mostrandoResultado && totpURI && (
+    <div class="card">
+      <h2>1. Leia o código no seu app</h2>
+      <span class="muted">Adicione uma conta nova no app autenticador e aponte a câmera.</span>
+
+      <div style="background:#fff;padding:14px;border-radius:10px;width:max-content;margin:4px 0 14px">
+        <Fragment set:html={qr} />
+      </div>
+
+      <p class="muted">
+        <small>
+          Sem câmera? Cadastre manualmente como <strong>{APP_NAME}</strong> com esta chave:<br />
+          <code>{segredo}</code>
+        </small>
+      </p>
+    </div>
+  )}
+
+  {mostrandoResultado && (
+    <div class="card">
+      <h2>{totpURI ? "2. Guarde os códigos de recuperação" : "Seus novos códigos"}</h2>
+      <span class="muted">
+        Se você perder o celular, são eles que devolvem o acesso — cada um serve uma vez só.
+        <strong>Esta é a única vez que eles aparecem.</strong> Guarde no gerenciador de senhas
+        antes de sair desta tela.
+      </span>
+      <pre style="background:var(--surface-2);padding:14px;border-radius:10px;font-size:0.9rem;line-height:1.9;margin:0">{codigos.join("\n")}</pre>
+    </div>
+  )}
+
+  {mostrandoResultado && totpURI && (
+    <div class="card">
+      <h2>3. Confirme</h2>
+      <span class="muted">
+        Digite o código que o app mostra agora. Só depois disso o 2FA passa a valer — se a
+        leitura deu errado, você descobre aqui, e não na próxima vez que for entrar.
+      </span>
+
+      <form method="post" action="/api/security/2fa" class="row">
+        <input type="hidden" name="action" value="confirm" />
+        <div class="field">
+          <label for="codigo">Código de seis dígitos</label>
+          <input id="codigo" name="code" type="text" inputmode="numeric" autocomplete="one-time-code"
+                 pattern="[0-9]{6}" maxlength="6" required autofocus />
+        </div>
+        <div><button type="submit">Ativar verificação em duas etapas</button></div>
+      </form>
+    </div>
+  )}
+
+  {mostrandoResultado && !totpURI && (
+    <a class="btn" href="/dashboard/security">Guardei os códigos, voltar</a>
+  )}
+</Dashboard>

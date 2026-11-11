@@ -11,7 +11,7 @@ import type { AppEnv } from "~/lib/env";
  */
 
 /** Slug legível a partir do nome: sem acento, sem espaço, sem borda suja. */
-export function gerarSlug(nome: string): string {
+export function makeSlug(nome: string): string {
   const base = nome
     .toLowerCase()
     .normalize("NFD")
@@ -33,12 +33,12 @@ export function gerarSlug(nome: string): string {
  * `organization.slug` é UNIQUE: se o slug limpo já existir, tenta com sufixo
  * aleatório em vez de estourar.
  */
-export async function criarWorkspace(
+export async function createWorkspace(
   env: AppEnv,
   input: { nome: string; donoId: string },
 ): Promise<{ id: string; nome: string; slug: string }> {
   const db = getDb(env);
-  const base = gerarSlug(input.nome);
+  const base = makeSlug(input.nome);
 
   for (let tentativa = 0; tentativa < 5; tentativa++) {
     const slug = tentativa === 0 ? base : `${base}-${sufixo()}`;
@@ -74,17 +74,17 @@ const sufixo = () => Math.random().toString(36).slice(2, 6);
 
 export type Membership = {
   workspaceId: string;
-  workspaceNome: string;
+  workspaceName: string;
   workspaceSlug: string;
   role: WorkspaceRole;
 };
 
 /** Todos os workspaces de uma pessoa, com o papel dela em cada um. */
-export async function workspacesDoUsuario(env: AppEnv, userId: string): Promise<Membership[]> {
+export async function userWorkspaces(env: AppEnv, userId: string): Promise<Membership[]> {
   return getDb(env)
     .select({
       workspaceId: organization.id,
-      workspaceNome: organization.name,
+      workspaceName: organization.name,
       workspaceSlug: organization.slug,
       role: member.role,
     })
@@ -102,14 +102,14 @@ export async function workspacesDoUsuario(env: AppEnv, userId: string): Promise<
  * chama deve tratar como 404 — não 403. Dizer "sem permissão" confirmaria que o
  * workspace existe, o que é informação de graça para quem estiver sondando.
  */
-export async function membershipPorSlug(
+export async function membershipBySlug(
   env: AppEnv,
   input: { slug: string; userId: string },
 ): Promise<Membership | null> {
   const linha = await getDb(env)
     .select({
       workspaceId: organization.id,
-      workspaceNome: organization.name,
+      workspaceName: organization.name,
       workspaceSlug: organization.slug,
       role: member.role,
     })
@@ -122,7 +122,7 @@ export async function membershipPorSlug(
 }
 
 /** Workspaces onde a pessoa é a ÚNICA owner, com a contagem de membros. */
-export async function workspacesOndeEUnicaOwner(
+export async function workspacesWhereSoleOwner(
   env: AppEnv,
   userId: string,
 ): Promise<Array<{ id: string; nome: string; totalMembros: number }>> {

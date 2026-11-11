@@ -3,47 +3,47 @@ import { defineMiddleware } from "astro:middleware";
 import { REQUIRE_2FA_FOR_ADMINS } from "~/config";
 import { createAuth } from "~/lib/auth";
 import { env } from "~/lib/env";
-import { podeAdministrarPlataforma } from "~/lib/permissions";
-import { membershipPorSlug } from "~/lib/workspaces";
+import { canAdministerPlatform } from "~/lib/permissions";
+import { membershipBySlug } from "~/lib/workspaces";
 
 /** Rotas alcançáveis sem sessão. Tudo que não estiver aqui exige login. */
 const PUBLIC_PAGES = new Set([
   "/",
   "/login",
-  "/cadastro",
-  "/verificar-email",
-  "/esqueci-senha",
-  "/redefinir-senha",
+  "/signup",
+  "/verify-email",
+  "/forgot-password",
+  "/reset-password",
   "/setup",
   // Chega-se aqui com a senha aceita mas sem sessão ainda — só o cookie
   // temporário do segundo fator. Não há sessão para exigir.
-  "/dois-fatores",
+  "/two-factor",
   // Pública: o Google exige a URL da política para publicar o app OAuth.
-  "/privacidade",
+  "/privacy",
 ]);
 
 /** Endpoints de API alcançáveis sem sessão — são justamente os que criam uma. */
 const PUBLIC_API = new Set([
-  "/api/entrar",
-  "/api/sair",
-  "/api/cadastro",
-  "/api/reenviar-verificacao",
-  "/api/esqueci-senha",
-  "/api/redefinir-senha",
+  "/api/login",
+  "/api/logout",
+  "/api/signup",
+  "/api/resend-verification",
+  "/api/forgot-password",
+  "/api/reset-password",
   "/api/setup",
-  "/api/dois-fatores",
+  "/api/two-factor",
   "/api/social",
 ]);
 
 /** Páginas que um usuário JÁ logado não deveria ver. */
 const ANONYMOUS_ONLY = new Set([
   "/login",
-  "/cadastro",
-  "/verificar-email",
-  "/esqueci-senha",
-  "/redefinir-senha",
+  "/signup",
+  "/verify-email",
+  "/forgot-password",
+  "/reset-password",
   "/setup",
-  "/dois-fatores",
+  "/two-factor",
 ]);
 
 /**
@@ -67,7 +67,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   if (path.startsWith("/api/auth/")) return next();
 
   // API por token e servidor MCP: a autenticação é o token pessoal, conferido
-  // dentro do próprio handler (`autenticarToken`). Não há cookie nem sessão
+  // dentro do próprio handler (`authenticateToken`). Não há cookie nem sessão
   // aqui — passar pelo portão abaixo só renderia um redirect para o login.
   if (path.startsWith("/api/v1/") || path === "/mcp" || path.startsWith("/mcp/")) return next();
 
@@ -89,7 +89,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // A página de convite é pública: quem ainda não tem conta precisa chegar
   // nela para entender o que é e criar a conta com o e-mail certo. O ACEITE,
   // esse sim, exige sessão — e o plugin ainda confere se o e-mail bate.
-  const paginaDeConvite = !isApi && path.startsWith("/convite/");
+  const paginaDeConvite = !isApi && path.startsWith("/invite/");
   const needsSession = paginaDeConvite
     ? false
     : isApi
@@ -113,7 +113,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const noWorkspace = path.match(ROTA_DE_WORKSPACE);
   if (noWorkspace && context.locals.user) {
     const slug = decodeURIComponent(noWorkspace[1]);
-    const membership = await membershipPorSlug(env, { slug, userId: context.locals.user.id });
+    const membership = await membershipBySlug(env, { slug, userId: context.locals.user.id });
 
     // 404 e não 403, de propósito: "sem permissão" confirmaria que o workspace
     // existe, o que é informação de graça para quem estiver sondando slugs.
@@ -136,21 +136,21 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   // Área de administração da PLATAFORMA — não da aplicação de ninguém.
   if (path.startsWith("/dashboard/admin") || path.startsWith("/api/admin")) {
-    if (!podeAdministrarPlataforma(context.locals.user?.role)) {
+    if (!canAdministerPlatform(context.locals.user?.role)) {
       if (isApi) return new Response("Sem permissão", { status: 403 });
-      return context.redirect("/dashboard?e=sem_permissao");
+      return context.redirect("/dashboard?e=no_permission");
     }
   }
 
   // Administrador de plataforma sem 2FA: entra, mas só navega para a tela de
   // configuração. É bloqueio de navegação, não de acesso.
-  if (REQUIRE_2FA_FOR_ADMINS && podeAdministrarPlataforma(context.locals.user?.role)) {
+  if (REQUIRE_2FA_FOR_ADMINS && canAdministerPlatform(context.locals.user?.role)) {
     const liberado =
-      path === "/dashboard/seguranca/2fa" || path === "/api/seguranca/2fa" || path === "/api/sair";
+      path === "/dashboard/security/2fa" || path === "/api/security/2fa" || path === "/api/logout";
 
     if (!context.locals.user?.twoFactorEnabled && !liberado) {
       if (isApi) return new Response("Ative a verificação em duas etapas", { status: 403 });
-      return context.redirect("/dashboard/seguranca/2fa?obrigatorio=1");
+      return context.redirect("/dashboard/security/2fa?obrigatorio=1");
     }
   }
 

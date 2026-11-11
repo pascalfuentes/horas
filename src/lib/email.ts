@@ -46,7 +46,7 @@ export async function sendEmail(env: AppEnv, mail: Mail): Promise<void> {
   }
 }
 
-export function layoutEmail(heading: string, paragraphs: string[], cta?: { label: string; url: string }) {
+export function emailLayout(heading: string, paragraphs: string[], cta?: { label: string; url: string }) {
   const html = `<!doctype html><html lang="pt-BR"><body style="margin:0;background:#f4f4f5;font-family:system-ui,-apple-system,'Segoe UI',sans-serif">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px">
 <table role="presentation" width="100%" style="max-width:480px;background:#fff;border-radius:12px;padding:32px">

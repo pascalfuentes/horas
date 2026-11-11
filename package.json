@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "postinstall": "node scripts/cf.mjs types || true",
-    "novo-projeto": "node scripts/novo-projeto.mjs",
+    "new-project": "node scripts/new-project.mjs",
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro build && node scripts/cf.mjs dev",

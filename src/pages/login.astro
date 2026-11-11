@@ -1,5 +1,5 @@
 ---
-import BotoesSociais from "~/components/BotoesSociais.astro";
+import SocialButtons from "~/components/SocialButtons.astro";
 import Turnstile from "~/components/Turnstile.astro";
 import Auth from "~/layouts/Auth.astro";
 import { safeNext } from "~/lib/http";
@@ -10,7 +10,7 @@ const next = safeNext(Astro.url.searchParams.get("next") ?? "");
 ---
 
 <Auth title="Entrar" heading="Entrar" subheading="Acesse sua conta para continuar.">
-  <form method="post" action="/api/entrar" class="stack">
+  <form method="post" action="/api/login" class="stack">
     <input type="hidden" name="next" value={next} />
 
     <div class="field">
@@ -20,20 +20,20 @@ const next = safeNext(Astro.url.searchParams.get("next") ?? "");
 
     <div class="field">
       <label for="senha">Senha</label>
-      <input id="senha" name="senha" type="password" autocomplete="current-password" required />
+      <input id="senha" name="password" type="password" autocomplete="current-password" required />
     </div>
 
     <Turnstile />
     <button class="btn-block" type="submit">Entrar</button>
   </form>
 
-  <BotoesSociais next={next} verbo="Entrar com" />
+  <SocialButtons next={next} verbo="Entrar com" />
 
   <p class="auth-foot">
-    <a href="/esqueci-senha">Esqueci minha senha</a>
+    <a href="/forgot-password">Esqueci minha senha</a>
   </p>
-  <p class="auth-foot">Ainda não tem conta? <a href="/cadastro">Criar conta</a></p>
+  <p class="auth-foot">Ainda não tem conta? <a href="/signup">Criar conta</a></p>
   <p class="auth-foot muted">
-    <small><a href="/privacidade">Política de privacidade</a></small>
+    <small><a href="/privacy">Política de privacidade</a></small>
   </p>
 </Auth>

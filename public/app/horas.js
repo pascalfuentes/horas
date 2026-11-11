@@ -202,7 +202,7 @@
    * @returns {HTMLSelectElement}
    */
   function projectSelect(projects, selected, emptyLabel) {
-    const s = /** @type {HTMLSelectElement} */ (el('select', { 'aria-label': 'Projeto' }));
+    const s = /** @type {HTMLSelectElement} */ (el('select', { 'aria-label': 'Project' }));
     s.appendChild(el('option', { value: '0', text: emptyLabel || 'Sem projeto' }));
     projects.forEach(function (p) {
       if (p.archived && p.id !== selected) return;
@@ -279,7 +279,7 @@
     }) }, [
       el('h2', { text: entry ? 'Editar lançamento' : 'Lançamento manual' }),
       field('Descrição', f.desc),
-      field('Projeto', f.proj),
+      field('Project', f.proj),
       el('div', { class: 'hr-grid4' }, [field('Dia', f.date), field('Início', f.from), field('Fim', f.to), field('Duração', f.dur)]),
       field('Tags', f.tags),
       el('datalist', { id: 'hd-taglist' }, (opts.tags || []).map(function (tag) { return el('option', { value: tag }); })),
@@ -309,7 +309,7 @@
   /* ------------------------------------------------------------------ */
 
   /** @returns {Promise<void>} */
-  async function viewTempo() {
+  async function viewTime() {
     /** @type {{projects: object[], running: object|null, entries: object[], status: object|null}} */
     const state = { projects: [], running: null, entries: [], status: null, tags: [] };
     let ticker = 0;
@@ -385,7 +385,7 @@
     }
 
     /**
-     * @param {object} e Entrada.
+     * @param {object} e Entry.
      * @returns {HTMLElement}
      */
     function row(e) {
@@ -515,7 +515,7 @@
   /* ------------------------------------------------------------------ */
 
   /** @returns {Promise<void>} */
-  async function viewRelatorios() {
+  async function viewReports() {
     const today = day(0);
     const monday = day(-((today.getDay() + 6) % 7));
     /** @type {Object<string, {label: string, range: function(): Date[]}>} */
@@ -529,7 +529,7 @@
     };
     /** Agrupamentos do resumo: rótulo, lista no JSON e como nomear cada linha. */
     const groups = {
-      project: { label: 'Projeto', key: 'by_project', name: function (g) { return g.client ? g.project + ' · ' + g.client : g.project; } },
+      project: { label: 'Project', key: 'by_project', name: function (g) { return g.client ? g.project + ' · ' + g.client : g.project; } },
       client: { label: 'Cliente', key: 'by_client', name: function (g) { return g.client; } },
       tag: { label: 'Tag', key: 'by_tag', name: function (g) { return g.tag; } },
       description: { label: 'Descrição', key: 'by_description', name: function (g) { return g.project ? g.description + ' · ' + g.project : g.description; } },
@@ -554,7 +554,7 @@
     const preset = /** @type {HTMLSelectElement} */ (el('select', { 'aria-label': 'Período' }, Object.keys(presets).map(function (k) { return el('option', { value: k, text: presets[k].label }); }).concat([el('option', { value: 'custom', text: 'Personalizado' })])));
     const from = /** @type {HTMLInputElement} */ (el('input', { type: 'date', 'aria-label': 'De' }));
     const to = /** @type {HTMLInputElement} */ (el('input', { type: 'date', 'aria-label': 'Até' }));
-    const proj = filter('Projeto', 'Todos os projetos', [['0', 'Sem projeto']].concat(projects.map(function (p) { return [String(p.id), p.name]; })));
+    const proj = filter('Project', 'Todos os projetos', [['0', 'Sem projeto']].concat(projects.map(function (p) { return [String(p.id), p.name]; })));
     const client = filter('Cliente', 'Todos os clientes', clients.map(function (c) { return [c, c]; }));
     const tag = filter('Tag', 'Todas as tags', tags.map(function (t) { return [t, '#' + t]; }));
     const bill = filter('Faturável', 'Faturável e não', [['1', 'Só faturável'], ['0', 'Só não faturável']]);
@@ -669,7 +669,7 @@
       const entries = got2[1];
       out.replaceChildren(
         stats(s),
-        table('Lançamentos', ['Dia', 'Descrição', 'Projeto', 'Horário', 'Duração', 'Valor', ''], entries.map(function (e) {
+        table('Lançamentos', ['Dia', 'Descrição', 'Project', 'Horário', 'Duração', 'Valor', ''], entries.map(function (e) {
           return [
             new Date(e.start).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }),
             el('span', {}, [e.description || '(sem descrição)', e.tags.length ? el('small', { class: 'muted', text: ' ' + e.tags.map(function (t) { return '#' + t; }).join(' ') }) : null]),
@@ -725,7 +725,7 @@
   /* ------------------------------------------------------------------ */
 
   /** @returns {Promise<void>} */
-  async function viewProjetos() {
+  async function viewProjects() {
     const body = el('tbody', {});
     const name = /** @type {HTMLInputElement} */ (el('input', { type: 'text', id: 'np-name', required: true, maxlength: '80' }));
     const client = /** @type {HTMLInputElement} */ (el('input', { type: 'text', id: 'np-client', maxlength: '80', list: 'np-clients', autocomplete: 'off' }));
@@ -829,15 +829,15 @@
    * A lista de tokens vem renderizada do servidor; aqui só o criar/revogar.
    * @returns {void}
    */
-  function viewIntegracoes() {
+  function viewIntegrations() {
     const url = root.dataset.tokens || '';
     const form = /** @type {HTMLFormElement|null} */ (document.getElementById('novo-token'));
     const reveal = document.getElementById('token-novo');
 
     if (form) form.addEventListener('submit', safe(async function (ev) {
       ev.preventDefault();
-      const nome = /** @type {HTMLInputElement} */ (form.elements.namedItem('nome'));
-      const r = await api('', 'POST', { acao: 'criar', nome: nome.value, timezone: TZ }, url);
+      const nome = /** @type {HTMLInputElement} */ (form.elements.namedItem('name'));
+      const r = await api('', 'POST', { action: 'create', name: nome.value, timezone: TZ }, url);
       // Mostra o token e preenche os exemplos com ele. Só existe nesta tela, agora.
       document.querySelectorAll('[data-token]').forEach(function (n) { n.textContent = n.textContent.replace(/SEU_TOKEN/g, r.token); });
       /** @type {HTMLElement} */ (reveal.querySelector('code')).textContent = r.token;
@@ -856,7 +856,7 @@
     document.querySelectorAll('[data-revogar]').forEach(function (b) {
       b.addEventListener('click', safe(async function () {
         if (!confirm('Revogar este token? Quem estiver usando perde o acesso na hora.')) return;
-        await api('', 'POST', { acao: 'revogar', id: b.getAttribute('data-revogar') }, url);
+        await api('', 'POST', { action: 'revoke', id: b.getAttribute('data-revogar') }, url);
         location.reload();
       }));
     });
@@ -865,7 +865,7 @@
   /* ------------------------------------------------------------------ */
 
   /** @type {Object<string, function(): (Promise<void>|void)>} */
-  const views = { tempo: viewTempo, relatorios: viewRelatorios, projetos: viewProjetos, integracoes: viewIntegracoes };
+  const views = { time: viewTime, reports: viewReports, projects: viewProjects, integrations: viewIntegrations };
   const start = views[root.dataset.view || ''];
   if (start) {
     Promise.resolve().then(start).catch(function (e) {

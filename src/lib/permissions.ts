@@ -4,11 +4,11 @@ import { WORKSPACE_ROLES, type WorkspaceRole } from "~/db/schema";
  * Matriz papel × permissão DENTRO DE UM WORKSPACE.
  *
  * A regra é declarada UMA vez aqui e checada no servidor em cada handler que
- * escreve. Esconder botão na interface não é autorização — a UI usa `pode()` só
+ * escreve. Esconder botão na interface não é autorização — a UI usa `can()` só
  * para não mostrar ação que vai falhar de qualquer jeito.
  *
  * Não confunda com o papel de PLATAFORMA (`user.role`), que responde outra
- * pergunta: quem opera a instalação. Ver `podeAdministrarPlataforma()`.
+ * pergunta: quem opera a instalação. Ver `canAdministerPlatform()`.
  */
 export const PERMISSIONS = {
   /** Ler os dados de negócio do workspace. */
@@ -36,10 +36,10 @@ export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 /**
  * Repare no que NÃO está aqui: mexer na própria conta.
  *
- * A conta existe fora de qualquer workspace — a mesma pessoa pode ser `owner`
+ * A conta existe fora de qualquer workspace — a mesma pessoa can ser `owner`
  * num e `viewer` noutro, e a senha é uma só. Guardar isso por papel de
  * workspace misturaria duas perguntas diferentes. Quem cuida disso é
- * `denyConta()` em `src/lib/guards.ts`.
+ * `denyAccount()` em `src/lib/guards.ts`.
  */
 
 const P = PERMISSIONS;
@@ -67,13 +67,13 @@ const MATRIX: Record<WorkspaceRole, readonly Permission[]> = {
   viewer: [P.CONTENT_READ, P.MEMBERS_READ, P.WORKSPACE_READ],
 };
 
-export function ehPapelDeWorkspace(value: unknown): value is WorkspaceRole {
+export function isWorkspaceRole(value: unknown): value is WorkspaceRole {
   return typeof value === "string" && (WORKSPACE_ROLES as readonly string[]).includes(value);
 }
 
-/** A pessoa, com este papel no workspace, pode fazer isto? */
-export function pode(role: unknown, permission: Permission): boolean {
-  if (!ehPapelDeWorkspace(role)) return false;
+/** A pessoa, com este papel no workspace, can fazer isto? */
+export function can(role: unknown, permission: Permission): boolean {
+  if (!isWorkspaceRole(role)) return false;
   return MATRIX[role].includes(permission);
 }
 
@@ -84,7 +84,7 @@ export function pode(role: unknown, permission: Permission): boolean {
  * precisa ser membro dele como qualquer pessoa. O que isto libera é só a área
  * de administração da INSTALAÇÃO.
  */
-export function podeAdministrarPlataforma(platformRole: unknown): boolean {
+export function canAdministerPlatform(platformRole: unknown): boolean {
   return platformRole === "admin";
 }
 

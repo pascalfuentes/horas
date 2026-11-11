@@ -1,11 +1,11 @@
 import type { APIRoute } from "astro";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 
-import { autenticarToken, tokenDoCabecalho } from "~/lib/api-tokens";
+import { authenticateToken, tokenFromHeader } from "~/lib/api-tokens";
 import { createStore } from "~/lib/horas";
-import { erroJson } from "~/lib/horas-api";
-import { criarServidorMcp } from "~/lib/horas-mcp";
-import { PERMISSIONS, pode } from "~/lib/permissions";
+import { jsonError } from "~/lib/horas-api";
+import { createMcpServer } from "~/lib/horas-mcp";
+import { PERMISSIONS, can } from "~/lib/permissions";
 
 export const prerender = false;
 
@@ -20,9 +20,9 @@ export const prerender = false;
  * há sessão MCP para guardar, o que é exatamente o que um Worker quer.
  */
 export const POST: APIRoute = async ({ request, locals, params }) => {
-  const portador = await autenticarToken(locals.env, tokenDoCabecalho(request) ?? params.token ?? null);
+  const portador = await authenticateToken(locals.env, tokenFromHeader(request) ?? params.token ?? null);
   if (!portador) {
-    const resposta = erroJson("Token ausente ou inválido.", 401);
+    const resposta = jsonError("Token ausente ou inválido.", 401);
     resposta.headers.set("www-authenticate", "Bearer");
     return resposta;
   }
@@ -33,7 +33,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
     tz: portador.tz,
   });
 
-  const servidor = criarServidorMcp(store, pode(portador.role, PERMISSIONS.CONTENT_WRITE));
+  const servidor = createMcpServer(store, can(portador.role, PERMISSIONS.CONTENT_WRITE));
   const transporte = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,

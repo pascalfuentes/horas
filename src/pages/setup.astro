@@ -1,12 +1,12 @@
 ---
 import Auth from "~/layouts/Auth.astro";
-import { contarAdminsPlataforma } from "~/lib/plataforma";
+import { countPlatformAdmins } from "~/lib/platform";
 
 export const prerender = false;
 
 // Só existe enquanto não houver superadmin. Com cadastro aberto, "banco vazio"
 // seria uma corrida: alguém se cadastra antes e o posto fica inalcançável.
-if ((await contarAdminsPlataforma(Astro.locals.env)) > 0) return Astro.redirect("/login");
+if ((await countPlatformAdmins(Astro.locals.env)) > 0) return Astro.redirect("/login");
 
 const hasSecret = Boolean(Astro.locals.env.SETUP_SECRET);
 ---
@@ -26,7 +26,7 @@ const hasSecret = Boolean(Astro.locals.env.SETUP_SECRET);
 
       <div class="field">
         <label for="nome">Nome</label>
-        <input id="nome" name="nome" type="text" autocomplete="name" required />
+        <input id="nome" name="name" type="text" autocomplete="name" required />
       </div>
 
       <div class="field">
@@ -36,13 +36,13 @@ const hasSecret = Boolean(Astro.locals.env.SETUP_SECRET);
 
       <div class="field">
         <label for="senha">Senha</label>
-        <input id="senha" name="senha" type="password" minlength="10" autocomplete="new-password" required />
+        <input id="senha" name="password" type="password" minlength="10" autocomplete="new-password" required />
         <span class="hint">Mínimo de 10 caracteres.</span>
       </div>
 
       <div class="field">
         <label for="confirma">Confirmar senha</label>
-        <input id="confirma" name="confirma" type="password" minlength="10" autocomplete="new-password" required />
+        <input id="confirma" name="confirm" type="password" minlength="10" autocomplete="new-password" required />
       </div>
 
       <button class="btn-block" type="submit">Criar administrador</button>

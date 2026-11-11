@@ -15,10 +15,10 @@ import { drizzle } from "drizzle-orm/d1";
 
 import { APP_NAME, INVITE_TTL_DAYS } from "~/config";
 import { schema } from "~/db/schema";
-import { assertEnv, provedoresSociais, type AppEnv } from "~/lib/env";
-import { layoutEmail, sendEmail } from "~/lib/email";
+import { assertEnv, socialProviders, type AppEnv } from "~/lib/env";
+import { emailLayout, sendEmail } from "~/lib/email";
 import { verifyTurnstile } from "~/lib/http";
-import { criarWorkspace } from "~/lib/workspaces";
+import { createWorkspace } from "~/lib/workspaces";
 
 /**
  * Duas listas de papéis registradas no Better Auth, para dois plugins
@@ -36,7 +36,7 @@ const roles = {
   user: ac.newRole({ content: ["read", "write"] }),
 };
 
-// --- WORKSPACE (plugin organization): quem pode o quê dentro de um workspace ---
+// --- WORKSPACE (plugin organization): quem can o quê dentro de um workspace ---
 //
 // Cuidado com uma armadilha do plugin: passar `roles` SUBSTITUI os defaults, não
 // mescla (`has-permission.mjs` faz `{ ...options.roles || defaultRoles }`). Por
@@ -119,7 +119,7 @@ function build(env: AppEnv) {
         // "Confiável" aqui significa: o provedor confirma o e-mail antes de nos
         // contar. Google e GitHub fazem. Vincular por e-mail sem essa garantia
         // deixaria alguém reivindicar a conta de outra pessoa.
-        trustedProviders: provedoresSociais(env),
+        trustedProviders: socialProviders(env),
       },
     },
 
@@ -143,11 +143,11 @@ function build(env: AppEnv) {
       // o reset expulsa essa pessoa. É o ponto do reset.
       revokeSessionsOnPasswordReset: true,
       sendResetPassword: async ({ user, url }) => {
-        const { html, text } = layoutEmail(
+        const { html, text } = emailLayout(
           "Redefinir sua senha",
           [
             `Olá, ${escapeHtml(user.name)}.`,
-            "Recebemos um pedido para redefinir a senha da sua conta. O link vale por 1 hora e só pode ser usado uma vez.",
+            "Recebemos um pedido para redefinir a senha da sua conta. O link vale por 1 hora e só can ser usado uma vez.",
             "Se não foi você, ignore este e-mail — nada muda.",
           ],
           { label: "Redefinir senha", url },
@@ -166,7 +166,7 @@ function build(env: AppEnv) {
       autoSignInAfterVerification: true,
       expiresIn: 60 * 60,
       sendVerificationEmail: async ({ user, url }) => {
-        const { html, text } = layoutEmail(
+        const { html, text } = emailLayout(
           "Confirme seu e-mail",
           [`Olá, ${escapeHtml(user.name)}.`, "Confirme este endereço para concluir a alteração. O link vale por 1 hora."],
           { label: "Confirmar e-mail", url },
@@ -216,7 +216,7 @@ function build(env: AppEnv) {
         // conta autoriza a troca — sem isso, trocar e-mail vira sequestro.
         updateEmailWithoutVerification: false,
         sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
-          const { html, text } = layoutEmail(
+          const { html, text } = emailLayout(
             "Confirmar troca de e-mail",
             [
               `Olá, ${escapeHtml(user.name)}.`,
@@ -285,8 +285,8 @@ function build(env: AppEnv) {
         requireEmailVerificationOnInvitation: true,
         cancelPendingInvitationsOnReInvite: true,
         sendInvitationEmail: async (dados) => {
-          const url = `${env.BETTER_AUTH_URL}/convite/${dados.id}`;
-          const { html, text } = layoutEmail(
+          const url = `${env.BETTER_AUTH_URL}/invite/${dados.id}`;
+          const { html, text } = emailLayout(
             `Convite para ${escapeHtml(dados.organization.name)}`,
             [
               `${escapeHtml(dados.inviter.user.name)} convidou você para o workspace ` +
@@ -313,7 +313,7 @@ function build(env: AppEnv) {
         // errado, celular sem bateria) não tranca ninguém para fora.
         skipVerificationOnEnable: false,
         // Um código TOTP tem seis dígitos: são 1.000.000 de possibilidades, o
-        // que é pouco para quem pode tentar à vontade. Trava depois de cinco.
+        // que é pouco para quem can tentar à vontade. Trava depois de cinco.
         accountLockout: { enabled: true, maxFailedAttempts: 5, durationSeconds: 900 },
       }),
       adminPlugin({
@@ -336,7 +336,7 @@ function build(env: AppEnv) {
     // ------------------------------------------------------------------
     // Turnstile no ENDPOINT, não só na nossa página
     //
-    // `/api/cadastro` validava o Turnstile e depois chamava
+    // `/api/signup` validava o Turnstile e depois chamava
     // `/sign-up/email`. Mas o endpoint do Better Auth é público: um POST
     // direto nele criava conta sem passar por desafio nenhum — a proteção
     // anti-bot valia só para quem usasse o formulário.
@@ -383,7 +383,7 @@ function build(env: AppEnv) {
             // `organizationHooks` não disparam, então a auditoria é registrada
             // aqui mesmo.
             try {
-              const ws = await criarWorkspace(env, {
+              const ws = await createWorkspace(env, {
                 nome: nomeDoWorkspacePessoal(novoUsuario.name, novoUsuario.email),
                 donoId: novoUsuario.id,
               });

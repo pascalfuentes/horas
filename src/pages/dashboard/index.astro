@@ -1,5 +1,5 @@
 ---
-import { workspacesDoUsuario } from "~/lib/workspaces";
+import { userWorkspaces } from "~/lib/workspaces";
 
 export const prerender = false;
 
@@ -10,11 +10,11 @@ export const prerender = false;
  * lembrar o último workspace usado. Se ele não valer mais (a pessoa saiu do
  * workspace, ou ele foi excluído), cai no primeiro da lista.
  */
-const meus = await workspacesDoUsuario(Astro.locals.env, Astro.locals.user!.id);
+const meus = await userWorkspaces(Astro.locals.env, Astro.locals.user!.id);
 const ultimo = Astro.locals.session?.activeOrganizationId;
 
 const slug = meus.find((w) => w.workspaceId === ultimo)?.workspaceSlug ?? meus[0]?.workspaceSlug;
-const destino = slug ? `/w/${slug}/tempo` : "/workspaces";
+const destino = slug ? `/w/${slug}/time` : "/workspaces";
 
 // O aviso precisa sobreviver ao salto. Quem aceita um convite passa por aqui a
 // caminho do workspace novo, e sem isso a confirmação se perdia no caminho —

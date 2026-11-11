@@ -1,0 +1,85 @@
+---
+import { desc, eq } from "drizzle-orm";
+
+import Dashboard from "~/layouts/Dashboard.astro";
+import { note, user as userTable } from "~/db/schema";
+import { getDb } from "~/lib/auth";
+import { formatDateTime } from "~/lib/format";
+import { PERMISSIONS, can } from "~/lib/permissions";
+
+export const prerender = false;
+
+const ws = Astro.locals.membership!;
+const podeEscrever = can(ws.role, PERMISSIONS.CONTENT_WRITE);
+
+// TODA query de dado de negócio filtra por workspace. Sem este `where`, uma
+// pessoa veria o conteúdo de workspaces dos quais nem é membro.
+const notas = await getDb(Astro.locals.env)
+  .select({
+    id: note.id,
+    title: note.title,
+    body: note.body,
+    createdAt: note.createdAt,
+    autor: userTable.name,
+  })
+  .from(note)
+  .leftJoin(userTable, eq(note.authorId, userTable.id))
+  .where(eq(note.workspaceId, ws.workspaceId))
+  .orderBy(desc(note.createdAt))
+  .limit(50)
+  .all();
+---
+
+<Dashboard
+  title={`Anotações — ${ws.workspaceName}`}
+  heading="Anotações"
+  description="Módulo de demonstração — existe para mostrar os papéis de workspace funcionando."
+>
+  {podeEscrever ? (
+    <div class="card">
+      <h2>Nova anotação</h2>
+      <form method="post" action={`/api/w/${ws.workspaceSlug}/notes`} class="stack">
+        <div class="field">
+          <label for="titulo">Título</label>
+          <input id="titulo" name="title" type="text" maxlength="160" required />
+        </div>
+        <div class="field">
+          <label for="corpo">Conteúdo</label>
+          <textarea id="corpo" name="body" maxlength="4000"></textarea>
+        </div>
+        <div><button type="submit">Salvar</button></div>
+      </form>
+    </div>
+  ) : (
+    <p class="alert alert-info">
+      <span>
+        Seu papel aqui é somente leitura, então o formulário não aparece. Mais importante:
+        um POST direto em <code>/api/w/{ws.workspaceSlug}/notes</code> também leva 403 — a
+        autorização está no servidor, não na interface.
+      </span>
+    </p>
+  )}
+
+  <div class="card">
+    <h2>Anotações deste workspace ({notas.length})</h2>
+    {notas.length === 0 ? (
+      <p class="empty">Nenhuma anotação ainda.</p>
+    ) : (
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Título</th><th>Conteúdo</th><th>Autor</th><th>Criada em</th></tr></thead>
+          <tbody>
+            {notas.map((n) => (
+              <tr>
+                <td class="wrap"><strong>{n.title}</strong></td>
+                <td class="wrap">{n.body.slice(0, 120)}</td>
+                <td>{n.autor ?? "—"}</td>
+                <td>{formatDateTime(n.createdAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </div>
+</Dashboard>

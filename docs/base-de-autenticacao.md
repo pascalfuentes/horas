@@ -5,7 +5,7 @@ comando, e começa a escrever a sua aplicação **dentro** de um sistema que já
 tem login, convites, papéis, sessões e auditoria funcionando.
 
 **Multi-tenant por workspace**: qualquer pessoa cria conta, ganha um workspace
-próprio, e convida quem quiser para ele. Quem pode o quê é decidido pelo papel
+próprio, e convida quem quiser para ele. Quem can o quê é decidido pelo papel
 **dentro de cada workspace**, não por um papel global.
 
 ```
@@ -47,7 +47,7 @@ npm run dev
 
 Abra <http://localhost:4321>. Sem superadmin você cai em `/setup` — use o
 `SETUP_SECRET` do `.dev.vars` e crie a conta que vai operar a instalação. Depois
-dá para criar contas normais em `/cadastro`. Os e-mails (verificação, convite,
+dá para criar contas normais em `/signup`. Os e-mails (verificação, convite,
 recuperação de senha) são impressos no terminal em vez de enviados, o que basta
 para percorrer todos os fluxos.
 
@@ -62,10 +62,10 @@ No GitHub, clique em **Use this template → Create a new repository**. Depois:
 ```bash
 git clone <seu-repositorio-novo> && cd <ele>
 npm install
-npm run novo-projeto
+npm run new-project
 ```
 
-O `novo-projeto` pergunta o nome da aplicação, cria o banco D1 e grava tudo em
+O `new-project` pergunta o nome da aplicação, cria o banco D1 e grava tudo em
 **`wrangler.local.jsonc`** — um arquivo fora do Git com os ids reais deste
 deploy. O `wrangler.jsonc` versionado permanece com placeholders, para que o
 próximo clone também comece limpo.
@@ -169,7 +169,7 @@ São seis pontos de contato:
 | 5 | `src/pages/api/….ts` | o endpoint de escrita, começando com `deny(locals, PERMISSIONS.X)` |
 | 6 | `src/layouts/Dashboard.astro` | o link na navegação lateral |
 
-A regra que não pode ser quebrada é a do item 5: **toda rota que escreve começa
+A regra que não can ser quebrada é a do item 5: **toda rota que escreve começa
 com `deny()`**. Esconder o botão na interface não é autorização — é só cortesia
 com quem não ia conseguir mesmo.
 
@@ -181,12 +181,12 @@ parar de valer numa refatoração futura.
 
 Quando a sua aplicação de verdade estiver no lugar:
 
-- `src/pages/dashboard/notas.astro` e `src/pages/api/notas.ts` — apagar
+- `src/pages/dashboard/notes.astro` e `src/pages/api/notes.ts` — apagar
 - `migrations/0000_init.sql` — a tabela `note` (ou uma migration nova com `DROP TABLE`)
 - `src/db/schema.ts` — o `note` e a entrada em `schema`
 - `src/layouts/Dashboard.astro` — o link "Anotações"
 - `src/lib/http.ts` — a mensagem `ok_nota`
-- `scripts/smoke.sh` — as verificações que usam `/api/notas`
+- `scripts/smoke.sh` — as verificações que usam `/api/notes`
 
 ## Como está organizado
 
@@ -219,7 +219,7 @@ src/
     dashboard/admin/   usuarios · auditoria (só o superadmin)
     api/               endpoints de formulário (funcionam sem JavaScript)
 scripts/
-  novo-projeto.mjs     clone → projeto novo
+  new-project.mjs     clone → projeto novo
   config.mjs           resolve qual wrangler.jsonc vale
   d1.mjs               migrations, com a trava de produção
   totp.mjs             gera código TOTP (usado pela bateria; útil para depurar)
@@ -241,7 +241,7 @@ Duas travas, as duas do plugin, e as duas necessárias:
 2. O e-mail precisa estar **verificado**. Sem isso, bastaria cadastrar-se com o
    endereço de um convidado para herdar o convite dele — e o cadastro é aberto.
 
-A página `/convite/[id]` é pública, porque quem ainda não tem conta precisa
+A página `/invite/[id]` é pública, porque quem ainda não tem conta precisa
 chegar nela e entender o que criar. O que ela mostra — nome do workspace e
 e-mail convidado — é o que quem tem o link já recebeu por e-mail. O **aceite**
 é que tem as travas.
@@ -251,7 +251,7 @@ ação deliberada de quem já é dono.
 
 ### O convite também aparece dentro do painel
 
-O link do e-mail não pode ser o único caminho. E-mail se perde, cai em spam, ou
+O link do e-mail não can ser o único caminho. E-mail se perde, cai em spam, ou
 é apagado sem querer — e aí a pessoa fica sem saída mesmo já estando logada,
 porque nada na interface indica que existe um convite esperando por ela.
 
@@ -261,7 +261,7 @@ completa fica em `/workspaces`, e o aviso do topo é omitido lá para não
 duplicar.
 
 O que **não** muda é quem autoriza. Os botões postam no mesmo
-`/api/convite/aceitar` da página pública, e as duas travas continuam sendo do
+`/api/invite/accept` da página pública, e as duas travas continuam sendo do
 plugin. O aviso decide o que aparece na tela; ele não decide nada sobre acesso.
 
 A consulta casa pelo **e-mail**, que é a mesma chave que o plugin confere no
@@ -313,13 +313,13 @@ sondando.
 | Transferir a propriedade | ✓ | — | — | — |
 
 Repare no que **não** está na tabela: mexer na própria conta. A conta existe fora
-de qualquer workspace — a mesma pessoa pode ser `owner` num e `viewer` noutro, e
+de qualquer workspace — a mesma pessoa can ser `owner` num e `viewer` noutro, e
 a senha é uma só. Guardar isso por papel de workspace misturaria duas perguntas
-diferentes, então quem cuida disso é um guard separado (`denyConta`). Quem é só
+diferentes, então quem cuida disso é um guard separado (`denyAccount`). Quem é só
 `viewer` continua trocando a própria senha e o próprio 2FA.
 
-São três guards porque são três perguntas: `denyConta` (é você?), `deny` (você
-pode isto neste workspace?) e `denyPlataforma` (você opera a instalação?).
+São três guards porque são três perguntas: `denyAccount` (é você?), `deny` (você
+can isto neste workspace?) e `denyPlatform` (você opera a instalação?).
 
 ### Dois níveis de papel, e só um deles decide o dia a dia
 
@@ -327,7 +327,7 @@ pode isto neste workspace?) e `denyPlataforma` (você opera a instalação?).
 Não decide nada dentro de workspace nenhum. Valores: `admin` e `user`.
 
 `member.role` (workspace) é quem decide ler e escrever: `owner`, `admin`,
-`editor`, `viewer`. É por workspace, então a mesma pessoa pode ser `owner` num e
+`editor`, `viewer`. É por workspace, então a mesma pessoa can ser `owner` num e
 `viewer` noutro.
 
 O superadmin **não** ganha passe livre em workspace alheio: para agir num
@@ -383,7 +383,7 @@ continuam em `auth.api.*`, onde a sessão é a barreira.
 
 ### Nada de enumeração de contas
 
-Senha errada e e-mail inexistente devolvem a mesma mensagem. `/esqueci-senha`
+Senha errada e e-mail inexistente devolvem a mesma mensagem. `/forgot-password`
 sempre responde "se existir uma conta, enviamos o link" — inclusive quando o
 envio falha. Mensagens de erro são **códigos** na querystring (`?e=credenciais`),
 nunca texto vindo do usuário.
@@ -438,7 +438,7 @@ mão. A ação revoga as sessões dela e fica registrada na auditoria.
 
 Códigos de recuperação valem uma vez cada, e cinco códigos errados seguidos
 travam a conta por 15 minutos — seis dígitos são só um milhão de possibilidades,
-o que é pouco para quem pode tentar à vontade.
+o que é pouco para quem can tentar à vontade.
 
 ## O que NÃO está aqui
 
@@ -453,7 +453,7 @@ Deixado de fora de propósito, para você somar quando precisar:
 
 | | |
 |---|---|
-| `npm run novo-projeto` | transforma um clone num projeto novo |
+| `npm run new-project` | transforma um clone num projeto novo |
 | `npm run dev` | servidor local com D1 e secrets reais do workerd |
 | `npm run smoke` | bateria de 135 verificações de ponta a ponta |
 | `npm run check` | typecheck (`astro check`) |

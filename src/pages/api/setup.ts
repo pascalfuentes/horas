@@ -4,7 +4,7 @@ import { AUDIT, audit } from "~/lib/audit";
 import { callAuth, getDb } from "~/lib/auth";
 import { user as userTable } from "~/db/schema";
 import { codeFromAuthError, fail, handleAuthResponse, isEmail, str } from "~/lib/http";
-import { contarAdminsPlataforma, usuarioPorEmail } from "~/lib/plataforma";
+import { countPlatformAdmins, userByEmail } from "~/lib/platform";
 import { timingSafeEqual } from "~/lib/tokens";
 import { eq } from "drizzle-orm";
 
@@ -24,22 +24,22 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const env = locals.env;
   const form = await request.formData();
 
-  if (!env.SETUP_SECRET) return fail("/setup", "sem_permissao");
+  if (!env.SETUP_SECRET) return fail("/setup", "no_permission");
   if (!(await timingSafeEqual(str(form, "secret"), env.SETUP_SECRET))) {
-    return fail("/setup", "sem_permissao");
+    return fail("/setup", "no_permission");
   }
-  if ((await contarAdminsPlataforma(env)) > 0) return fail("/login", "sem_permissao");
+  if ((await countPlatformAdmins(env)) > 0) return fail("/login", "no_permission");
 
-  const nome = str(form, "nome");
+  const nome = str(form, "name");
   const email = str(form, "email").toLowerCase();
-  const senha = str(form, "senha");
+  const senha = str(form, "password");
 
-  if (!nome || !isEmail(email)) return fail("/setup", "campos");
-  if (senha.length < 10) return fail("/setup", "senha_curta");
-  if (senha !== str(form, "confirma")) return fail("/setup", "senha_confirma");
+  if (!nome || !isEmail(email)) return fail("/setup", "fields");
+  if (senha.length < 10) return fail("/setup", "password_short");
+  if (senha !== str(form, "confirm")) return fail("/setup", "password_mismatch");
 
   const db = getDb(env);
-  const existente = await usuarioPorEmail(env, email);
+  const existente = await userByEmail(env, email);
 
   try {
     if (!existente) {
@@ -53,11 +53,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
       if (!res.ok) return handleAuthResponse(res, "/setup", "/setup");
     }
 
-    const alvo = existente ?? (await usuarioPorEmail(env, email));
-    if (!alvo) return fail("/setup", "erro");
+    const alvo = existente ?? (await userByEmail(env, email));
+    if (!alvo) return fail("/setup", "error");
 
     // Promove a superadmin e dispensa a verificação de e-mail: quem tem o
-    // SETUP_SECRET é o operador da instalação, não um visitante.
+    // SETUP_SECRET é o operator da instalação, não um visitante.
     await db
       .update(userTable)
       .set({ role: "admin", emailVerified: true })

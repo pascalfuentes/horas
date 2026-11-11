@@ -21,7 +21,7 @@ export class HorasError extends Error {
   }
 }
 
-export type Projeto = {
+export type Project = {
   id: number;
   name: string;
   client: string;
@@ -32,14 +32,14 @@ export type Projeto = {
   total_seconds: number;
 };
 
-export type Ajustes = {
+export type Settings = {
   /** Código ISO 4217, só para formatação. */
   currency: string;
   /** Valor por hora dos projetos que não têm o seu. */
   default_rate: number;
 };
 
-export type Entrada = {
+export type Entry = {
   id: number;
   description: string;
   project_id: number | null;
@@ -56,7 +56,7 @@ export type Entrada = {
   amount: number;
 };
 
-export type EntradaInput = {
+export type EntryInput = {
   description?: string;
   project?: string | null;
   project_id?: number | string | null;
@@ -67,7 +67,7 @@ export type EntradaInput = {
   duration_minutes?: number | null;
 };
 
-export type Filtro = {
+export type Filter = {
   from?: string | null;
   to?: string | null;
   project?: string | null;
@@ -85,7 +85,7 @@ export type Filtro = {
 /* ---------- Datas e fuso ---------- */
 
 /** O fuso é um nome IANA que este runtime conhece? */
-export function tzValido(tz: unknown): tz is string {
+export function isValidTz(tz: unknown): tz is string {
   if (typeof tz !== "string" || !tz || tz.length > 64) return false;
   try {
     new Intl.DateTimeFormat("en-US", { timeZone: tz });
@@ -193,7 +193,7 @@ type LinhaEntrada = {
   project_rate: number | null;
 };
 
-function shapeEntry(row: LinhaEntrada | null, taxaPadrao: number): Entrada | null {
+function shapeEntry(row: LinhaEntrada | null, taxaPadrao: number): Entry | null {
   if (!row) return null;
   const endMs = row.end ? Date.parse(row.end) : Date.now();
   const segundos = Math.max(0, Math.round((endMs - Date.parse(row.start)) / 1000));
@@ -226,20 +226,20 @@ export type Store = ReturnType<typeof createStore>;
  */
 export function createStore(db: D1Database, ctx: { workspaceId: string; userId: string; tz?: string }) {
   const { workspaceId: ws, userId: uid } = ctx;
-  const tz = tzValido(ctx.tz) ? ctx.tz : DEFAULT_TZ;
+  const tz = isValidTz(ctx.tz) ? ctx.tz : DEFAULT_TZ;
 
   const all = async <T>(sql: string, ...args: unknown[]) => (await db.prepare(sql).bind(...args).all<T>()).results ?? [];
   const first = <T>(sql: string, ...args: unknown[]) => db.prepare(sql).bind(...args).first<T>();
   const run = async (sql: string, ...args: unknown[]) => (await db.prepare(sql).bind(...args).run()).meta;
   const nowIso = () => new Date().toISOString();
 
-  /* ----- Ajustes do workspace (moeda e taxa padrão) ----- */
+  /* ----- Settings do workspace (moeda e taxa padrão) ----- */
 
   // Lidos uma vez por requisição: todo lançamento precisa da taxa padrão para
   // calcular o valor, e o store vive só o tempo de uma requisição.
-  let ajustesEmCache: Promise<Ajustes> | null = null;
+  let ajustesEmCache: Promise<Settings> | null = null;
 
-  function getSettings(): Promise<Ajustes> {
+  function getSettings(): Promise<Settings> {
     ajustesEmCache ??= first<{ currency: string; defaultRate: number }>(
       'SELECT "currency", "defaultRate" FROM "time_settings" WHERE "workspaceId" = ?1',
       ws,
@@ -247,7 +247,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     return ajustesEmCache;
   }
 
-  async function updateSettings(patch: { currency?: unknown; default_rate?: unknown } = {}): Promise<Ajustes> {
+  async function updateSettings(patch: { currency?: unknown; default_rate?: unknown } = {}): Promise<Settings> {
     const atual = await getSettings();
     let currency = atual.currency;
     if (patch.currency !== undefined) {
@@ -274,7 +274,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
 
   /* ----- Projetos (do workspace; os totais são só das horas desta pessoa) ----- */
 
-  async function listProjects({ includeArchived = false }: { includeArchived?: boolean } = {}): Promise<Projeto[]> {
+  async function listProjects({ includeArchived = false }: { includeArchived?: boolean } = {}): Promise<Project[]> {
     const rows = await all<{ id: number; name: string; client: string; color: string; archived: number; hourlyRate: number | null; total: number }>(
       `SELECT p.*, COALESCE(SUM((julianday(COALESCE(e."end", 'now')) - julianday(e."start")) * 86400), 0) AS total
          FROM "time_project" p
@@ -295,13 +295,13 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     }));
   }
 
-  async function getProject(id: number | string): Promise<Projeto> {
+  async function getProject(id: number | string): Promise<Project> {
     const p = (await listProjects({ includeArchived: true })).find((x) => x.id === Number(id));
-    if (!p) throw new HorasError(`Projeto ${id} não encontrado.`, 404);
+    if (!p) throw new HorasError(`Project ${id} não encontrado.`, 404);
     return p;
   }
 
-  async function createProject(input: { name?: string; client?: string; color?: string; hourly_rate?: unknown } = {}): Promise<Projeto> {
+  async function createProject(input: { name?: string; client?: string; color?: string; hourly_rate?: unknown } = {}): Promise<Project> {
     const name = texto(input.name, 80);
     if (!name) throw new HorasError("O projeto precisa de um nome.");
     if (await first('SELECT 1 AS x FROM "time_project" WHERE "workspaceId" = ?1 AND "name" = ?2', ws, name)) {
@@ -324,7 +324,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
   async function updateProject(
     id: number | string,
     patch: { name?: string; client?: string; color?: string; archived?: boolean; hourly_rate?: unknown } = {},
-  ): Promise<Projeto> {
+  ): Promise<Project> {
     const cur = await getProject(id);
     const name = patch.name !== undefined ? texto(patch.name, 80) : cur.name;
     if (!name) throw new HorasError("O projeto precisa de um nome.");
@@ -372,14 +372,14 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
 
   /* ----- Entradas ----- */
 
-  async function getEntry(id: number | string): Promise<Entrada> {
+  async function getEntry(id: number | string): Promise<Entry> {
     const row = await first<LinhaEntrada>(`${ENTRY_SELECT} WHERE e."id" = ?1 AND e."workspaceId" = ?2 AND e."userId" = ?3`, Number(id), ws, uid);
-    if (!row) throw new HorasError(`Entrada ${id} não encontrada.`, 404);
+    if (!row) throw new HorasError(`Entry ${id} não encontrada.`, 404);
     return shapeEntry(row, await taxaPadrao())!;
   }
 
   /** Timer rodando agora, se houver. */
-  async function getRunning(): Promise<Entrada | null> {
+  async function getRunning(): Promise<Entry | null> {
     return shapeEntry(
       await first<LinhaEntrada>(`${ENTRY_SELECT} WHERE e."workspaceId" = ?1 AND e."userId" = ?2 AND e."end" IS NULL LIMIT 1`, ws, uid),
       await taxaPadrao(),
@@ -387,19 +387,19 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
   }
 
   /** Para o timer que está rodando. Devolve null se não havia nenhum. */
-  async function stopTimer({ end }: { end?: string } = {}): Promise<Entrada | null> {
+  async function stopTimer({ end }: { end?: string } = {}): Promise<Entry | null> {
     const running = await getRunning();
     if (!running) return null;
     const endIso = end ? toIso(end, "end", tz) : nowIso();
-    if (endIso < running.start) throw new HorasError("O fim não pode ser antes do início.");
+    if (endIso < running.start) throw new HorasError("O fim não can ser antes do início.");
     await run('UPDATE "time_entry" SET "end" = ?1 WHERE "id" = ?2 AND "end" IS NULL', endIso, running.id);
     return getEntry(running.id);
   }
 
   /** Inicia um timer. Se já houver um rodando, ele é parado antes. */
-  async function startTimer(input: EntradaInput = {}): Promise<{ entry: Entrada; stopped: Entrada | null }> {
+  async function startTimer(input: EntryInput = {}): Promise<{ entry: Entry; stopped: Entry | null }> {
     const start = input.start ? toIso(input.start, "start", tz) : nowIso();
-    if (Date.parse(start) > Date.now() + 60000) throw new HorasError("Um timer não pode começar no futuro.");
+    if (Date.parse(start) > Date.now() + 60000) throw new HorasError("Um timer não can começar no futuro.");
     const projectId = (await resolveProject(input)) ?? null;
     const running = await getRunning();
     const stopped = running ? await stopTimer({ end: start > running.start ? start : undefined }) : null;
@@ -423,7 +423,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
    * Aceita start+end, start+duration_minutes, end+duration_minutes ou só
    * duration_minutes (termina agora).
    */
-  async function createEntry(input: EntradaInput = {}): Promise<Entrada> {
+  async function createEntry(input: EntryInput = {}): Promise<Entry> {
     const mins = input.duration_minutes !== undefined && input.duration_minutes !== null ? Number(input.duration_minutes) : null;
     if (mins !== null && !(mins > 0)) throw new HorasError("duration_minutes precisa ser maior que zero.");
     let start = input.start ? toIso(input.start, "start", tz) : null;
@@ -451,7 +451,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     return getEntry(meta.last_row_id);
   }
 
-  async function updateEntry(id: number | string, patch: EntradaInput = {}): Promise<Entrada> {
+  async function updateEntry(id: number | string, patch: EntryInput = {}): Promise<Entry> {
     const cur = await getEntry(id);
     const start = patch.start ? toIso(patch.start, "start", tz) : cur.start;
     let end = patch.end ? toIso(patch.end, "end", tz) : cur.end;
@@ -461,7 +461,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
       end = new Date(Date.parse(start) + mins * 60000).toISOString();
     }
     if (end && end <= start) throw new HorasError("O fim precisa ser depois do início.");
-    if (!end && Date.parse(start) > Date.now() + 60000) throw new HorasError("Um timer rodando não pode começar no futuro.");
+    if (!end && Date.parse(start) > Date.now() + 60000) throw new HorasError("Um timer rodando não can começar no futuro.");
     const projectId = await resolveProject(patch);
     await run(
       `UPDATE "time_entry" SET "description" = ?1, "projectId" = ?2, "tags" = ?3, "billable" = ?4, "start" = ?5, "end" = ?6
@@ -486,7 +486,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
   }
 
   /** Lista entradas, mais recentes primeiro. */
-  async function listEntries({ from, to, project, project_id, q, billable, tag, client, limit = 500 }: Filtro = {}): Promise<Entrada[]> {
+  async function listEntries({ from, to, project, project_id, q, billable, tag, client, limit = 500 }: Filter = {}): Promise<Entry[]> {
     const where = ['e."workspaceId" = ?', 'e."userId" = ?'];
     const args: unknown[] = [ws, uid];
     if (from) where.push('e."start" >= ?'), args.push(rangeBound(from, false, tz));
@@ -528,13 +528,13 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
   }
 
   /** Relatório agregado de um período. */
-  async function summary(filter: Filtro = {}) {
+  async function summary(filter: Filter = {}) {
     const entries = await listEntries({ ...filter, limit: 5000 });
     const { currency } = await getSettings();
 
     type Grupo = { seconds: number; amount: number; entries: number };
     const novo = (): Grupo => ({ seconds: 0, amount: 0, entries: 0 });
-    const somar = <K, T extends Grupo>(mapa: Map<K, T>, chave: K, base: () => T, e: Entrada) => {
+    const somar = <K, T extends Grupo>(mapa: Map<K, T>, chave: K, base: () => T, e: Entry) => {
       const g = mapa.get(chave) ?? base();
       g.seconds += e.duration_seconds;
       g.amount += e.amount;
@@ -559,7 +559,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
       somar(byProject, pk, () => ({ ...novo(), project_id: e.project_id, project: e.project ?? "(sem projeto)", client: e.client ?? "", color: e.project_color ?? "#9ca3af" }), e);
       const cliente = e.client || "(sem cliente)";
       somar(byClient, cliente.toLowerCase(), () => ({ ...novo(), client: cliente }), e);
-      // Um lançamento com duas tags conta nas duas: a soma por tag pode passar do total.
+      // Um lançamento com duas tags conta nas duas: a soma por tag can passar do total.
       for (const t of e.tags.length ? e.tags : ["(sem tag)"]) somar(byTag, t.toLowerCase(), () => ({ ...novo(), tag: t }), e);
       somar(byDesc, `${pk}|${e.description}`, () => ({ ...novo(), description: e.description || "(sem descrição)", project: e.project ?? null }), e);
       const dia = localDay(e.start, tz);

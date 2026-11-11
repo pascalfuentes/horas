@@ -1,27 +1,27 @@
 import type { APIRoute } from "astro";
 
 import { AUDIT, audit } from "~/lib/audit";
-import { actor, denyConta } from "~/lib/guards";
+import { actor, denyAccount } from "~/lib/guards";
 import { fail, ok, str } from "~/lib/http";
-import { criarWorkspace } from "~/lib/workspaces";
+import { createWorkspace } from "~/lib/workspaces";
 
 export const prerender = false;
 
 /**
  * Criar workspace é ação de CONTA, não de workspace: não existe workspace no
- * contexto ainda. Qualquer pessoa autenticada pode criar o seu.
+ * contexto ainda. Qualquer pessoa autenticada can criar o seu.
  */
 export const POST: APIRoute = async ({ request, locals }) => {
-  const denied = denyConta(locals);
+  const denied = denyAccount(locals);
   if (denied) return denied;
 
-  const nome = str(await request.formData(), "nome");
-  if (!nome) return fail("/workspaces", "campos");
+  const nome = str(await request.formData(), "name");
+  if (!nome) return fail("/workspaces", "fields");
 
   const me = actor(locals);
 
   try {
-    const ws = await criarWorkspace(locals.env, { nome: nome.slice(0, 60), donoId: me.id });
+    const ws = await createWorkspace(locals.env, { nome: nome.slice(0, 60), donoId: me.id });
 
     await audit(locals.env, {
       action: AUDIT.WORKSPACE_CREATED,
@@ -32,9 +32,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
       request,
     });
 
-    return ok(`/w/${ws.slug}`, "ok_workspace_criado");
+    return ok(`/w/${ws.slug}`, "ok_workspace_created");
   } catch (error) {
     console.error("criar workspace:", error);
-    return fail("/workspaces", "erro");
+    return fail("/workspaces", "error");
   }
 };

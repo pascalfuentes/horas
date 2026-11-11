@@ -9,7 +9,7 @@ import { HorasError, type Store } from "~/lib/horas";
  *
  * Uma instância por requisição (o transporte é stateless), já amarrada ao
  * store da pessoa dona do token. As ferramentas de escrita só são registradas
- * para quem pode escrever — um `viewer` nem as enxerga.
+ * para quem can escrever — um `viewer` nem as enxerga.
  *
  * As descrições estão em inglês de propósito: é o que os modelos seguem melhor,
  * e a IA responde no idioma de quem está conversando de qualquer forma.
@@ -48,7 +48,7 @@ const filtroDePeriodo = {
   billable: z.boolean().optional().describe("true = only billable entries, false = only non-billable."),
 };
 
-export function criarServidorMcp(store: Store, podeEscrever: boolean): McpServer {
+export function createMcpServer(store: Store, podeEscrever: boolean): McpServer {
   const server = new McpServer(
     { name: APP_NAME.toLowerCase(), version: "1.0.0" },
     {

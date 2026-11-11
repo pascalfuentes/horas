@@ -3,7 +3,7 @@
  * ambientes). Ids de infraestrutura ficam em `wrangler.local.jsonc`; chaves
  * ficam em secrets do Worker.
  *
- * `npm run novo-projeto` reescreve o APP_NAME daqui.
+ * `npm run new-project` reescreve o APP_NAME daqui.
  */
 
 /** Aparece na barra superior e no nome do app dentro do Better Auth. */
@@ -19,10 +19,10 @@ export const INVITE_TTL_DAYS = 7;
  * pelo mesmo motivo dos ids: o repositório do template não deve carregar o
  * e-mail pessoal de ninguém. Os valores abaixo são só o fallback.
  */
-export function operador(env: { OPERADOR_NOME?: string; OPERADOR_CONTATO?: string }) {
+export function operator(env: { OPERATOR_NAME?: string; OPERATOR_CONTACT?: string }) {
   return {
-    nome: env.OPERADOR_NOME || APP_NAME,
-    contato: env.OPERADOR_CONTATO || "contato@exemplo.com",
+    nome: env.OPERATOR_NAME || APP_NAME,
+    contato: env.OPERATOR_CONTACT || "contato@exemplo.com",
   };
 }
 

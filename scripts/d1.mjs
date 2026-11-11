@@ -27,7 +27,7 @@ if (remoto && config.usandoPlaceholder) {
       "",
       "  npx wrangler d1 create <nome-do-banco>",
       "",
-      `e rode \`npm run novo-projeto\` para gravar o id em ${config.path}.`,
+      `e rode \`npm run new-project\` para gravar o id em ${config.path}.`,
     ].join("\n"),
   );
 }
