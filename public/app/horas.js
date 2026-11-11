@@ -283,6 +283,117 @@
   }
 
   /**
+   * Opens a small floating panel under an anchor. It closes on Escape, on a
+   * click outside, or when `close()` is called; only one is open at a time.
+   * @param {HTMLElement} anchor Element the panel hangs from (must be inside a positioned parent).
+   * @param {function(function(): void): HTMLElement} build Receives `close` and returns the panel.
+   * @returns {void}
+   */
+  function popover(anchor, build) {
+    const open = document.querySelector('.hr-menu');
+    if (open) open.dispatchEvent(new Event('hr-close'));
+    /** @returns {void} */
+    function close() {
+      panel.remove();
+      document.removeEventListener('mousedown', outside, true);
+      document.removeEventListener('keydown', onKey, true);
+      anchor.setAttribute('aria-expanded', 'false');
+    }
+    /** @param {MouseEvent} ev @returns {void} */
+    function outside(ev) { if (!panel.contains(/** @type {Node} */ (ev.target)) && !anchor.contains(/** @type {Node} */ (ev.target))) close(); }
+    /** @param {KeyboardEvent} ev @returns {void} */
+    function onKey(ev) { if (ev.key === 'Escape') { close(); anchor.focus(); } }
+    const panel = build(close);
+    panel.classList.add('hr-menu');
+    panel.addEventListener('hr-close', close);
+    anchor.setAttribute('aria-expanded', 'true');
+    anchor.parentElement.appendChild(panel);
+    document.addEventListener('mousedown', outside, true);
+    document.addEventListener('keydown', onKey, true);
+    const first = /** @type {HTMLElement|null} */ (panel.querySelector('input, button'));
+    if (first) first.focus();
+  }
+
+  /**
+   * Project chip that opens a menu to pick a project, clear it, or create a
+   * new one by typing its name. Used in the timer bar and on every entry row.
+   * @param {{projects: object[], value: number|null, onPick: function(number): (Promise<any>|void)}} opts
+   *   `projects` is the shared list; a project created here is added to it.
+   * @returns {HTMLElement} Wrapper whose `dataset.value` holds the chosen project id ("0" for none).
+   */
+  function projectPicker(opts) {
+    const dot = el('span', { class: 'hr-dot' });
+    const name = el('span', { class: 'hr-chip-name' });
+    const chip = el('button', { type: 'button', class: 'hr-chip', 'aria-haspopup': 'true', 'aria-expanded': 'false', title: 'Change project' }, [dot, name]);
+    const wrap = el('span', { class: 'hr-pick' }, [chip]);
+
+    /**
+     * Reflects a choice on the chip.
+     * @param {number} id Project id, 0 for none.
+     * @returns {void}
+     */
+    function paint(id) {
+      const p = opts.projects.filter(function (x) { return x.id === id; })[0];
+      wrap.dataset.value = String(p ? p.id : 0);
+      dot.style.background = p ? p.color : 'var(--border-strong)';
+      name.textContent = p ? p.name : 'No project';
+      chip.classList.toggle('hr-chip-empty', !p);
+    }
+
+    /**
+     * @param {number} id
+     * @param {function(): void} close
+     * @returns {Promise<void>}
+     */
+    async function pick(id, close) {
+      close();
+      if (String(id) === wrap.dataset.value) return;
+      paint(id);
+      await opts.onPick(id);
+    }
+
+    chip.addEventListener('click', function () {
+      if (chip.getAttribute('aria-expanded') === 'true') return;
+      popover(chip, function (close) {
+        const query = /** @type {HTMLInputElement} */ (el('input', { type: 'text', placeholder: 'Find or create a project', maxlength: '80', 'aria-label': 'Find or create a project' }));
+        const list = el('div', { class: 'hr-menu-list' });
+        /** @returns {void} */
+        function render() {
+          const q = query.value.trim().toLowerCase();
+          const active = opts.projects.filter(function (p) { return !p.archived && (!q || p.name.toLowerCase().indexOf(q) !== -1 || (p.client || '').toLowerCase().indexOf(q) !== -1); });
+          const exact = opts.projects.some(function (p) { return p.name.toLowerCase() === q; });
+          list.replaceChildren.apply(list, [
+            !q ? el('button', { type: 'button', class: 'hr-menu-item', onclick: safe(function () { return pick(0, close); }) }, [el('span', { class: 'hr-dot', style: 'background:var(--border-strong)' }), 'No project']) : null,
+          ].concat(active.slice(0, 50).map(function (p) {
+            return el('button', { type: 'button', class: 'hr-menu-item', onclick: safe(function () { return pick(p.id, close); }) }, [
+              el('span', { class: 'hr-dot', style: 'background:' + p.color }), el('span', { text: p.name }), p.client ? el('small', { text: p.client }) : null,
+            ]);
+          })).concat([
+            q && !active.length ? el('p', { class: 'hr-menu-empty', text: 'No project matches.' }) : null,
+            q && !exact && CAN_WRITE ? el('button', { type: 'button', class: 'hr-menu-item hr-menu-create', 'data-busy': 'Creating…', onclick: safe(async function () {
+              const created = await api('/projects', 'POST', { name: query.value.trim() });
+              opts.projects.push(created);
+              await pick(created.id, close);
+            }) }, ['+ Create project “' + query.value.trim() + '”']) : null,
+          ]).filter(Boolean));
+        }
+        query.addEventListener('input', render);
+        query.addEventListener('keydown', function (ev) {
+          if (ev.key !== 'Enter') return;
+          ev.preventDefault();
+          const firstOption = /** @type {HTMLElement|null} */ (list.querySelector('.hr-menu-item'));
+          if (firstOption) firstOption.click();
+        });
+        render();
+        return el('div', { class: 'hr-menu-project' }, [query, list]);
+      });
+    });
+
+    paint(opts.value || 0);
+    return wrap;
+  }
+
+  /**
    * Entry dialog: manual (no `entry`) or editing. Used by the timer and
    * by the detailed report.
    * @param {{entry?: object, projects: object[], tags?: string[], defaults?: {description?: string, project_id?: number|null}, onDone: function(): Promise<void>}} opts
@@ -396,14 +507,13 @@
     const totals = el('div', { class: 'hr-totals' });
     const list = el('div', { class: 'hr-days' });
 
-    /** @returns {HTMLSelectElement} */
-    function projEl() { return /** @type {HTMLSelectElement} */ (projSlot.firstChild); }
+    /** @returns {number} Project chosen in the timer bar, 0 for none. */
+    function barProject() { return projSlot.firstChild ? Number(/** @type {HTMLElement} */ (projSlot.firstChild).dataset.value) : 0; }
 
     /** @returns {void} */
     function paintBar() {
       const r = state.running;
-      projSlot.replaceChildren(projectSelect(state.projects, r ? r.project_id : Number(projEl() ? projEl().value : 0) || null));
-      projEl().addEventListener('change', safe(patchRunning));
+      projSlot.replaceChildren(projectPicker({ projects: state.projects, value: r ? r.project_id : barProject() || null, onPick: patchRunning }));
       if (r) {
         if (document.activeElement !== desc) desc.value = r.description;
         bill.checked = r.billable;
@@ -426,7 +536,7 @@
       if (!state.running) return;
       state.running = await api('/entries/' + state.running.id, 'PATCH', {
         description: desc.value,
-        project_id: Number(projEl().value),
+        project_id: barProject(),
         billable: bill.checked,
       });
     }
@@ -456,31 +566,138 @@
     }
 
     /**
+     * Saves a change made directly on a row, then refreshes the list. The row
+     * dims while waiting, and the field being edited keeps the focus afterwards.
+     * @param {HTMLElement} li The row.
+     * @param {object} e Entry.
+     * @param {object} body Fields to change.
+     * @returns {Promise<void>}
+     */
+    async function saveRow(li, e, body) {
+      const focused = /** @type {HTMLElement|null} */ (document.activeElement);
+      const key = focused && focused.dataset ? focused.dataset.k : '';
+      li.setAttribute('aria-busy', 'true');
+      try {
+        await api('/entries/' + e.id, 'PATCH', body);
+        await load();
+      } finally {
+        li.removeAttribute('aria-busy');
+      }
+      const again = key ? /** @type {HTMLElement|null} */ (list.querySelector('[data-k="' + key + '"]')) : null;
+      if (again) again.focus();
+    }
+
+    /**
+     * One entry. For someone who can write, every field is edited in place,
+     * as in Clockify: there is no separate edit screen.
      * @param {object} e Entry.
      * @returns {HTMLElement}
      */
     function row(e) {
-      return el('li', { class: 'hr-row' }, [
-        el('span', { class: 'hr-dot', style: 'background:' + (e.project_color || 'var(--border)') }),
+      if (!CAN_WRITE) {
+        return el('li', { class: 'hr-row' }, [
+          el('span', { class: 'hr-dot', style: 'background:' + (e.project_color || 'var(--border)') }),
+          el('div', { class: 'hr-what' }, [
+            el('span', { class: e.description ? '' : 'muted', text: e.description || '(no description)' }),
+            el('small', {}, [e.project || 'No project', e.billable ? ' · billable' : '', e.tags.length ? ' · ' + e.tags.map(function (t) { return '#' + t; }).join(' ') : '']),
+          ]),
+          el('span', { class: 'hr-when muted', text: hhmm(e.start) + ' – ' + hhmm(e.end) }),
+          el('strong', { class: 'hr-dur', text: clock(e.duration_seconds) }),
+        ]);
+      }
+
+      const li = el('li', { class: 'hr-row hr-row-edit' });
+      const k = function (field) { return e.id + ':' + field; };
+      const start = new Date(e.start);
+      /**
+       * Start and end as dates on a given day; an end before the start means it ran past midnight.
+       * @param {string} dayStr YYYY-MM-DD
+       * @param {string} from HH:MM
+       * @param {string} to HH:MM
+       * @returns {Date[]}
+       */
+      function span(dayStr, from, to) {
+        const a = new Date(dayStr + 'T' + from);
+        const b = new Date(dayStr + 'T' + to);
+        if (b <= a) b.setDate(b.getDate() + 1);
+        return [a, b];
+      }
+
+      const descIn = /** @type {HTMLInputElement} */ (el('input', { type: 'text', class: 'hr-inline hr-inline-desc', value: e.description, placeholder: 'Add description', maxlength: '500', 'aria-label': 'Description', 'data-k': k('desc') }));
+      descIn.addEventListener('change', safe(function () { return saveRow(li, e, { description: descIn.value }); }));
+
+      const tagsIn = /** @type {HTMLInputElement} */ (el('input', { type: 'text', class: 'hr-inline hr-inline-tags', value: e.tags.map(function (t) { return '#' + t; }).join(' '), placeholder: '+ tag', 'aria-label': 'Tags', 'data-k': k('tags') }));
+      tagsIn.addEventListener('change', safe(function () { return saveRow(li, e, { tags: tagsIn.value.split(/[\s,]+/).map(function (t) { return t.replace(/^#/, ''); }).filter(Boolean) }); }));
+
+      const fromIn = /** @type {HTMLInputElement} */ (el('input', { type: 'time', class: 'hr-inline hr-inline-time', value: hhmm(e.start), required: true, 'aria-label': 'Start time', 'data-k': k('from') }));
+      const toIn = /** @type {HTMLInputElement} */ (el('input', { type: 'time', class: 'hr-inline hr-inline-time', value: hhmm(e.end), required: true, 'aria-label': 'End time', 'data-k': k('to') }));
+      const saveTimes = safe(function () {
+        if (!fromIn.value || !toIn.value) return Promise.resolve();
+        const r = span(dayKey(start), fromIn.value, toIn.value);
+        return saveRow(li, e, { start: r[0].toISOString(), end: r[1].toISOString() });
+      });
+      fromIn.addEventListener('change', saveTimes);
+      toIn.addEventListener('change', saveTimes);
+
+      const durIn = /** @type {HTMLInputElement} */ (el('input', { type: 'text', class: 'hr-inline hr-inline-dur', value: clock(e.duration_seconds), 'aria-label': 'Duration', title: 'Type 1:30, 1h30 or 90 to change the end time', 'data-k': k('dur') }));
+      durIn.addEventListener('change', safe(function () {
+        const secs = parseDuration(durIn.value);
+        if (!secs || secs >= 86400 * 7) { durIn.value = clock(e.duration_seconds); throw new Error('Invalid duration. Examples: 1:30, 1h30, 45m, 90.'); }
+        return saveRow(li, e, { end: new Date(start.getTime() + secs * 1000).toISOString() });
+      }));
+
+      const dateIn = /** @type {HTMLInputElement} */ (el('input', { type: 'date', class: 'hr-date-input', value: dayKey(start), tabindex: '-1', 'aria-hidden': 'true' }));
+      dateIn.addEventListener('change', safe(function () {
+        if (!dateIn.value) return Promise.resolve();
+        const r = span(dateIn.value, hhmm(e.start), hhmm(e.end));
+        return saveRow(li, e, { start: r[0].toISOString(), end: r[1].toISOString() });
+      }));
+
+      li.append(
         el('div', { class: 'hr-what' }, [
-          el('span', { class: e.description ? '' : 'muted', text: e.description || '(no description)' }),
-          el('small', {}, [
-            e.project || 'No project',
-            e.billable ? ' · billable' : '',
-            e.tags.length ? ' · ' + e.tags.map(function (t) { return '#' + t; }).join(' ') : '',
+          descIn,
+          el('div', { class: 'hr-meta' }, [
+            projectPicker({ projects: state.projects, value: e.project_id, onPick: function (id) { return saveRow(li, e, { project_id: id }); } }),
+            tagsIn,
           ]),
         ]),
-        el('span', { class: 'hr-when muted', text: hhmm(e.start) + ' – ' + hhmm(e.end) }),
-        el('strong', { class: 'hr-dur', text: clock(e.duration_seconds) }),
-        CAN_WRITE && el('span', { class: 'row-actions' }, [
-          el('button', { type: 'button', class: 'hr-play', title: 'Continue this entry', 'aria-label': 'Continue', onclick: safe(async function () {
-            await api('/timer/start', 'POST', { description: e.description, project_id: e.project_id || 0, tags: e.tags, billable: e.billable });
-            await load();
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }) }, [el('span', { class: 'hr-tri' })]),
-          el('button', { type: 'button', class: 'btn-ghost btn-sm', text: 'Edit', onclick: function () { openDialog(e); } }),
+        el('button', { type: 'button', class: 'hr-bill', 'aria-pressed': String(e.billable), title: e.billable ? 'Billable. Click to make it non-billable' : 'Not billable. Click to make it billable', 'aria-label': 'Billable', onclick: safe(function () { return saveRow(li, e, { billable: !e.billable }); }) }, [el('span', { text: '$' })]),
+        el('span', { class: 'hr-date' }, [
+          el('button', { type: 'button', class: 'hr-icon', title: 'Move to another day', 'aria-label': 'Change the day', onclick: function () {
+            if (dateIn.showPicker) dateIn.showPicker(); else dateIn.focus();
+          } }, [el('span', { class: 'hr-cal' })]),
+          dateIn,
         ]),
-      ]);
+        el('span', { class: 'hr-times' }, [fromIn, el('span', { class: 'muted', text: '–' }), toIn]),
+        durIn,
+        el('button', { type: 'button', class: 'hr-play', title: 'Continue this entry', 'aria-label': 'Continue', onclick: safe(async function () {
+          await api('/timer/start', 'POST', { description: e.description, project_id: e.project_id || 0, tags: e.tags, billable: e.billable });
+          await load();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }) }, [el('span', { class: 'hr-tri' })]),
+        el('span', { class: 'hr-pick' }, [
+          el('button', { type: 'button', class: 'hr-icon hr-more', title: 'More actions', 'aria-label': 'More actions', 'aria-haspopup': 'true', 'aria-expanded': 'false', onclick: function (ev) {
+            const anchor = /** @type {HTMLElement} */ (ev.currentTarget);
+            if (anchor.getAttribute('aria-expanded') === 'true') return;
+            popover(anchor, function (close) {
+              return el('div', { class: 'hr-menu-actions' }, [
+                el('button', { type: 'button', class: 'hr-menu-item', 'data-busy': 'Duplicating…', text: 'Duplicate', onclick: safe(async function () {
+                  await api('/entries', 'POST', { description: e.description, project_id: e.project_id || 0, tags: e.tags, billable: e.billable, start: e.start, end: e.end });
+                  close();
+                  await load();
+                }) }),
+                el('button', { type: 'button', class: 'hr-menu-item hr-menu-danger', 'data-busy': 'Deleting…', text: 'Delete', onclick: safe(async function () {
+                  if (!confirm('Delete this entry? This cannot be undone.')) return;
+                  await api('/entries/' + e.id, 'DELETE');
+                  close();
+                  await load();
+                }) }),
+              ]);
+            });
+          } }, [el('span', { class: 'hr-kebab' })]),
+        ])
+      );
+      return li;
     }
 
     /**
@@ -493,7 +710,7 @@
         entry: entry,
         projects: state.projects,
         tags: state.tags,
-        defaults: { description: desc.value, project_id: Number(projEl().value) || null },
+        defaults: { description: desc.value, project_id: barProject() || null },
         onDone: load,
       });
     }
@@ -551,7 +768,7 @@
 
     btn.addEventListener('click', safe(async function () {
       if (state.running) await api('/timer/stop', 'POST', {});
-      else await api('/timer/start', 'POST', { description: desc.value, project_id: Number(projEl().value), billable: bill.checked });
+      else await api('/timer/start', 'POST', { description: desc.value, project_id: barProject(), billable: bill.checked });
       if (state.running) desc.value = '';
       await load();
     }));
