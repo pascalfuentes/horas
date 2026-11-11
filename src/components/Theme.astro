@@ -1,0 +1,56 @@
+---
+/**
+ * Theme bootstrap, placed in every page's <head>.
+ *
+ * Light (cream) is the default for everyone. Dark is opt-in: the choice lives
+ * in localStorage and is applied here, before the first paint, so a page never
+ * flashes the wrong theme. Any element with `data-theme-toggle` switches it.
+ */
+---
+
+<script is:inline>
+  (function () {
+    var KEY = "horas-theme";
+    var root = document.documentElement;
+
+    /** @returns {boolean} Whether the saved choice is dark. */
+    function isDark() {
+      try {
+        return localStorage.getItem(KEY) === "dark";
+      } catch (e) {
+        return false;
+      }
+    }
+
+    /**
+     * Applies a theme to the page and updates the toggle labels.
+     * @param {boolean} dark
+     * @returns {void}
+     */
+    function apply(dark) {
+      if (dark) root.setAttribute("data-theme", "dark");
+      else root.removeAttribute("data-theme");
+      var toggles = document.querySelectorAll("[data-theme-toggle]");
+      for (var i = 0; i < toggles.length; i++) {
+        toggles[i].textContent = dark ? "Light mode" : "Dark mode";
+        toggles[i].setAttribute("aria-pressed", String(dark));
+      }
+    }
+
+    apply(isDark());
+    document.addEventListener("DOMContentLoaded", function () {
+      apply(isDark());
+    });
+    document.addEventListener("click", function (ev) {
+      var target = ev.target;
+      if (!target || !target.closest || !target.closest("[data-theme-toggle]")) return;
+      var dark = !isDark();
+      try {
+        localStorage.setItem(KEY, dark ? "dark" : "light");
+      } catch (e) {
+        /* private mode: the choice lasts for this page only */
+      }
+      apply(dark);
+    });
+  })();
+</script>

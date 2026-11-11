@@ -50,30 +50,30 @@
   --mono: "DM Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1b1624;
-    --surface: #272130;
-    --surface-2: #3a3345;
-    --border: #3a3345;
-    --border-strong: #55505e;
-    --text: #fdfbf8;
-    --text-muted: #b9b6bd;
-    --ink: #f9f6f3;
-    --ink-text: #1b1624;
-    --accent-subtle: #3a3345;
-    --link: #5dcdf1;
-    --coral-subtle: #3a3345;
-    --sun-subtle: #3a3345;
-    --danger: #f0705f;
-    --danger-bg: #3a3345;
-    --danger-border: #55505e;
-    --success: #4cc98c;
-    --success-bg: #3a3345;
-    --success-border: #55505e;
-    --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -12px rgb(0 0 0 / 0.5);
-    --shadow-pop: 0 24px 48px -16px rgb(0 0 0 / 0.6);
-  }
+/* Dark is opt-in (the switch in the sidebar), never automatic: the cream theme
+   is the identity of the product, so it is what everyone sees first. */
+:root[data-theme="dark"] {
+  --bg: #1b1624;
+  --surface: #272130;
+  --surface-2: #3a3345;
+  --border: #3a3345;
+  --border-strong: #55505e;
+  --text: #fdfbf8;
+  --text-muted: #b9b6bd;
+  --ink: #f9f6f3;
+  --ink-text: #1b1624;
+  --accent-subtle: #3a3345;
+  --link: #5dcdf1;
+  --coral-subtle: #3a3345;
+  --sun-subtle: #3a3345;
+  --danger: #f0705f;
+  --danger-bg: #3a3345;
+  --danger-border: #55505e;
+  --success: #4cc98c;
+  --success-bg: #3a3345;
+  --success-border: #55505e;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -12px rgb(0 0 0 / 0.5);
+  --shadow-pop: 0 24px 48px -16px rgb(0 0 0 / 0.6);
 }
 
 * { box-sizing: border-box; }
@@ -136,6 +136,7 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 .sidenav .ws-picker a { padding: 8px 16px; font-size: 0.875rem; border-radius: 0; }
 .sidenav .ws-picker a[aria-current="true"] { background: var(--surface-2); color: var(--text); font-weight: 500; }
 
+.theme-toggle { margin-top: auto; align-self: flex-start; }
 .sidenav .group { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); padding: 16px 0 6px; }
 .sidenav a:not(.brand) {
   display: block; padding: 10px 14px; border-radius: var(--radius);

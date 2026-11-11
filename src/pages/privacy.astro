@@ -1,4 +1,5 @@
 ---
+import Theme from "~/components/Theme.astro";
 import { APP_NAME, INVITE_TTL_DAYS, operator } from "~/config";
 import "~/styles/global.css";
 
@@ -25,6 +26,7 @@ const updated = "September 17, 2026";
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>Privacy Policy — {APP_NAME}</title>
+    <Theme />
   </head>
   <body>
     <main class="doc">

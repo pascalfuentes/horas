@@ -1,4 +1,5 @@
 ---
+import Theme from "~/components/Theme.astro";
 import Alert from "~/components/Alert.astro";
 import PendingInvites from "~/components/PendingInvites.astro";
 import { APP_NAME } from "~/config";
@@ -87,6 +88,7 @@ const groups = [
     <meta name="robots" content="noindex" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>{title}</title>
+    <Theme />
   </head>
   <body>
     <div class="app">
@@ -111,6 +113,7 @@ const groups = [
             ))}
           </>
         ))}
+        <button type="button" class="btn-ghost btn-sm theme-toggle" data-theme-toggle>Dark mode</button>
       </nav>
 
       <main class="content">

@@ -1,4 +1,5 @@
 ---
+import Theme from "~/components/Theme.astro";
 import { APP_NAME, operator } from "~/config";
 import { countPlatformAdmins } from "~/lib/platform";
 import "~/styles/global.css";
@@ -39,6 +40,7 @@ const tools = ["get_status", "start_timer", "stop_timer", "add_entry", "summary_
     <meta property="og:type" content="website" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>{APP_NAME} — the time tracker that talks to your AI</title>
+    <Theme />
   </head>
   <body class="lp">
     <div class="lp-top">
