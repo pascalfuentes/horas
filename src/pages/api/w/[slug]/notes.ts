@@ -9,11 +9,11 @@ import { PERMISSIONS } from "~/lib/permissions";
 export const prerender = false;
 
 /**
- * MÓDULO DE DEMONSTRAÇÃO.
+ * DEMO MODULE.
  *
- * O slug está na ROTA, não no corpo: o middleware resolve e confere a
- * membership antes de chegar aqui. Aceitar um `workspaceId` vindo do formulário
- * deixaria qualquer pessoa escrever em qualquer workspace.
+ * The slug is in the ROUTE, not in the body: the middleware resolves and checks
+ * the membership before getting here. Accepting a `workspaceId` coming from the
+ * form would let anyone write to any workspace.
  */
 export const POST: APIRoute = async ({ request, locals }) => {
   const denied = deny(locals, PERMISSIONS.CONTENT_WRITE);

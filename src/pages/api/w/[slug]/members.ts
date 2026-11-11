@@ -12,8 +12,9 @@ import { PERMISSIONS } from "~/lib/permissions";
 export const prerender = false;
 
 export const POST: APIRoute = async ({ request, locals }) => {
-  // Sair do workspace é a única ação aqui que NÃO exige members:write — é sobre
-  // a sua própria participação. Quem tem só `viewer` também can sair.
+  // Leaving the workspace is the only action here that does NOT require
+  // members:write — it is about your own membership. Someone with only `viewer`
+  // can leave too.
   const denied = str(await peek(request), "action") === "leave"
     ? denyAccount(locals)
     : deny(locals, PERMISSIONS.MEMBERS_WRITE);
@@ -22,13 +23,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const ws = currentWorkspace(locals);
   const me = actor(locals);
   const form = await request.formData();
-  const acao = str(form, "action");
+  const action = str(form, "action");
   const PAGE = `/w/${ws.workspaceSlug}/members`;
 
   try {
-    if (acao === "leave") {
-      // O trigger `keep_one_owner_on_delete` recusa se você for o último dono —
-      // e está certo: o workspace ficaria órfão. Transfira antes.
+    if (action === "leave") {
+      // The `keep_one_owner_on_delete` trigger refuses if you are the last
+      // owner — and rightly so: the workspace would be orphaned. Transfer first.
       const res = await callAuth(locals.auth, request, "/organization/leave", {
         organizationId: ws.workspaceId,
       });
@@ -47,22 +48,22 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const memberId = str(form, "memberId");
     if (!memberId) return fail(PAGE, "fields");
 
-    const alvo = await memberById(locals.env, ws.workspaceId, memberId);
-    if (!alvo) return fail(PAGE, "fields");
+    const target = await memberById(locals.env, ws.workspaceId, memberId);
+    if (!target) return fail(PAGE, "fields");
 
-    if (acao === "role") {
-      const papel = str(form, "role") as WorkspaceRole;
-      // A checagem do próprio membro vem primeiro para a mensagem dizer o que
-      // de fato aconteceu: quem tenta mudar o próprio papel sendo dono ouviria
-      // "papel inválido", que não explica nada.
-      if (alvo.userId === me.id) return fail(PAGE, "own_membership");
-      if (!(WORKSPACE_ROLES as readonly string[]).includes(papel)) return fail(PAGE, "invalid_role");
-      // Virar dono é transferência, não troca de papel: tem ação própria.
-      if (papel === "owner" || alvo.role === "owner") return fail(PAGE, "invalid_role");
+    if (action === "role") {
+      const role = str(form, "role") as WorkspaceRole;
+      // The own-member check comes first so the message says what actually
+      // happened: an owner trying to change their own role would hear
+      // "invalid role", which explains nothing.
+      if (target.userId === me.id) return fail(PAGE, "own_membership");
+      if (!(WORKSPACE_ROLES as readonly string[]).includes(role)) return fail(PAGE, "invalid_role");
+      // Becoming owner is a transfer, not a role change: it has its own action.
+      if (role === "owner" || target.role === "owner") return fail(PAGE, "invalid_role");
 
       const res = await callAuth(locals.auth, request, "/organization/update-member-role", {
         memberId,
-        role: papel,
+        role,
         organizationId: ws.workspaceId,
       });
       if (!res.ok) return handleAuthResponse(res, PAGE, PAGE);
@@ -71,17 +72,17 @@ export const POST: APIRoute = async ({ request, locals }) => {
         action: AUDIT.MEMBER_ROLE_CHANGED,
         actorId: me.id,
         actorEmail: me.email,
-        targetId: alvo.userId,
-        targetEmail: alvo.email,
+        targetId: target.userId,
+        targetEmail: target.email,
         workspaceId: ws.workspaceId,
-        details: { de: alvo.role, para: papel },
+        details: { from: target.role, to: role },
         request,
       });
       return ok(PAGE, "ok_member_role");
     }
 
-    if (acao === "remove") {
-      if (alvo.userId === me.id) return fail(PAGE, "own_membership");
+    if (action === "remove") {
+      if (target.userId === me.id) return fail(PAGE, "own_membership");
 
       const res = await callAuth(locals.auth, request, "/organization/remove-member", {
         memberIdOrEmail: memberId,
@@ -93,34 +94,34 @@ export const POST: APIRoute = async ({ request, locals }) => {
         action: AUDIT.MEMBER_REMOVED,
         actorId: me.id,
         actorEmail: me.email,
-        targetId: alvo.userId,
-        targetEmail: alvo.email,
+        targetId: target.userId,
+        targetEmail: target.email,
         workspaceId: ws.workspaceId,
         request,
       });
       return ok(PAGE, "ok_member_removed");
     }
 
-    if (acao === "transfer") {
-      const podeTransferir = deny(locals, PERMISSIONS.WORKSPACE_TRANSFER);
-      if (podeTransferir) return podeTransferir;
-      if (alvo.userId === me.id) return fail(PAGE, "own_membership");
+    if (action === "transfer") {
+      const transferDenied = deny(locals, PERMISSIONS.WORKSPACE_TRANSFER);
+      if (transferDenied) return transferDenied;
+      if (target.userId === me.id) return fail(PAGE, "own_membership");
 
-      const meuMembro = await memberById(locals.env, ws.workspaceId, str(form, "myMemberId"));
-      if (!meuMembro || meuMembro.userId !== me.id) return fail(PAGE, "fields");
+      const myMember = await memberById(locals.env, ws.workspaceId, str(form, "myMemberId"));
+      if (!myMember || myMember.userId !== me.id) return fail(PAGE, "fields");
 
       await transferOwnership(locals.env, {
         workspaceId: ws.workspaceId,
-        deMemberId: meuMembro.memberId,
-        paraMemberId: alvo.memberId,
+        fromMemberId: myMember.memberId,
+        toMemberId: target.memberId,
       });
 
       await audit(locals.env, {
         action: AUDIT.WORKSPACE_OWNER_TRANSFERRED,
         actorId: me.id,
         actorEmail: me.email,
-        targetId: alvo.userId,
-        targetEmail: alvo.email,
+        targetId: target.userId,
+        targetEmail: target.email,
         workspaceId: ws.workspaceId,
         request,
       });
@@ -130,14 +131,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return fail(PAGE, "fields");
   } catch (error) {
     if (isLastOwnerError(error)) return fail(PAGE, "last_owner");
-    console.error("membros do workspace:", error);
+    console.error("workspace members:", error);
     return fail(PAGE, codeFromAuthError(error));
   }
 };
 
 /**
- * O corpo só can ser lido uma vez, e a escolha do guard depende da ação. Lê de
- * um clone para decidir, e o handler lê o original.
+ * The body can only be read once, and the choice of guard depends on the
+ * action. Reads from a clone to decide, and the handler reads the original.
  */
 async function peek(request: Request): Promise<FormData> {
   return request.clone().formData();

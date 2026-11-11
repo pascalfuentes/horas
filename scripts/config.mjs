@@ -2,26 +2,27 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 /**
- * Este repositório é template E instalação ao mesmo tempo.
+ * This repository is a template AND an installation at the same time.
  *
- * `wrangler.jsonc` é a versão do TEMPLATE: vai para o Git com placeholders no
- * lugar dos ids. `wrangler.local.jsonc` é a versão DESTE deploy: fica fora do
- * Git com os valores reais. Quando existe, ele vence.
+ * `wrangler.jsonc` is the TEMPLATE version: it goes to Git with placeholders
+ * in place of the ids. `wrangler.local.jsonc` is THIS deploy's version: it
+ * stays out of Git with the real values. When it exists, it wins.
  *
- * Assim um clone novo não tem id de banco válido — `db:remote` falha alto em
- * vez de escrever no banco de produção de outro projeto por engano.
+ * That way a new clone has no valid database id: `db:remote` fails loudly
+ * instead of writing to another project's production database by mistake.
  */
 export function configPath() {
   return existsSync(resolve("wrangler.local.jsonc")) ? "wrangler.local.jsonc" : "wrangler.jsonc";
 }
 
 /**
- * O id do template. A trava olha SÓ o id: renomear o banco não desarma a
- * proteção, e é o id que decide em qual banco o wrangler escreve.
+ * The template id. The guard looks ONLY at the id: renaming the database does
+ * not disarm the protection, and the id is what decides which database
+ * wrangler writes to.
  */
 const PLACEHOLDER = /^(|0{8}-0{4}-4000-8000-0{12})$/;
 
-/** Remove comentários de JSONC respeitando o que está dentro de strings. */
+/** Strips JSONC comments while respecting what is inside strings. */
 export function parseJsonc(text) {
   let out = "";
   let inString = false;
@@ -52,7 +53,7 @@ export function parseJsonc(text) {
     out += c;
   }
 
-  // Vírgula sobrando antes de } ou ] é válida em JSONC, não em JSON.
+  // A trailing comma before } or ] is valid in JSONC, not in JSON.
   return JSON.parse(out.replace(/,(\s*[}\]])/g, "$1"));
 }
 
@@ -67,11 +68,11 @@ export function readConfig() {
     databaseName: d1?.database_name,
     databaseId: d1?.database_id,
     turnstileSiteKey: config.vars?.PUBLIC_TURNSTILE_SITE_KEY,
-    usandoPlaceholder: PLACEHOLDER.test(String(d1?.database_id ?? "")),
+    usingPlaceholder: PLACEHOLDER.test(String(d1?.database_id ?? "")),
   };
 }
 
-export function abortar(mensagem) {
-  console.error(`\n\x1b[31m✗\x1b[0m ${mensagem}\n`);
+export function abort(message) {
+  console.error(`\n\x1b[31m✗\x1b[0m ${message}\n`);
   process.exit(1);
 }

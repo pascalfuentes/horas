@@ -1,9 +1,9 @@
 /**
- * Interface do controle de tempo (timer, relatórios, projetos e tokens).
+ * Time tracking UI (timer, reports, projects and tokens).
  *
- * Um arquivo só, sem build e sem dependências. Cada página do painel renderiza
- * um `<div id="horas-app" data-view="…">` e este script monta a tela dentro.
- * Todo texto vindo do banco entra no DOM por `textContent`, nunca por HTML.
+ * A single file, no build and no dependencies. Each dashboard page renders
+ * a `<div id="horas-app" data-view="…">` and this script builds the screen inside it.
+ * All text coming from the database enters the DOM through `textContent`, never as HTML.
  */
 (function () {
   'use strict';
@@ -11,22 +11,22 @@
   const root = document.getElementById('horas-app');
   if (!root) return;
 
-  /** Base da API deste workspace, ex.: /api/w/meu-slug/horas */
+  /** Base of this workspace's API, e.g. /api/w/my-slug/horas */
   const BASE = root.dataset.base || '';
-  /** Papel de leitura esconde tudo que escreve (o servidor barra de qualquer forma). */
+  /** A read-only role hides everything that writes (the server blocks it anyway). */
   const CAN_WRITE = root.dataset.write === '1';
   const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   /* ------------------------------------------------------------------ */
-  /* Utilitários                                                         */
+  /* Utilities                                                          */
   /* ------------------------------------------------------------------ */
 
   /**
-   * Chama a API JSON do workspace.
-   * @param {string} path Caminho depois da base, ex.: "/entries?from=2026-01-01".
+   * Calls the workspace's JSON API.
+   * @param {string} path Path after the base, e.g. "/entries?from=2026-01-01".
    * @param {string} [method]
    * @param {object} [body]
-   * @param {string} [base] Outra base, quando não é a API de horas.
+   * @param {string} [base] Another base, when it is not the horas API.
    * @returns {Promise<any>}
    */
   async function api(path, method, body, base) {
@@ -38,17 +38,17 @@
     });
     if (res.status === 401) {
       location.href = '/login?next=' + encodeURIComponent(location.pathname);
-      throw new Error('Sessão expirada.');
+      throw new Error('Session expired.');
     }
     const data = await res.json().catch(function () { return null; });
-    if (!res.ok) throw new Error((data && data.error) || 'Algo deu errado (' + res.status + ').');
+    if (!res.ok) throw new Error((data && data.error) || 'Something went wrong (' + res.status + ').');
     return data;
   }
 
   /**
-   * Cria um elemento.
+   * Creates an element.
    * @param {string} tag
-   * @param {Object<string, any>} [attrs] `class`, `text`, `on<evento>` e atributos comuns.
+   * @param {Object<string, any>} [attrs] `class`, `text`, `on<event>` and regular attributes.
    * @param {Array<Node|string|null|undefined|false>} [children]
    * @returns {HTMLElement}
    */
@@ -74,7 +74,7 @@
   function pad(n) { return String(n).padStart(2, '0'); }
 
   /**
-   * Segundos -> "1:23:45" (relógio).
+   * Seconds -> "1:23:45" (clock).
    * @param {number} s
    * @returns {string}
    */
@@ -84,7 +84,7 @@
   }
 
   /**
-   * Segundos -> "1h 23min" (leitura).
+   * Seconds -> "1h 23min" (for reading).
    * @param {number} s
    * @returns {string}
    */
@@ -95,23 +95,23 @@
   }
 
   /**
-   * Valor em dinheiro na moeda do workspace.
+   * Money amount in the workspace currency.
    * @param {number} n
-   * @param {string} currency Código ISO 4217.
+   * @param {string} currency ISO 4217 code.
    * @returns {string}
    */
   function money(n, currency) {
     try {
-      return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: currency || 'BRL' }).format(n || 0);
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'BRL' }).format(n || 0);
     } catch (e) {
       return (n || 0).toFixed(2);
     }
   }
 
   /**
-   * Lê uma duração digitada: "1:30", "1h30", "1h 30m", "45m", "1,5" (horas) ou "90" (minutos).
+   * Reads a typed duration: "1:30", "1h30", "1h 30m", "45m", "1.5" or "1,5" (hours) or "90" (minutes).
    * @param {string} text
-   * @returns {number|null} Segundos, ou null se não deu para entender.
+   * @returns {number|null} Seconds, or null if it could not be understood.
    */
   function parseDuration(text) {
     const t = String(text || '').trim().toLowerCase().replace(',', '.');
@@ -126,7 +126,7 @@
   }
 
   /**
-   * Segundos -> "1:30" (para campo de duração).
+   * Seconds -> "1:30" (for the duration field).
    * @param {number} s
    * @returns {string}
    */
@@ -136,14 +136,14 @@
   }
 
   /**
-   * Data local -> "YYYY-MM-DD".
+   * Local date -> "YYYY-MM-DD".
    * @param {Date} d
    * @returns {string}
    */
   function dayKey(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
 
   /**
-   * Hoje deslocado em N dias, à meia-noite local.
+   * Today shifted by N days, at local midnight.
    * @param {number} [offset]
    * @returns {Date}
    */
@@ -160,31 +160,31 @@
   function hhmm(iso) { const d = new Date(iso); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
 
   /**
-   * "YYYY-MM-DD" -> "Hoje", "Ontem" ou "ter., 10 de nov.".
+   * "YYYY-MM-DD" -> "Today", "Yesterday" or "Tue, Nov 10".
    * @param {string} key
    * @returns {string}
    */
   function dayLabel(key) {
-    if (key === dayKey(day(0))) return 'Hoje';
-    if (key === dayKey(day(-1))) return 'Ontem';
+    if (key === dayKey(day(0))) return 'Today';
+    if (key === dayKey(day(-1))) return 'Yesterday';
     const p = key.split('-').map(Number);
-    return new Date(p[0], p[1] - 1, p[2]).toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' });
+    return new Date(p[0], p[1] - 1, p[2]).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' });
   }
 
   /**
-   * Mostra um aviso passageiro no rodapé.
+   * Shows a brief notice at the bottom of the page.
    * @param {string} msg
    * @param {boolean} [isError]
    * @returns {void}
    */
   function toast(msg, isError) {
-    const t = el('div', { class: 'hr-toast' + (isError ? ' hr-toast-erro' : ''), role: 'status', text: msg });
+    const t = el('div', { class: 'hr-toast' + (isError ? ' hr-toast-error' : ''), role: 'status', text: msg });
     document.body.appendChild(t);
     setTimeout(function () { t.remove(); }, 3500);
   }
 
   /**
-   * Envolve um handler assíncrono: erro vira aviso em vez de sumir no console.
+   * Wraps an async handler: an error becomes a notice instead of vanishing into the console.
    * @param {function(...any): Promise<any>} fn
    * @returns {function(...any): void}
    */
@@ -195,7 +195,7 @@
   }
 
   /**
-   * `<select>` de projetos.
+   * Project `<select>`.
    * @param {Array<object>} projects
    * @param {number|null} selected
    * @param {string} [emptyLabel]
@@ -203,7 +203,7 @@
    */
   function projectSelect(projects, selected, emptyLabel) {
     const s = /** @type {HTMLSelectElement} */ (el('select', { 'aria-label': 'Project' }));
-    s.appendChild(el('option', { value: '0', text: emptyLabel || 'Sem projeto' }));
+    s.appendChild(el('option', { value: '0', text: emptyLabel || 'No project' }));
     projects.forEach(function (p) {
       if (p.archived && p.id !== selected) return;
       s.appendChild(el('option', { value: String(p.id), text: p.client ? p.name + ' · ' + p.client : p.name, selected: p.id === selected }));
@@ -212,8 +212,8 @@
   }
 
   /**
-   * Diálogo de lançamento: manual (sem `entry`) ou edição. Usado no timer e
-   * no relatório detalhado.
+   * Entry dialog: manual (no `entry`) or editing. Used by the timer and
+   * by the detailed report.
    * @param {{entry?: object, projects: object[], tags?: string[], defaults?: {description?: string, project_id?: number|null}, onDone: function(): Promise<void>}} opts
    * @returns {void}
    */
@@ -226,16 +226,16 @@
     const f = {
       desc: /** @type {HTMLInputElement} */ (el('input', { type: 'text', id: 'hd-desc', maxlength: '500', value: entry ? entry.description : defaults.description || '' })),
       proj: projectSelect(opts.projects, entry ? entry.project_id : defaults.project_id || null),
-      tags: /** @type {HTMLInputElement} */ (el('input', { type: 'text', id: 'hd-tags', list: 'hd-taglist', placeholder: 'separadas por vírgula', autocomplete: 'off', value: entry ? entry.tags.join(', ') : '' })),
+      tags: /** @type {HTMLInputElement} */ (el('input', { type: 'text', id: 'hd-tags', list: 'hd-taglist', placeholder: 'comma-separated', autocomplete: 'off', value: entry ? entry.tags.join(', ') : '' })),
       date: /** @type {HTMLInputElement} */ (el('input', { type: 'date', id: 'hd-date', required: true, value: dayKey(start) })),
       from: /** @type {HTMLInputElement} */ (el('input', { type: 'time', id: 'hd-from', required: true, value: t(start) })),
       to: /** @type {HTMLInputElement} */ (el('input', { type: 'time', id: 'hd-to', required: true, value: t(end) })),
-      dur: /** @type {HTMLInputElement} */ (el('input', { type: 'text', id: 'hd-dur', inputmode: 'text', placeholder: '1:30, 1h30 ou 90', autocomplete: 'off' })),
+      dur: /** @type {HTMLInputElement} */ (el('input', { type: 'text', id: 'hd-dur', inputmode: 'text', placeholder: '1:30, 1h30 or 90', autocomplete: 'off' })),
       bill: /** @type {HTMLInputElement} */ (el('input', { type: 'checkbox', id: 'hd-bill', checked: entry ? entry.billable : false })),
     };
     f.proj.id = 'hd-proj';
 
-    /** Início e fim como datas; fim antes do início = terminou depois da meia-noite. @returns {Date[]} */
+    /** Start and end as dates; end before start = it ended after midnight. @returns {Date[]} */
     function range() {
       const s = new Date(f.date.value + 'T' + f.from.value);
       const e = new Date(f.date.value + 'T' + f.to.value);
@@ -245,10 +245,10 @@
     const syncDur = function () { const r = range(); if (!isNaN(r[1] - r[0])) f.dur.value = hm((r[1] - r[0]) / 1000); };
     syncDur();
     [f.from, f.to, f.date].forEach(function (i) { i.addEventListener('change', syncDur); });
-    // Digitar a duração move o FIM, mantendo o início — como no Clockify.
+    // Typing the duration moves the END, keeping the start — like in Clockify.
     f.dur.addEventListener('change', function () {
       const secs = parseDuration(f.dur.value);
-      if (!secs || secs >= 86400) { toast('Duração inválida. Exemplos: 1:30, 1h30, 45m, 90.', true); syncDur(); return; }
+      if (!secs || secs >= 86400) { toast('Invalid duration. Examples: 1:30, 1h30, 45m, 90.', true); syncDur(); return; }
       f.to.value = t(new Date(range()[0].getTime() + secs * 1000));
       syncDur();
     });
@@ -277,26 +277,26 @@
       else await api('/entries', 'POST', payload());
       await finish();
     }) }, [
-      el('h2', { text: entry ? 'Editar lançamento' : 'Lançamento manual' }),
-      field('Descrição', f.desc),
+      el('h2', { text: entry ? 'Edit entry' : 'Manual entry' }),
+      field('Description', f.desc),
       field('Project', f.proj),
-      el('div', { class: 'hr-grid4' }, [field('Dia', f.date), field('Início', f.from), field('Fim', f.to), field('Duração', f.dur)]),
+      el('div', { class: 'hr-grid4' }, [field('Day', f.date), field('Start', f.from), field('End', f.to), field('Duration', f.dur)]),
       field('Tags', f.tags),
       el('datalist', { id: 'hd-taglist' }, (opts.tags || []).map(function (tag) { return el('option', { value: tag }); })),
-      el('label', { class: 'hr-check' }, [f.bill, ' Faturável']),
+      el('label', { class: 'hr-check' }, [f.bill, ' Billable']),
       el('div', { class: 'hr-dialog-foot' }, [
-        entry && el('button', { type: 'button', class: 'btn-danger btn-sm', text: 'Excluir', onclick: safe(async function () {
-          if (!confirm('Excluir este lançamento? Não dá para desfazer.')) return;
+        entry && el('button', { type: 'button', class: 'btn-danger btn-sm', text: 'Delete', onclick: safe(async function () {
+          if (!confirm('Delete this entry? This cannot be undone.')) return;
           await api('/entries/' + entry.id, 'DELETE');
           await finish();
         }) }),
-        entry && el('button', { type: 'button', class: 'btn-ghost btn-sm', text: 'Duplicar', title: 'Cria outro lançamento com estes dados', onclick: safe(async function () {
+        entry && el('button', { type: 'button', class: 'btn-ghost btn-sm', text: 'Duplicate', title: 'Creates another entry with this data', onclick: safe(async function () {
           await api('/entries', 'POST', payload());
           await finish();
         }) }),
         el('span', { class: 'spacer' }),
-        el('button', { type: 'button', class: 'btn-ghost', text: 'Cancelar', onclick: close }),
-        el('button', { type: 'submit', text: 'Salvar' }),
+        el('button', { type: 'button', class: 'btn-ghost', text: 'Cancel', onclick: close }),
+        el('button', { type: 'submit', text: 'Save' }),
       ]),
     ]));
     dlg.addEventListener('cancel', function () { dlg.remove(); });
@@ -305,7 +305,7 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* Tela: Tempo                                                         */
+  /* Screen: Time                                                       */
   /* ------------------------------------------------------------------ */
 
   /** @returns {Promise<void>} */
@@ -313,15 +313,15 @@
     /** @type {{projects: object[], running: object|null, entries: object[], status: object|null}} */
     const state = { projects: [], running: null, entries: [], status: null, tags: [] };
     let ticker = 0;
-    /** Quantos dias para trás a lista mostra; "Carregar mais" soma 30. */
+    /** How many days back the list shows; "Load more" adds 30. */
     let windowDays = 30;
 
-    const desc = /** @type {HTMLInputElement} */ (el('input', { type: 'text', placeholder: 'No que você está trabalhando?', maxlength: '500', 'aria-label': 'Descrição' }));
+    const desc = /** @type {HTMLInputElement} */ (el('input', { type: 'text', placeholder: 'What are you working on?', maxlength: '500', 'aria-label': 'Description' }));
     const projSlot = el('div', { class: 'hr-proj' });
     const bill = /** @type {HTMLInputElement} */ (el('input', { type: 'checkbox', id: 'hr-bill' }));
-    const clockEl = el('button', { type: 'button', class: 'hr-clock', text: '0:00:00', title: 'Corrigir a hora de início', onclick: function () { editStart(); } });
-    const more = el('button', { type: 'button', class: 'btn-sm hr-link', text: 'Carregar mais 30 dias', onclick: safe(async function () { windowDays += 30; await load(); }) });
-    const btn = el('button', { type: 'button', class: 'hr-go', text: 'Iniciar' });
+    const clockEl = el('button', { type: 'button', class: 'hr-clock', text: '0:00:00', title: 'Fix the start time', onclick: function () { editStart(); } });
+    const more = el('button', { type: 'button', class: 'btn-sm hr-link', text: 'Load 30 more days', onclick: safe(async function () { windowDays += 30; await load(); }) });
+    const btn = el('button', { type: 'button', class: 'hr-go', text: 'Start' });
     const totals = el('div', { class: 'hr-totals' });
     const list = el('div', { class: 'hr-days' });
 
@@ -338,7 +338,7 @@
         bill.checked = r.billable;
       }
       clockEl.disabled = !r;
-      btn.textContent = r ? 'Parar' : 'Iniciar';
+      btn.textContent = r ? 'Stop' : 'Start';
       btn.classList.toggle('hr-stop', !!r);
       clearInterval(ticker);
       const tick = function () {
@@ -350,7 +350,7 @@
       if (r) ticker = window.setInterval(tick, 1000);
     }
 
-    /** Edição na barra, com timer rodando, grava direto na entrada. @returns {Promise<void>} */
+    /** Editing in the bar, while the timer is running, saves straight to the entry. @returns {Promise<void>} */
     async function patchRunning() {
       if (!state.running) return;
       state.running = await api('/entries/' + state.running.id, 'PATCH', {
@@ -364,12 +364,12 @@
     function paintList() {
       const st = state.status;
       totals.replaceChildren.apply(totals, st ? [
-        el('span', { class: 'badge badge-sun', text: 'Hoje · ' + human(st.today_seconds) }),
-        el('span', { class: 'badge badge-sky', text: 'Esta semana · ' + human(st.week_seconds) }),
+        el('span', { class: 'badge badge-sun', text: 'Today · ' + human(st.today_seconds) }),
+        el('span', { class: 'badge badge-sky', text: 'This week · ' + human(st.week_seconds) }),
       ] : []);
       const done = state.entries.filter(function (e) { return !e.running; });
       if (!done.length) {
-        list.replaceChildren(el('p', { class: 'empty', text: 'Nenhum lançamento nos últimos ' + windowDays + ' dias. Inicie o timer acima ou peça para a sua IA lançar por você.' }));
+        list.replaceChildren(el('p', { class: 'empty', text: 'No entries in the last ' + windowDays + ' days. Start the timer above or ask your AI to log time for you.' }));
         return;
       }
       /** @type {Object<string, object[]>} */
@@ -392,28 +392,28 @@
       return el('li', { class: 'hr-row' }, [
         el('span', { class: 'hr-dot', style: 'background:' + (e.project_color || 'var(--border)') }),
         el('div', { class: 'hr-what' }, [
-          el('span', { class: e.description ? '' : 'muted', text: e.description || '(sem descrição)' }),
+          el('span', { class: e.description ? '' : 'muted', text: e.description || '(no description)' }),
           el('small', {}, [
-            e.project || 'Sem projeto',
-            e.billable ? ' · faturável' : '',
+            e.project || 'No project',
+            e.billable ? ' · billable' : '',
             e.tags.length ? ' · ' + e.tags.map(function (t) { return '#' + t; }).join(' ') : '',
           ]),
         ]),
         el('span', { class: 'hr-when muted', text: hhmm(e.start) + ' – ' + hhmm(e.end) }),
         el('strong', { class: 'hr-dur', text: clock(e.duration_seconds) }),
         CAN_WRITE && el('span', { class: 'row-actions' }, [
-          el('button', { type: 'button', class: 'hr-play', title: 'Continuar este lançamento', 'aria-label': 'Continuar', onclick: safe(async function () {
+          el('button', { type: 'button', class: 'hr-play', title: 'Continue this entry', 'aria-label': 'Continue', onclick: safe(async function () {
             await api('/timer/start', 'POST', { description: e.description, project_id: e.project_id || 0, tags: e.tags, billable: e.billable });
             await load();
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }) }, [el('span', { class: 'hr-tri' })]),
-          el('button', { type: 'button', class: 'btn-ghost btn-sm', text: 'Editar', onclick: function () { openDialog(e); } }),
+          el('button', { type: 'button', class: 'btn-ghost btn-sm', text: 'Edit', onclick: function () { openDialog(e); } }),
         ]),
       ]);
     }
 
     /**
-     * Abre o diálogo de lançamento manual (sem `entry`) ou de edição.
+     * Opens the dialog for a manual entry (no `entry`) or for editing.
      * @param {object} [entry]
      * @returns {void}
      */
@@ -428,7 +428,7 @@
     }
 
     /**
-     * Corrige a hora de início do timer rodando (esqueci de iniciar na hora).
+     * Fixes the start time of the running timer (forgot to start it on time).
      * @returns {void}
      */
     function editStart() {
@@ -445,15 +445,15 @@
         close();
         await load();
       }) }, [
-        el('h2', { text: 'Quando você começou?' }),
+        el('h2', { text: 'When did you start?' }),
         el('div', { class: 'hr-grid2' }, [
-          el('div', { class: 'field' }, [el('label', { for: 'hs-date', text: 'Dia' }), date]),
-          el('div', { class: 'field' }, [el('label', { for: 'hs-time', text: 'Início' }), time]),
+          el('div', { class: 'field' }, [el('label', { for: 'hs-date', text: 'Day' }), date]),
+          el('div', { class: 'field' }, [el('label', { for: 'hs-time', text: 'Start' }), time]),
         ]),
         el('div', { class: 'hr-dialog-foot' }, [
           el('span', { class: 'spacer' }),
-          el('button', { type: 'button', class: 'btn-ghost', text: 'Cancelar', onclick: close }),
-          el('button', { type: 'submit', text: 'Salvar' }),
+          el('button', { type: 'button', class: 'btn-ghost', text: 'Cancel', onclick: close }),
+          el('button', { type: 'submit', text: 'Save' }),
         ]),
       ]));
       dlg.addEventListener('cancel', function () { dlg.remove(); });
@@ -492,26 +492,26 @@
       CAN_WRITE ? el('div', { class: 'card hr-bar' }, [
         desc,
         projSlot,
-        el('label', { class: 'hr-check', for: 'hr-bill', title: 'Marcar como faturável' }, [bill, ' Faturável']),
+        el('label', { class: 'hr-check', for: 'hr-bill', title: 'Mark as billable' }, [bill, ' Billable']),
         clockEl,
         btn,
-      ]) : el('p', { class: 'alert alert-info', text: 'Seu papel neste workspace é somente leitura.' }),
+      ]) : el('p', { class: 'alert alert-info', text: 'Your role in this workspace is read-only.' }),
       el('div', { class: 'hr-sub' }, [
         totals,
-        CAN_WRITE && el('button', { type: 'button', class: 'btn-ghost btn-sm', text: '+ Lançamento manual', onclick: function () { openDialog(); } }),
+        CAN_WRITE && el('button', { type: 'button', class: 'btn-ghost btn-sm', text: '+ Manual entry', onclick: function () { openDialog(); } }),
       ]),
       list,
       el('div', { class: 'hr-more-wrap' }, [more])
     );
 
     await load();
-    // Outra aba, o celular ou a IA podem ter mexido no timer: ressincroniza ao voltar.
+    // Another tab, the phone or the AI may have changed the timer: resync on return.
     document.addEventListener('visibilitychange', function () { if (!document.hidden) load().catch(function () {}); });
     setInterval(function () { if (!document.hidden && !document.querySelector('dialog[open]')) load().catch(function () {}); }, 60000);
   }
 
   /* ------------------------------------------------------------------ */
-  /* Tela: Relatórios                                                    */
+  /* Screen: Reports                                                    */
   /* ------------------------------------------------------------------ */
 
   /** @returns {Promise<void>} */
@@ -520,19 +520,19 @@
     const monday = day(-((today.getDay() + 6) % 7));
     /** @type {Object<string, {label: string, range: function(): Date[]}>} */
     const presets = {
-      semana: { label: 'Esta semana', range: function () { return [monday, today]; } },
-      semana_passada: { label: 'Semana passada', range: function () { return [new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() - 7), new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() - 1)]; } },
-      mes: { label: 'Este mês', range: function () { return [new Date(today.getFullYear(), today.getMonth(), 1), today]; } },
-      mes_passado: { label: 'Mês passado', range: function () { return [new Date(today.getFullYear(), today.getMonth() - 1, 1), new Date(today.getFullYear(), today.getMonth(), 0)]; } },
-      d30: { label: 'Últimos 30 dias', range: function () { return [day(-29), today]; } },
-      ano: { label: 'Este ano', range: function () { return [new Date(today.getFullYear(), 0, 1), today]; } },
+      week: { label: 'This week', range: function () { return [monday, today]; } },
+      last_week: { label: 'Last week', range: function () { return [new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() - 7), new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() - 1)]; } },
+      month: { label: 'This month', range: function () { return [new Date(today.getFullYear(), today.getMonth(), 1), today]; } },
+      last_month: { label: 'Last month', range: function () { return [new Date(today.getFullYear(), today.getMonth() - 1, 1), new Date(today.getFullYear(), today.getMonth(), 0)]; } },
+      d30: { label: 'Last 30 days', range: function () { return [day(-29), today]; } },
+      year: { label: 'This year', range: function () { return [new Date(today.getFullYear(), 0, 1), today]; } },
     };
-    /** Agrupamentos do resumo: rótulo, lista no JSON e como nomear cada linha. */
+    /** Summary groupings: label, list in the JSON and how to name each row. */
     const groups = {
       project: { label: 'Project', key: 'by_project', name: function (g) { return g.client ? g.project + ' · ' + g.client : g.project; } },
-      client: { label: 'Cliente', key: 'by_client', name: function (g) { return g.client; } },
+      client: { label: 'Client', key: 'by_client', name: function (g) { return g.client; } },
       tag: { label: 'Tag', key: 'by_tag', name: function (g) { return g.tag; } },
-      description: { label: 'Descrição', key: 'by_description', name: function (g) { return g.project ? g.description + ' · ' + g.project : g.description; } },
+      description: { label: 'Description', key: 'by_description', name: function (g) { return g.project ? g.description + ' · ' + g.project : g.description; } },
     };
 
     const got = await Promise.all([api('/projects?archived=1'), api('/tags')]);
@@ -541,26 +541,26 @@
     const clients = projects.map(function (p) { return p.client; }).filter(function (c, i, a) { return c && a.indexOf(c) === i; }).sort();
 
     /**
-     * `<select>` simples de filtro; a primeira opção (valor vazio) é "todos".
+     * Plain filter `<select>`; the first option (empty value) means "all".
      * @param {string} label
      * @param {string} all
-     * @param {Array<string[]>} options Pares [valor, texto].
+     * @param {Array<string[]>} options [value, text] pairs.
      * @returns {HTMLSelectElement}
      */
     function filter(label, all, options) {
       return /** @type {HTMLSelectElement} */ (el('select', { 'aria-label': label }, [el('option', { value: '', text: all })].concat(options.map(function (o) { return el('option', { value: o[0], text: o[1] }); }))));
     }
 
-    const preset = /** @type {HTMLSelectElement} */ (el('select', { 'aria-label': 'Período' }, Object.keys(presets).map(function (k) { return el('option', { value: k, text: presets[k].label }); }).concat([el('option', { value: 'custom', text: 'Personalizado' })])));
-    const from = /** @type {HTMLInputElement} */ (el('input', { type: 'date', 'aria-label': 'De' }));
-    const to = /** @type {HTMLInputElement} */ (el('input', { type: 'date', 'aria-label': 'Até' }));
-    const proj = filter('Project', 'Todos os projetos', [['0', 'Sem projeto']].concat(projects.map(function (p) { return [String(p.id), p.name]; })));
-    const client = filter('Cliente', 'Todos os clientes', clients.map(function (c) { return [c, c]; }));
-    const tag = filter('Tag', 'Todas as tags', tags.map(function (t) { return [t, '#' + t]; }));
-    const bill = filter('Faturável', 'Faturável e não', [['1', 'Só faturável'], ['0', 'Só não faturável']]);
-    const groupBy = /** @type {HTMLSelectElement} */ (el('select', { 'aria-label': 'Agrupar por' }, Object.keys(groups).map(function (k) { return el('option', { value: k, text: 'Agrupar por ' + groups[k].label.toLowerCase() }); })));
+    const preset = /** @type {HTMLSelectElement} */ (el('select', { 'aria-label': 'Period' }, Object.keys(presets).map(function (k) { return el('option', { value: k, text: presets[k].label }); }).concat([el('option', { value: 'custom', text: 'Custom' })])));
+    const from = /** @type {HTMLInputElement} */ (el('input', { type: 'date', 'aria-label': 'From' }));
+    const to = /** @type {HTMLInputElement} */ (el('input', { type: 'date', 'aria-label': 'To' }));
+    const proj = filter('Project', 'All projects', [['0', 'No project']].concat(projects.map(function (p) { return [String(p.id), p.name]; })));
+    const client = filter('Client', 'All clients', clients.map(function (c) { return [c, c]; }));
+    const tag = filter('Tag', 'All tags', tags.map(function (t) { return [t, '#' + t]; }));
+    const bill = filter('Billable', 'Billable and non-billable', [['1', 'Billable only'], ['0', 'Non-billable only']]);
+    const groupBy = /** @type {HTMLSelectElement} */ (el('select', { 'aria-label': 'Group by' }, Object.keys(groups).map(function (k) { return el('option', { value: k, text: 'Group by ' + groups[k].label.toLowerCase() }); })));
     const out = el('div', {});
-    let mode = 'resumo';
+    let mode = 'summary';
     const tabs = el('div', { class: 'hr-tabs', role: 'tablist' });
 
     /** @returns {string} */
@@ -582,7 +582,7 @@
     }
 
     /**
-     * Gráfico de barras por dia, preenchendo os dias sem lançamento.
+     * Bar chart per day, filling in the days without entries.
      * @param {Array<{day: string, seconds: number}>} byDay
      * @returns {HTMLElement}
      */
@@ -597,10 +597,10 @@
       const max = Math.max.apply(null, days.map(function (k) { return map[k] || 0; }).concat([3600]));
       const dense = days.length > 14;
       const top = Math.max.apply(null, days.map(function (k) { return map[k] || 0; }));
-      return el('div', { class: 'hr-chart' + (dense ? ' hr-chart-dense' : ''), role: 'img', 'aria-label': 'Horas por dia no período' }, days.map(function (k) {
+      return el('div', { class: 'hr-chart' + (dense ? ' hr-chart-dense' : ''), role: 'img', 'aria-label': 'Hours per day in the period' }, days.map(function (k) {
         const s = map[k] || 0;
         const p = k.split('-').map(Number);
-        const label = days.length > 62 ? '' : new Date(p[0], p[1] - 1, p[2]).toLocaleDateString('pt-BR', dense ? { day: 'numeric' } : { weekday: 'short', day: 'numeric' });
+        const label = days.length > 62 ? '' : new Date(p[0], p[1] - 1, p[2]).toLocaleDateString('en-US', dense ? { day: 'numeric' } : { weekday: 'short', day: 'numeric' });
         const kind = !s ? ' hr-col-zero' : (s === top && days.length > 1 ? ' hr-col-max' : '');
         return el('div', { class: 'hr-col' + kind, title: dayLabel(k) + ': ' + human(s) }, [
           el('small', { text: s && !dense ? human(s) : '' }),
@@ -624,32 +624,32 @@
         rows.length ? el('div', { class: 'table-wrap' }, [el('table', {}, [
           el('thead', {}, [el('tr', {}, head.map(function (h) { return el('th', { text: h }); }))]),
           el('tbody', {}, rows.map(function (r) { return el('tr', {}, r.map(function (c) { return el('td', { class: 'wrap' }, [c]); })); })),
-        ])]) : el('p', { class: 'empty', text: 'Nada neste período com estes filtros.' }),
+        ])]) : el('p', { class: 'empty', text: 'Nothing in this period with these filters.' }),
       ]);
     }
 
     /**
-     * @param {object} s Resposta de /summary.
+     * @param {object} s Response of /summary.
      * @returns {HTMLElement}
      */
     function stats(s) {
       const stat = function (label, value) { return el('div', { class: 'card hr-stat' }, [el('small', { class: 'muted', text: label }), el('strong', { text: value })]); };
       return el('div', { class: 'hr-stats' }, [
         stat('Total', human(s.total_seconds)),
-        stat('Faturável', human(s.billable_seconds)),
-        stat('Valor', money(s.billable_amount, s.currency)),
-        stat('Lançamentos', String(s.entries)),
+        stat('Billable', human(s.billable_seconds)),
+        stat('Amount', money(s.billable_amount, s.currency)),
+        stat('Entries', String(s.entries)),
       ]);
     }
 
     /** @returns {Promise<void>} */
-    async function loadResumo() {
+    async function loadSummary() {
       const s = await api('/summary' + query());
       const g = groups[groupBy.value];
       out.replaceChildren(
         stats(s),
-        el('div', { class: 'card' }, [el('h2', { text: 'Por dia' }), chart(s.by_day)]),
-        table(el('div', { class: 'hr-card-head' }, [el('h2', { text: 'Por ' + g.label.toLowerCase() }), groupBy]), [g.label, 'Tempo', 'Valor', '%'], s[g.key].map(function (r) {
+        el('div', { class: 'card' }, [el('h2', { text: 'By day' }), chart(s.by_day)]),
+        table(el('div', { class: 'hr-card-head' }, [el('h2', { text: 'By ' + g.label.toLowerCase() }), groupBy]), [g.label, 'Time', 'Amount', '%'], s[g.key].map(function (r) {
           const pct = s.total_seconds ? Math.round((r.seconds / s.total_seconds) * 100) : 0;
           const color = r.color || 'var(--accent)';
           return [
@@ -658,39 +658,39 @@
             el('span', { class: 'hr-num', text: r.amount ? money(r.amount, s.currency) : '—' }),
             el('span', { class: 'hr-pct' }, [el('span', { style: 'width:' + pct + '%;background:' + color }), el('small', { text: pct + '%' })]),
           ];
-        }), groupBy.value === 'tag' ? 'Um lançamento com várias tags conta em cada uma.' : '')
+        }), groupBy.value === 'tag' ? 'An entry with several tags counts in each of them.' : '')
       );
     }
 
     /** @returns {Promise<void>} */
-    async function loadDetalhado() {
+    async function loadDetailed() {
       const got2 = await Promise.all([api('/summary' + query()), api('/entries' + query() + '&limit=1000')]);
       const s = got2[0];
       const entries = got2[1];
       out.replaceChildren(
         stats(s),
-        table('Lançamentos', ['Dia', 'Descrição', 'Project', 'Horário', 'Duração', 'Valor', ''], entries.map(function (e) {
+        table('Entries', ['Day', 'Description', 'Project', 'Time', 'Duration', 'Amount', ''], entries.map(function (e) {
           return [
-            new Date(e.start).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }),
-            el('span', {}, [e.description || '(sem descrição)', e.tags.length ? el('small', { class: 'muted', text: ' ' + e.tags.map(function (t) { return '#' + t; }).join(' ') }) : null]),
-            el('span', {}, [el('span', { class: 'hr-dot', style: 'background:' + (e.project_color || 'var(--border)') }), ' ' + (e.project || 'Sem projeto')]),
-            e.running ? hhmm(e.start) + ' – agora' : hhmm(e.start) + ' – ' + hhmm(e.end),
+            new Date(e.start).toLocaleDateString('en-US', { day: '2-digit', month: '2-digit', year: '2-digit' }),
+            el('span', {}, [e.description || '(no description)', e.tags.length ? el('small', { class: 'muted', text: ' ' + e.tags.map(function (t) { return '#' + t; }).join(' ') }) : null]),
+            el('span', {}, [el('span', { class: 'hr-dot', style: 'background:' + (e.project_color || 'var(--border)') }), ' ' + (e.project || 'No project')]),
+            e.running ? hhmm(e.start) + ' – now' : hhmm(e.start) + ' – ' + hhmm(e.end),
             el('span', { class: 'hr-num', text: clock(e.duration_seconds) }),
             el('span', { class: 'hr-num', text: e.billable ? money(e.amount, s.currency) : '—' }),
-            CAN_WRITE && !e.running ? el('button', { type: 'button', class: 'btn-ghost btn-sm', text: 'Editar', onclick: function () { entryDialog({ entry: e, projects: projects, tags: tags, onDone: load }); } }) : '',
+            CAN_WRITE && !e.running ? el('button', { type: 'button', class: 'btn-ghost btn-sm', text: 'Edit', onclick: function () { entryDialog({ entry: e, projects: projects, tags: tags, onDone: load }); } }) : '',
           ];
-        }), entries.length >= 1000 ? 'Mostrando os 1000 mais recentes do período. O total acima considera todos.' : '')
+        }), entries.length >= 1000 ? 'Showing the 1000 most recent in the period. The total above covers all of them.' : '')
       );
     }
 
     /** @returns {Promise<void>} */
     async function load() {
       if (!from.value || !to.value) return;
-      tabs.replaceChildren.apply(tabs, [['resumo', 'Resumo'], ['detalhado', 'Detalhado']].map(function (t) {
+      tabs.replaceChildren.apply(tabs, [['summary', 'Summary'], ['detailed', 'Detailed']].map(function (t) {
         return el('button', { type: 'button', role: 'tab', class: 'btn-ghost btn-sm', 'aria-selected': String(mode === t[0]), text: t[1], onclick: function () { mode = t[0]; reload(); } });
       }));
-      if (mode === 'resumo') await loadResumo();
-      else await loadDetalhado();
+      if (mode === 'summary') await loadSummary();
+      else await loadDetailed();
     }
 
     const reload = safe(load);
@@ -705,9 +705,9 @@
         tags.length ? tag : null,
         bill,
         el('span', { class: 'spacer' }),
-        el('button', { type: 'button', class: 'btn-ghost btn-sm', text: 'Exportar CSV', onclick: safe(async function () {
+        el('button', { type: 'button', class: 'btn-ghost btn-sm', text: 'Export CSV', onclick: safe(async function () {
           const res = await fetch(BASE + '/export.csv' + query(), { headers: { 'x-timezone': TZ }, credentials: 'same-origin' });
-          if (!res.ok) throw new Error('Não foi possível exportar.');
+          if (!res.ok) throw new Error('Could not export.');
           const a = el('a', { href: URL.createObjectURL(await res.blob()), download: 'horas-' + from.value + '_' + to.value + '.csv' });
           a.click();
           URL.revokeObjectURL(a.getAttribute('href'));
@@ -721,7 +721,7 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* Tela: Projetos                                                      */
+  /* Screen: Projects                                                   */
   /* ------------------------------------------------------------------ */
 
   /** @returns {Promise<void>} */
@@ -729,9 +729,9 @@
     const body = el('tbody', {});
     const name = /** @type {HTMLInputElement} */ (el('input', { type: 'text', id: 'np-name', required: true, maxlength: '80' }));
     const client = /** @type {HTMLInputElement} */ (el('input', { type: 'text', id: 'np-client', maxlength: '80', list: 'np-clients', autocomplete: 'off' }));
-    const rate = /** @type {HTMLInputElement} */ (el('input', { type: 'number', id: 'np-rate', min: '0', step: '0.01', placeholder: 'padrão' }));
+    const rate = /** @type {HTMLInputElement} */ (el('input', { type: 'number', id: 'np-rate', min: '0', step: '0.01', placeholder: 'default' }));
     const clientList = el('datalist', { id: 'np-clients' });
-    const currency = /** @type {HTMLSelectElement} */ (el('select', { id: 'st-currency' }, [['BRL', 'Real (R$)'], ['USD', 'Dólar (US$)'], ['EUR', 'Euro (€)'], ['GBP', 'Libra (£)']].map(function (c) { return el('option', { value: c[0], text: c[1] }); })));
+    const currency = /** @type {HTMLSelectElement} */ (el('select', { id: 'st-currency' }, [['BRL', 'Real (R$)'], ['USD', 'Dollar (US$)'], ['EUR', 'Euro (€)'], ['GBP', 'Pound (£)']].map(function (c) { return el('option', { value: c[0], text: c[1] }); })));
     const defRate = /** @type {HTMLInputElement} */ (el('input', { type: 'number', id: 'st-rate', min: '0', step: '0.01' }));
     let settings = { currency: 'BRL', default_rate: 0 };
 
@@ -745,29 +745,29 @@
       if (document.activeElement !== defRate) defRate.value = settings.default_rate ? String(settings.default_rate) : '';
       clientList.replaceChildren.apply(clientList, projects.map(function (p) { return p.client; }).filter(function (c, i, a) { return c && a.indexOf(c) === i; }).map(function (c) { return el('option', { value: c }); }));
       if (!projects.length) {
-        body.replaceChildren(el('tr', {}, [el('td', { colspan: '6', class: 'empty', text: 'Nenhum projeto ainda.' })]));
+        body.replaceChildren(el('tr', {}, [el('td', { colspan: '6', class: 'empty', text: 'No projects yet.' })]));
         return;
       }
       body.replaceChildren.apply(body, projects.map(function (p) {
         const patch = function (data) { return safe(async function () { await api('/projects/' + p.id, 'PATCH', data()); await load(); }); };
-        const color = /** @type {HTMLInputElement} */ (el('input', { type: 'color', value: p.color, disabled: !CAN_WRITE, 'aria-label': 'Cor de ' + p.name }));
-        const nm = /** @type {HTMLInputElement} */ (el('input', { type: 'text', value: p.name, maxlength: '80', disabled: !CAN_WRITE, 'aria-label': 'Nome' }));
-        const cl = /** @type {HTMLInputElement} */ (el('input', { type: 'text', value: p.client, maxlength: '80', placeholder: '—', list: 'np-clients', disabled: !CAN_WRITE, 'aria-label': 'Cliente' }));
-        const rt = /** @type {HTMLInputElement} */ (el('input', { type: 'number', min: '0', step: '0.01', value: p.hourly_rate === null ? '' : String(p.hourly_rate), placeholder: settings.default_rate ? String(settings.default_rate) : 'padrão', disabled: !CAN_WRITE, 'aria-label': 'Valor por hora de ' + p.name, title: 'Vazio = usa o valor padrão do workspace' }));
+        const color = /** @type {HTMLInputElement} */ (el('input', { type: 'color', value: p.color, disabled: !CAN_WRITE, 'aria-label': 'Color of ' + p.name }));
+        const nm = /** @type {HTMLInputElement} */ (el('input', { type: 'text', value: p.name, maxlength: '80', disabled: !CAN_WRITE, 'aria-label': 'Name' }));
+        const cl = /** @type {HTMLInputElement} */ (el('input', { type: 'text', value: p.client, maxlength: '80', placeholder: '—', list: 'np-clients', disabled: !CAN_WRITE, 'aria-label': 'Client' }));
+        const rt = /** @type {HTMLInputElement} */ (el('input', { type: 'number', min: '0', step: '0.01', value: p.hourly_rate === null ? '' : String(p.hourly_rate), placeholder: settings.default_rate ? String(settings.default_rate) : 'default', disabled: !CAN_WRITE, 'aria-label': 'Hourly rate of ' + p.name, title: 'Empty = uses the workspace default rate' }));
         color.addEventListener('change', patch(function () { return { color: color.value }; }));
         nm.addEventListener('change', patch(function () { return { name: nm.value }; }));
         cl.addEventListener('change', patch(function () { return { client: cl.value }; }));
         rt.addEventListener('change', patch(function () { return { hourly_rate: rt.value === '' ? null : Number(rt.value) }; }));
         return el('tr', { class: p.archived ? 'hr-archived' : '' }, [
           el('td', {}, [color]),
-          el('td', {}, [nm, p.archived ? el('span', { class: 'badge', text: 'Arquivado' }) : null]),
+          el('td', {}, [nm, p.archived ? el('span', { class: 'badge', text: 'Archived' }) : null]),
           el('td', {}, [cl]),
           el('td', {}, [rt]),
           el('td', { text: human(p.total_seconds) }),
           el('td', {}, [CAN_WRITE && el('span', { class: 'row-actions' }, [
-            el('button', { type: 'button', class: 'btn-ghost btn-sm', text: p.archived ? 'Reativar' : 'Arquivar', onclick: patch(function () { return { archived: !p.archived }; }) }),
-            el('button', { type: 'button', class: 'btn-danger btn-sm', text: 'Excluir', onclick: safe(async function () {
-              if (!confirm('Excluir o projeto "' + p.name + '"? Os lançamentos continuam, sem projeto. Vale para todos os membros.')) return;
+            el('button', { type: 'button', class: 'btn-ghost btn-sm', text: p.archived ? 'Unarchive' : 'Archive', onclick: patch(function () { return { archived: !p.archived }; }) }),
+            el('button', { type: 'button', class: 'btn-danger btn-sm', text: 'Delete', onclick: safe(async function () {
+              if (!confirm('Delete the project "' + p.name + '"? Its entries remain, without a project. This applies to every member.')) return;
               await api('/projects/' + p.id, 'DELETE');
               await load();
             }) }),
@@ -778,7 +778,7 @@
 
     const saveSettings = safe(async function () {
       await api('/settings', 'PATCH', { currency: currency.value, default_rate: defRate.value === '' ? 0 : Number(defRate.value) });
-      toast('Faturamento atualizado.');
+      toast('Billing updated.');
       await load();
     });
     currency.addEventListener('change', saveSettings);
@@ -788,33 +788,33 @@
     root.replaceChildren(
       clientList,
       CAN_WRITE && el('div', { class: 'card' }, [
-        el('h2', { text: 'Novo projeto' }),
+        el('h2', { text: 'New project' }),
         el('form', { class: 'row', onsubmit: safe(async function (ev) {
           ev.preventDefault();
           await api('/projects', 'POST', { name: name.value, client: client.value, hourly_rate: rate.value === '' ? null : Number(rate.value) });
           name.value = client.value = rate.value = '';
           await load();
         }) }, [
-          el('div', { class: 'field' }, [el('label', { for: 'np-name', text: 'Nome' }), name]),
-          el('div', { class: 'field' }, [el('label', { for: 'np-client', text: 'Cliente (opcional)' }), client]),
-          el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'np-rate', text: 'Valor/hora' }), rate]),
-          el('div', { class: 'field hr-field-btn' }, [el('button', { type: 'submit', text: 'Criar' })]),
+          el('div', { class: 'field' }, [el('label', { for: 'np-name', text: 'Name' }), name]),
+          el('div', { class: 'field' }, [el('label', { for: 'np-client', text: 'Client (optional)' }), client]),
+          el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'np-rate', text: 'Hourly rate' }), rate]),
+          el('div', { class: 'field hr-field-btn' }, [el('button', { type: 'submit', text: 'Create' })]),
         ]),
       ]),
       el('div', { class: 'card' }, [
-        el('h2', { text: 'Projetos do workspace' }),
-        el('span', { class: 'muted', text: 'Compartilhados entre os membros. O tempo mostrado é só o seu.' }),
+        el('h2', { text: 'Workspace projects' }),
+        el('span', { class: 'muted', text: 'Shared among members. The time shown is yours only.' }),
         el('div', { class: 'table-wrap' }, [el('table', { class: 'hr-projects' }, [
-          el('thead', {}, [el('tr', {}, ['Cor', 'Nome', 'Cliente', 'Valor/hora', 'Seu tempo', ''].map(function (h) { return el('th', { text: h }); }))]),
+          el('thead', {}, [el('tr', {}, ['Color', 'Name', 'Client', 'Hourly rate', 'Your time', ''].map(function (h) { return el('th', { text: h }); }))]),
           body,
         ])]),
       ]),
       el('div', { class: 'card' }, [
-        el('h2', { text: 'Faturamento' }),
-        el('span', { class: 'muted', text: 'O valor de um lançamento faturável é horas × valor/hora do projeto. Projetos sem valor próprio usam o padrão abaixo. Mudar um valor recalcula tudo que já foi lançado.' }),
+        el('h2', { text: 'Billing' }),
+        el('span', { class: 'muted', text: 'The amount of a billable entry is hours × the project hourly rate. Projects without their own rate use the default below. Changing a rate recalculates everything already logged.' }),
         el('div', { class: 'row' }, [
-          el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'st-currency', text: 'Moeda' }), currency]),
-          el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'st-rate', text: 'Valor/hora padrão' }), defRate]),
+          el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'st-currency', text: 'Currency' }), currency]),
+          el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'st-rate', text: 'Default hourly rate' }), defRate]),
         ]),
       ])
     );
@@ -822,24 +822,24 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* Tela: Integrações (tokens de API/MCP)                               */
+  /* Screen: Integrations (API/MCP tokens)                              */
   /* ------------------------------------------------------------------ */
 
   /**
-   * A lista de tokens vem renderizada do servidor; aqui só o criar/revogar.
+   * The token list comes rendered from the server; here only create/revoke.
    * @returns {void}
    */
   function viewIntegrations() {
     const url = root.dataset.tokens || '';
-    const form = /** @type {HTMLFormElement|null} */ (document.getElementById('novo-token'));
-    const reveal = document.getElementById('token-novo');
+    const form = /** @type {HTMLFormElement|null} */ (document.getElementById('new-token'));
+    const reveal = document.getElementById('token-reveal');
 
     if (form) form.addEventListener('submit', safe(async function (ev) {
       ev.preventDefault();
-      const nome = /** @type {HTMLInputElement} */ (form.elements.namedItem('name'));
-      const r = await api('', 'POST', { action: 'create', name: nome.value, timezone: TZ }, url);
-      // Mostra o token e preenche os exemplos com ele. Só existe nesta tela, agora.
-      document.querySelectorAll('[data-token]').forEach(function (n) { n.textContent = n.textContent.replace(/SEU_TOKEN/g, r.token); });
+      const nameInput = /** @type {HTMLInputElement} */ (form.elements.namedItem('name'));
+      const r = await api('', 'POST', { action: 'create', name: nameInput.value, timezone: TZ }, url);
+      // Shows the token and fills the examples with it. It only exists on this screen, right now.
+      document.querySelectorAll('[data-token]').forEach(function (n) { n.textContent = n.textContent.replace(/YOUR_TOKEN/g, r.token); });
       /** @type {HTMLElement} */ (reveal.querySelector('code')).textContent = r.token;
       reveal.hidden = false;
       form.hidden = true;
@@ -849,14 +849,14 @@
     document.querySelectorAll('[data-copy]').forEach(function (b) {
       b.addEventListener('click', safe(async function () {
         await navigator.clipboard.writeText(document.getElementById(b.getAttribute('data-copy')).textContent);
-        toast('Copiado.');
+        toast('Copied.');
       }));
     });
 
-    document.querySelectorAll('[data-revogar]').forEach(function (b) {
+    document.querySelectorAll('[data-revoke]').forEach(function (b) {
       b.addEventListener('click', safe(async function () {
-        if (!confirm('Revogar este token? Quem estiver usando perde o acesso na hora.')) return;
-        await api('', 'POST', { action: 'revoke', id: b.getAttribute('data-revogar') }, url);
+        if (!confirm('Revoke this token? Anyone using it loses access immediately.')) return;
+        await api('', 'POST', { action: 'revoke', id: b.getAttribute('data-revoke') }, url);
         location.reload();
       }));
     });
@@ -869,7 +869,7 @@
   const start = views[root.dataset.view || ''];
   if (start) {
     Promise.resolve().then(start).catch(function (e) {
-      root.appendChild(el('p', { class: 'alert alert-error', text: 'Não foi possível carregar: ' + e.message }));
+      root.appendChild(el('p', { class: 'alert alert-error', text: 'Could not load: ' + e.message }));
     });
   }
 })();

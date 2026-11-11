@@ -6,16 +6,18 @@ import { isUniqueViolation } from "~/lib/errors";
 import type { AppEnv } from "~/lib/env";
 
 /**
- * Workspace = `organization` do Better Auth. O nome no produto é workspace; o
- * nome na tabela é o que o plugin espera.
+ * Workspace = Better Auth's `organization`. The name in the product is
+ * workspace; the name in the table is what the plugin expects.
  */
 
-/** Slug legível a partir do nome: sem acento, sem espaço, sem borda suja. */
-export function makeSlug(nome: string): string {
-  const base = nome
+/** Readable slug from the name: no accents, no spaces, no messy edges. */
+export function makeSlug(name: string): string {
+  const base = name
     .toLowerCase()
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
+    // "Ana's workspace" -> "anas-workspace", not "ana-s-workspace".
+    .replace(/['’]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 40);
@@ -23,31 +25,32 @@ export function makeSlug(nome: string): string {
 }
 
 /**
- * Cria um workspace e coloca a pessoa como `owner`.
+ * Creates a workspace and makes the person its `owner`.
  *
- * Insere direto pelo Drizzle em vez de chamar `auth.api.createOrganization`
- * porque isto roda DENTRO do hook de criação de usuário — chamar a API do
- * Better Auth de lá seria reentrante. Em troca, os `organizationHooks` não
- * disparam, então a auditoria é registrada por quem chama.
+ * Inserts directly through Drizzle instead of calling
+ * `auth.api.createOrganization` because this runs INSIDE the user creation
+ * hook — calling the Better Auth API from there would be reentrant. In
+ * exchange, the `organizationHooks` do not fire, so the audit entry is recorded
+ * by the caller.
  *
- * `organization.slug` é UNIQUE: se o slug limpo já existir, tenta com sufixo
- * aleatório em vez de estourar.
+ * `organization.slug` is UNIQUE: if the clean slug already exists, it tries
+ * with a random suffix instead of blowing up.
  */
 export async function createWorkspace(
   env: AppEnv,
-  input: { nome: string; donoId: string },
-): Promise<{ id: string; nome: string; slug: string }> {
+  input: { name: string; ownerId: string },
+): Promise<{ id: string; name: string; slug: string }> {
   const db = getDb(env);
-  const base = makeSlug(input.nome);
+  const base = makeSlug(input.name);
 
-  for (let tentativa = 0; tentativa < 5; tentativa++) {
-    const slug = tentativa === 0 ? base : `${base}-${sufixo()}`;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const slug = attempt === 0 ? base : `${base}-${suffix()}`;
     const id = crypto.randomUUID();
 
     try {
       await db.insert(organization).values({
         id,
-        name: input.nome,
+        name: input.name,
         slug,
         createdAt: new Date(),
       });
@@ -59,18 +62,18 @@ export async function createWorkspace(
     await db.insert(member).values({
       id: crypto.randomUUID(),
       organizationId: id,
-      userId: input.donoId,
+      userId: input.ownerId,
       role: "owner",
       createdAt: new Date(),
     });
 
-    return { id, nome: input.nome, slug };
+    return { id, name: input.name, slug };
   }
 
-  throw new Error("Não foi possível gerar um slug livre para o workspace.");
+  throw new Error("Could not generate a free slug for the workspace.");
 }
 
-const sufixo = () => Math.random().toString(36).slice(2, 6);
+const suffix = () => Math.random().toString(36).slice(2, 6);
 
 export type Membership = {
   workspaceId: string;
@@ -79,7 +82,7 @@ export type Membership = {
   role: WorkspaceRole;
 };
 
-/** Todos os workspaces de uma pessoa, com o papel dela em cada um. */
+/** All of a person's workspaces, with their role in each one. */
 export async function userWorkspaces(env: AppEnv, userId: string): Promise<Membership[]> {
   return getDb(env)
     .select({
@@ -96,17 +99,18 @@ export async function userWorkspaces(env: AppEnv, userId: string): Promise<Membe
 }
 
 /**
- * A membership de uma pessoa num workspace, pelo slug.
+ * A person's membership in a workspace, by slug.
  *
- * É esta função que autoriza o acesso: `null` significa "não é membro", e quem
- * chama deve tratar como 404 — não 403. Dizer "sem permissão" confirmaria que o
- * workspace existe, o que é informação de graça para quem estiver sondando.
+ * This is the function that authorizes access: `null` means "not a member", and
+ * the caller must treat it as 404 — not 403. Saying "permission denied" would
+ * confirm that the workspace exists, which is free information for anyone
+ * probing.
  */
 export async function membershipBySlug(
   env: AppEnv,
   input: { slug: string; userId: string },
 ): Promise<Membership | null> {
-  const linha = await getDb(env)
+  const row = await getDb(env)
     .select({
       workspaceId: organization.id,
       workspaceName: organization.name,
@@ -118,17 +122,17 @@ export async function membershipBySlug(
     .where(and(eq(organization.slug, input.slug), eq(member.userId, input.userId)))
     .get();
 
-  return linha ?? null;
+  return row ?? null;
 }
 
-/** Workspaces onde a pessoa é a ÚNICA owner, com a contagem de membros. */
+/** Workspaces where the person is the ONLY owner, with the member count. */
 export async function workspacesWhereSoleOwner(
   env: AppEnv,
   userId: string,
-): Promise<Array<{ id: string; nome: string; totalMembros: number }>> {
+): Promise<Array<{ id: string; name: string; memberCount: number }>> {
   const rows = await env.DB.prepare(
-    `SELECT o."id", o."name" AS nome,
-            (SELECT COUNT(*) FROM "member" WHERE "organizationId" = o."id") AS "totalMembros"
+    `SELECT o."id", o."name" AS name,
+            (SELECT COUNT(*) FROM "member" WHERE "organizationId" = o."id") AS "memberCount"
        FROM "member" m
        JOIN "organization" o ON o."id" = m."organizationId"
       WHERE m."userId" = ?1
@@ -137,7 +141,7 @@ export async function workspacesWhereSoleOwner(
               WHERE "organizationId" = o."id" AND "role" = 'owner') = 1`,
   )
     .bind(userId)
-    .all<{ id: string; nome: string; totalMembros: number }>();
+    .all<{ id: string; name: string; memberCount: number }>();
 
   return rows.results ?? [];
 }

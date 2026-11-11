@@ -8,33 +8,33 @@ import { createWorkspace } from "~/lib/workspaces";
 export const prerender = false;
 
 /**
- * Criar workspace é ação de CONTA, não de workspace: não existe workspace no
- * contexto ainda. Qualquer pessoa autenticada can criar o seu.
+ * Creating a workspace is an ACCOUNT action, not a workspace one: there is no
+ * workspace in context yet. Any authenticated person can create their own.
  */
 export const POST: APIRoute = async ({ request, locals }) => {
   const denied = denyAccount(locals);
   if (denied) return denied;
 
-  const nome = str(await request.formData(), "name");
-  if (!nome) return fail("/workspaces", "fields");
+  const name = str(await request.formData(), "name");
+  if (!name) return fail("/workspaces", "fields");
 
   const me = actor(locals);
 
   try {
-    const ws = await createWorkspace(locals.env, { nome: nome.slice(0, 60), donoId: me.id });
+    const ws = await createWorkspace(locals.env, { name: name.slice(0, 60), ownerId: me.id });
 
     await audit(locals.env, {
       action: AUDIT.WORKSPACE_CREATED,
       actorId: me.id,
       actorEmail: me.email,
       workspaceId: ws.id,
-      details: { nome: ws.nome, slug: ws.slug, motivo: "criado pela pessoa" },
+      details: { name: ws.name, slug: ws.slug, reason: "created by the user" },
       request,
     });
 
     return ok(`/w/${ws.slug}`, "ok_workspace_created");
   } catch (error) {
-    console.error("criar workspace:", error);
+    console.error("create workspace:", error);
     return fail("/workspaces", "error");
   }
 };

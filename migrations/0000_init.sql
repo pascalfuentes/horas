@@ -1,7 +1,7 @@
--- Tabelas do núcleo do Better Auth (nomes de coluna em camelCase, como o
--- gerador oficial emite para SQLite) + as tabelas da aplicação.
--- Todos os timestamps são unixepoch() em SEGUNDOS, para casar com o
--- drizzle `integer(..., { mode: "timestamp" })`.
+-- Better Auth core tables (camelCase column names, as the official
+-- generator emits for SQLite) + the application tables.
+-- All timestamps are unixepoch() in SECONDS, to match drizzle's
+-- `integer(..., { mode: "timestamp" })`.
 
 CREATE TABLE "user" (
   "id"                 text    PRIMARY KEY NOT NULL,
@@ -11,12 +11,12 @@ CREATE TABLE "user" (
   "image"              text,
   "createdAt"          integer NOT NULL,
   "updatedAt"          integer NOT NULL,
-  -- plugin admin
+  -- admin plugin
   "role"               text    NOT NULL DEFAULT 'user',
   "banned"             integer DEFAULT 0,
   "banReason"          text,
   "banExpires"         integer,
-  -- campos da aplicação
+  -- application fields
   "phone"              text,
   CONSTRAINT "user_role_valid" CHECK ("role" IN ('admin', 'user', 'readonly'))
 );
@@ -61,19 +61,19 @@ CREATE TABLE "verification" (
 );
 CREATE INDEX "verification_identifier_idx" ON "verification" ("identifier");
 
--- Rate limiting do Better Auth (storage: "database"). Uma tabela no D1 em vez
--- de KV: fonte única de verdade, sem consistência eventual atrapalhando.
+-- Better Auth rate limiting (storage: "database"). A table in D1 instead
+-- of KV: single source of truth, no eventual consistency getting in the way.
 CREATE TABLE "rateLimit" (
   "id"          text    PRIMARY KEY NOT NULL,
   "key"         text    NOT NULL UNIQUE,
   "count"       integer NOT NULL DEFAULT 0,
-  -- milissegundos (Date.now()), não segundos: é o que o Better Auth grava.
+  -- milliseconds (Date.now()), not seconds: that is what Better Auth writes.
   "lastRequest" integer NOT NULL DEFAULT 0
 );
 
 -- ---------------------------------------------------------------------------
--- Convites. Guardamos o SHA-256 do token, nunca o token em si: se o banco
--- vazar, ninguém consegue criar conta com o que está lá.
+-- Invitations. We store the SHA-256 of the token, never the token itself: if
+-- the database leaks, nobody can create an account with what is in there.
 -- ---------------------------------------------------------------------------
 CREATE TABLE "invitation" (
   "id"         text    PRIMARY KEY NOT NULL,
@@ -88,7 +88,7 @@ CREATE TABLE "invitation" (
   CONSTRAINT "invitation_role_valid" CHECK ("role" IN ('admin', 'user', 'readonly'))
 );
 
--- No máximo UM convite pendente por e-mail.
+-- At most ONE pending invitation per e-mail.
 CREATE UNIQUE INDEX "invitation_one_pending_per_email"
   ON "invitation" ("email")
   WHERE "acceptedAt" IS NULL AND "revokedAt" IS NULL;
@@ -108,8 +108,8 @@ CREATE TABLE "audit_log" (
 CREATE INDEX "audit_log_createdAt_idx" ON "audit_log" ("createdAt" DESC);
 
 -- ---------------------------------------------------------------------------
--- MÓDULO DE DEMONSTRAÇÃO — recurso de negócio protegido, existe só para provar
--- que 'readonly' é barrado no servidor. Pode apagar tabela, página e endpoint.
+-- DEMO MODULE: a protected business resource that exists only to prove that
+-- 'readonly' is blocked on the server. Table, page and endpoint can be deleted.
 -- ---------------------------------------------------------------------------
 CREATE TABLE "note" (
   "id"        text    PRIMARY KEY NOT NULL,

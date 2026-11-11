@@ -5,57 +5,58 @@ import { safeNext } from "~/lib/http";
 export const prerender = false;
 
 /**
- * Segundo fator no login. Chega-se aqui com a senha já aceita: o Better Auth
- * ainda não abriu sessão, só deixou um cookie temporário. Por isso a página é
- * pública no middleware — não há sessão para exigir ainda.
+ * Second factor at login. You get here with the password already accepted:
+ * Better Auth has not opened a session yet, it only left a temporary cookie.
+ * That is why the page is public in the middleware — there is no session to
+ * require yet.
  */
 const next = safeNext(Astro.url.searchParams.get("next") ?? "");
 ---
 
 <Auth
-  title="Verificação em duas etapas"
-  heading="Confirme que é você"
-  subheading="Digite o código de seis dígitos do seu app autenticador."
+  title="Two-step verification"
+  heading="Confirm it's you"
+  subheading="Enter the six-digit code from your authenticator app."
 >
   <form method="post" action="/api/two-factor" class="stack">
     <input type="hidden" name="action" value="totp" />
     <input type="hidden" name="next" value={next} />
 
     <div class="field">
-      <label for="codigo">Código</label>
-      <input id="codigo" name="code" type="text" inputmode="numeric" autocomplete="one-time-code"
+      <label for="code">Code</label>
+      <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code"
              pattern="[0-9]{6}" maxlength="6" required autofocus
              style="font-size:1.3rem;letter-spacing:0.35em;text-align:center" />
     </div>
 
     <label style="display:flex;gap:8px;align-items:center;font-size:0.8125rem;cursor:pointer">
       <input type="checkbox" name="trust" value="1" style="width:auto" />
-      Confiar neste dispositivo por 30 dias
+      Trust this device for 30 days
     </label>
 
-    <button class="btn-block" type="submit">Entrar</button>
+    <button class="btn-block" type="submit">Log in</button>
   </form>
 
   <details style="margin-top:18px">
-    <summary style="cursor:pointer;font-size:0.875rem">Perdi o acesso ao app</summary>
+    <summary style="cursor:pointer;font-size:0.875rem">I lost access to the app</summary>
     <p class="muted" style="margin:10px 0">
       <small>
-        Use um dos códigos de recuperação que você guardou ao ativar. Cada um serve uma vez só.
+        Use one of the recovery codes you saved when enabling it. Each one works only once.
       </small>
     </p>
     <form method="post" action="/api/two-factor" class="stack">
       <input type="hidden" name="action" value="backup" />
       <input type="hidden" name="next" value={next} />
       <div class="field">
-        <label for="backup">Código de recuperação</label>
+        <label for="backup">Recovery code</label>
         <input id="backup" name="code" type="text" autocomplete="off" required />
       </div>
-      <button class="btn-ghost" type="submit">Usar código de recuperação</button>
+      <button class="btn-ghost" type="submit">Use recovery code</button>
     </form>
     <p class="muted" style="margin-top:10px">
-      <small>Sem o celular e sem os códigos, só um administrador consegue devolver seu acesso.</small>
+      <small>Without your phone and without the codes, only an administrator can restore your access.</small>
     </p>
   </details>
 
-  <p class="auth-foot"><a href="/login">Voltar ao login</a></p>
+  <p class="auth-foot"><a href="/login">Back to login</a></p>
 </Auth>

@@ -9,54 +9,56 @@ import { str } from "~/lib/http";
 export const prerender = false;
 
 /**
- * Configuração do 2FA — e, para quem já tem, geração de novos códigos.
+ * 2FA setup — and, for those who already have it, generating new codes.
  *
- * O segredo e os códigos de recuperação são devolvidos UMA ÚNICA VEZ, na
- * resposta do Better Auth. Redirecionar os perderia, e passá-los pela
- * querystring seria jogar segredo no histórico do navegador e nos logs. Por
- * isso o POST renderiza a própria página com o resultado, em vez de redirecionar.
+ * The secret and the recovery codes are returned ONLY ONCE, in the Better Auth
+ * response. Redirecting would lose them, and passing them through the
+ * querystring would dump a secret into the browser history and the logs. That
+ * is why the POST renders the page itself with the result instead of
+ * redirecting.
  */
 
-const obrigatorio = Astro.url.searchParams.has("obrigatorio");
-const jaAtivo = Boolean((Astro.locals.user as { twoFactorEnabled?: boolean }).twoFactorEnabled);
+const mandatory = Astro.url.searchParams.has("required");
+const alreadyActive = Boolean((Astro.locals.user as { twoFactorEnabled?: boolean }).twoFactorEnabled);
 
-let erro = "";
+let error = "";
 let totpURI = "";
-let codigos: string[] = [];
+let codes: string[] = [];
 
 if (Astro.request.method === "POST") {
-  const senha = str(await Astro.request.formData(), "password");
-  if (!senha) {
-    erro = "Informe sua senha.";
+  const password = str(await Astro.request.formData(), "password");
+  if (!password) {
+    error = "Enter your password.";
   } else {
     try {
       const res = await callAuth(
         Astro.locals.auth,
         Astro.request,
-        jaAtivo ? "/two-factor/generate-backup-codes" : "/two-factor/enable",
-        jaAtivo ? { password: senha } : { password: senha, method: "totp" },
+        alreadyActive ? "/two-factor/generate-backup-codes" : "/two-factor/enable",
+        alreadyActive ? { password: password } : { password: password, method: "totp" },
       );
-      const corpo = (await res.json().catch(() => null)) as
+      const body = (await res.json().catch(() => null)) as
         | { totpURI?: string; backupCodes?: string[] }
         | null;
 
-      if (!res.ok) erro = "Senha incorreta.";
+      if (!res.ok) error = "Incorrect password.";
       else {
-        totpURI = corpo?.totpURI ?? "";
-        codigos = corpo?.backupCodes ?? [];
+        totpURI = body?.totpURI ?? "";
+        codes = body?.backupCodes ?? [];
       }
     } catch {
-      erro = "Não foi possível continuar. Tente de novo.";
+      error = "Could not continue. Try again.";
     }
   }
 }
 
-const segredo = totpURI ? (new URL(totpURI).searchParams.get("secret") ?? "") : "";
+const secret = totpURI ? (new URL(totpURI).searchParams.get("secret") ?? "") : "";
 /**
- * O uqr emite o SVG só com `viewBox`, sem `width`/`height` — em nenhuma das
- * opções. Dentro de um container `width: max-content`, um SVG sem dimensão
- * intrínseca colapsa para 0×0: o QR existia no HTML e não aparecia na tela.
- * Injetamos o tamanho na própria tag, para o SVG não depender de CSS nenhum.
+ * uqr emits the SVG with only `viewBox`, without `width`/`height` — under none
+ * of its options. Inside a `width: max-content` container, an SVG with no
+ * intrinsic size collapses to 0×0: the QR existed in the HTML and did not show
+ * on screen. We inject the size into the tag itself, so the SVG does not
+ * depend on any CSS.
  */
 const qr = totpURI
   ? renderSVG(totpURI, { border: 1 }).replace(
@@ -64,55 +66,55 @@ const qr = totpURI
       '<svg width="220" height="220" style="display:block" ',
     )
   : "";
-const mostrandoResultado = codigos.length > 0;
+const showingResult = codes.length > 0;
 ---
 
 <Dashboard
-  title="Verificação em duas etapas"
-  heading={jaAtivo ? "Novos códigos de recuperação" : "Verificação em duas etapas"}
+  title="Two-step verification"
+  heading={alreadyActive ? "New recovery codes" : "Two-step verification"}
   description={
-    jaAtivo
-      ? "Gerar novos códigos invalida todos os antigos na hora."
-      : "Um código de seis dígitos, além da senha, toda vez que você entrar."
+    alreadyActive
+      ? "Generating new codes invalidates all the old ones immediately."
+      : "A six-digit code, in addition to your password, every time you log in."
   }
 >
-  {obrigatorio && !mostrandoResultado && (
+  {mandatory && !showingResult && (
     <p class="alert alert-info">
       <span>
-        Sua conta é de administrador, e administradores precisam da verificação em duas
-        etapas. Você volta a navegar normalmente assim que terminar esta configuração.
+        Yours is an administrator account, and administrators need two-step
+        verification. You can browse normally again as soon as you finish this setup.
       </span>
     </p>
   )}
 
-  {erro && <p class="alert alert-error" role="alert">{erro}</p>}
+  {error && <p class="alert alert-error" role="alert">{error}</p>}
 
-  {!mostrandoResultado && (
+  {!showingResult && (
     <div class="card">
-      <h2>{jaAtivo ? "Gerar novos códigos" : "Ativar"}</h2>
+      <h2>{alreadyActive ? "Generate new codes" : "Enable"}</h2>
       <span class="muted">
-        {jaAtivo
-          ? "Use isto se você gastou os códigos antigos ou acha que alguém os viu."
-          : "Você vai precisar de um app autenticador no celular — Google Authenticator, Authy, 1Password ou o gerenciador de senhas que já usa."}
+        {alreadyActive
+          ? "Use this if you have used up the old codes or think someone has seen them."
+          : "You will need an authenticator app on your phone — Google Authenticator, Authy, 1Password or the password manager you already use."}
       </span>
 
       <form method="post" class="row">
         <div class="field">
-          <label for="senha">Confirme sua senha</label>
-          <input id="senha" name="password" type="password" autocomplete="current-password" required autofocus />
+          <label for="password">Confirm your password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required autofocus />
         </div>
-        <div><button type="submit">Continuar</button></div>
+        <div><button type="submit">Continue</button></div>
       </form>
       <span class="hint muted">
-        <small>A senha evita que alguém mexa nisto numa sessão sua esquecida aberta.</small>
+        <small>The password keeps someone from changing this in a session of yours left open.</small>
       </span>
     </div>
   )}
 
-  {mostrandoResultado && totpURI && (
+  {showingResult && totpURI && (
     <div class="card">
-      <h2>1. Leia o código no seu app</h2>
-      <span class="muted">Adicione uma conta nova no app autenticador e aponte a câmera.</span>
+      <h2>1. Scan the code with your app</h2>
+      <span class="muted">Add a new account in the authenticator app and point the camera.</span>
 
       <div style="background:#fff;padding:14px;border-radius:10px;width:max-content;margin:4px 0 14px">
         <Fragment set:html={qr} />
@@ -120,46 +122,46 @@ const mostrandoResultado = codigos.length > 0;
 
       <p class="muted">
         <small>
-          Sem câmera? Cadastre manualmente como <strong>{APP_NAME}</strong> com esta chave:<br />
-          <code>{segredo}</code>
+          No camera? Add it manually as <strong>{APP_NAME}</strong> with this key:<br />
+          <code>{secret}</code>
         </small>
       </p>
     </div>
   )}
 
-  {mostrandoResultado && (
+  {showingResult && (
     <div class="card">
-      <h2>{totpURI ? "2. Guarde os códigos de recuperação" : "Seus novos códigos"}</h2>
+      <h2>{totpURI ? "2. Save the recovery codes" : "Your new codes"}</h2>
       <span class="muted">
-        Se você perder o celular, são eles que devolvem o acesso — cada um serve uma vez só.
-        <strong>Esta é a única vez que eles aparecem.</strong> Guarde no gerenciador de senhas
-        antes de sair desta tela.
+        If you lose your phone, these are what get you back in — each one works only once.
+        <strong>This is the only time they are shown.</strong> Save them in your password manager
+        before leaving this screen.
       </span>
-      <pre style="background:var(--surface-2);padding:14px;border-radius:10px;font-size:0.9rem;line-height:1.9;margin:0">{codigos.join("\n")}</pre>
+      <pre style="background:var(--surface-2);padding:14px;border-radius:10px;font-size:0.9rem;line-height:1.9;margin:0">{codes.join("\n")}</pre>
     </div>
   )}
 
-  {mostrandoResultado && totpURI && (
+  {showingResult && totpURI && (
     <div class="card">
-      <h2>3. Confirme</h2>
+      <h2>3. Confirm</h2>
       <span class="muted">
-        Digite o código que o app mostra agora. Só depois disso o 2FA passa a valer — se a
-        leitura deu errado, você descobre aqui, e não na próxima vez que for entrar.
+        Enter the code the app is showing now. Only after that does 2FA take effect — if the
+        scan went wrong, you find out here, and not the next time you log in.
       </span>
 
       <form method="post" action="/api/security/2fa" class="row">
         <input type="hidden" name="action" value="confirm" />
         <div class="field">
-          <label for="codigo">Código de seis dígitos</label>
-          <input id="codigo" name="code" type="text" inputmode="numeric" autocomplete="one-time-code"
+          <label for="code">Six-digit code</label>
+          <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code"
                  pattern="[0-9]{6}" maxlength="6" required autofocus />
         </div>
-        <div><button type="submit">Ativar verificação em duas etapas</button></div>
+        <div><button type="submit">Enable two-step verification</button></div>
       </form>
     </div>
   )}
 
-  {mostrandoResultado && !totpURI && (
-    <a class="btn" href="/dashboard/security">Guardei os códigos, voltar</a>
+  {showingResult && !totpURI && (
+    <a class="btn" href="/dashboard/security">I saved the codes, go back</a>
   )}
 </Dashboard>

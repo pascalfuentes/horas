@@ -8,105 +8,105 @@ import { PERMISSIONS, ROLE_DESCRIPTIONS, ROLE_LABELS, can } from "~/lib/permissi
 export const prerender = false;
 
 const ws = Astro.locals.membership!;
-const eu = Astro.locals.user!;
+const me = Astro.locals.user!;
 
 if (!can(ws.role, PERMISSIONS.MEMBERS_READ)) {
   return Astro.redirect(`/w/${ws.workspaceSlug}?e=no_permission`);
 }
 
-const podeGerenciar = can(ws.role, PERMISSIONS.MEMBERS_WRITE);
-const podeTransferir = can(ws.role, PERMISSIONS.WORKSPACE_TRANSFER);
+const canManage = can(ws.role, PERMISSIONS.MEMBERS_WRITE);
+const canTransfer = can(ws.role, PERMISSIONS.WORKSPACE_TRANSFER);
 
-const membros = await listMembers(Astro.locals.env, ws.workspaceId);
-const convites = await listInvites(Astro.locals.env, ws.workspaceId);
-const pendentes = convites.filter((c) => inviteStatus(c) === "pending");
-const minhaParticipacao = membros.find((m) => m.userId === eu.id);
+const members = await listMembers(Astro.locals.env, ws.workspaceId);
+const invites = await listInvites(Astro.locals.env, ws.workspaceId);
+const pending = invites.filter((c) => inviteStatus(c) === "pending");
+const myMembership = members.find((m) => m.userId === me.id);
 
-// Só faz sentido convidar para papéis que se can atribuir. `owner` fica de
-// fora: dono se torna por transferência, que é ação deliberada de quem já é.
-const papeisConvidaveis = WORKSPACE_ROLES.filter((r) => r !== "owner");
+// It only makes sense to invite to roles that can be assigned. `owner` stays
+// out: one becomes owner by transfer, a deliberate action by someone who already is.
+const invitableRoles = WORKSPACE_ROLES.filter((r) => r !== "owner");
 ---
 
 <Dashboard
-  title={`Membros — ${ws.workspaceName}`}
-  heading="Membros"
-  description={`${membros.length} pessoa${membros.length === 1 ? "" : "s"} · ${pendentes.length} convite${pendentes.length === 1 ? "" : "s"} pendente${pendentes.length === 1 ? "" : "s"}`}
+  title={`Members — ${ws.workspaceName}`}
+  heading="Members"
+  description={`${members.length} ${members.length === 1 ? "person" : "people"} · ${pending.length} pending invite${pending.length === 1 ? "" : "s"}`}
 >
-  {podeGerenciar && (
+  {canManage && (
     <div class="card">
-      <h2>Convidar</h2>
+      <h2>Invite</h2>
       <span class="muted">
-        A pessoa recebe um link. Se ainda não tiver conta, cria uma com esse mesmo e-mail —
-        o convite só vale para o endereço que o recebeu.
+        The person gets a link. If they don't have an account yet, they create one with that same email —
+        the invite is only valid for the address that received it.
       </span>
 
       <form method="post" action={`/api/w/${ws.workspaceSlug}/invites`} class="row">
         <input type="hidden" name="action" value="invite" />
         <div class="field">
-          <label for="email">E-mail</label>
+          <label for="email">Email</label>
           <input id="email" name="email" type="email" required />
         </div>
         <div class="field" style="flex:0 1 180px">
-          <label for="papel">Papel</label>
-          <select id="papel" name="role">
-            {papeisConvidaveis.map((r) => (
+          <label for="role">Role</label>
+          <select id="role" name="role">
+            {invitableRoles.map((r) => (
               <option value={r} selected={r === "editor"}>{ROLE_LABELS[r as WorkspaceRole]}</option>
             ))}
           </select>
         </div>
-        <div><button type="submit">Enviar convite</button></div>
+        <div><button type="submit">Send invite</button></div>
       </form>
       <span class="hint muted"><small>{ROLE_DESCRIPTIONS.editor}</small></span>
     </div>
   )}
 
   <div class="card">
-    <h2>Quem participa</h2>
+    <h2>People in this workspace</h2>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Pessoa</th><th>Papel</th><th>Desde</th>{podeGerenciar && <th>Ações</th>}</tr></thead>
+        <thead><tr><th>Person</th><th>Role</th><th>Since</th>{canManage && <th>Actions</th>}</tr></thead>
         <tbody>
-          {membros.map((m) => (
+          {members.map((m) => (
             <tr>
               <td class="wrap">
-                <strong>{m.nome}</strong><br /><small class="muted">{m.email}</small>
-                {m.userId === eu.id && <> <span class="badge">você</span></>}
+                <strong>{m.name}</strong><br /><small class="muted">{m.email}</small>
+                {m.userId === me.id && <> <span class="badge">you</span></>}
               </td>
               <td>
-                {podeGerenciar && m.role !== "owner" && m.userId !== eu.id ? (
+                {canManage && m.role !== "owner" && m.userId !== me.id ? (
                   <form method="post" action={`/api/w/${ws.workspaceSlug}/members`} class="inline-form">
                     <input type="hidden" name="action" value="role" />
                     <input type="hidden" name="memberId" value={m.memberId} />
                     <select name="role">
-                      {papeisConvidaveis.map((r) => (
+                      {invitableRoles.map((r) => (
                         <option value={r} selected={r === m.role}>{ROLE_LABELS[r as WorkspaceRole]}</option>
                       ))}
                     </select>
-                    <button class="btn-ghost btn-sm" type="submit">Aplicar</button>
+                    <button class="btn-ghost btn-sm" type="submit">Apply</button>
                   </form>
                 ) : (
                   <span class={`badge ${m.role === "owner" ? "badge-admin" : ""}`}>{ROLE_LABELS[m.role]}</span>
                 )}
               </td>
-              <td>{formatDateTime(m.desde)}</td>
-              {podeGerenciar && (
+              <td>{formatDateTime(m.since)}</td>
+              {canManage && (
                 <td>
                   <div class="row-actions">
-                    {m.userId !== eu.id && m.role !== "owner" && (
+                    {m.userId !== me.id && m.role !== "owner" && (
                       <form method="post" action={`/api/w/${ws.workspaceSlug}/members`} class="inline-form">
                         <input type="hidden" name="action" value="remove" />
                         <input type="hidden" name="memberId" value={m.memberId} />
-                        <button class="btn-danger btn-sm" type="submit">Remover</button>
+                        <button class="btn-danger btn-sm" type="submit">Remove</button>
                       </form>
                     )}
-                    {podeTransferir && m.userId !== eu.id && minhaParticipacao && (
+                    {canTransfer && m.userId !== me.id && myMembership && (
                       <form method="post" action={`/api/w/${ws.workspaceSlug}/members`} class="inline-form">
                         <input type="hidden" name="action" value="transfer" />
                         <input type="hidden" name="memberId" value={m.memberId} />
-                        <input type="hidden" name="myMemberId" value={minhaParticipacao.memberId} />
+                        <input type="hidden" name="myMemberId" value={myMembership.memberId} />
                         <button class="btn-ghost btn-sm" type="submit"
-                                title="Você vira administrador e essa pessoa vira dona">
-                          Tornar dono
+                                title="You become an admin and this person becomes the owner">
+                          Make owner
                         </button>
                       </form>
                     )}
@@ -121,39 +121,39 @@ const papeisConvidaveis = WORKSPACE_ROLES.filter((r) => r !== "owner");
   </div>
 
   <div class="card">
-    <h2>Convites ({pendentes.length} pendente{pendentes.length === 1 ? "" : "s"})</h2>
-    {convites.length === 0 ? (
-      <p class="empty">Nenhum convite ainda.</p>
+    <h2>Invites ({pending.length} pending)</h2>
+    {invites.length === 0 ? (
+      <p class="empty">No invites yet.</p>
     ) : (
       <div class="table-wrap">
         <table>
-          <thead><tr><th>E-mail</th><th>Papel</th><th>Situação</th><th>Convidado por</th><th>Expira</th>{podeGerenciar && <th>Ações</th>}</tr></thead>
+          <thead><tr><th>Email</th><th>Role</th><th>Status</th><th>Invited by</th><th>Expires</th>{canManage && <th>Actions</th>}</tr></thead>
           <tbody>
-            {convites.map((c) => {
-              const situacao = inviteStatus(c);
+            {invites.map((c) => {
+              const status = inviteStatus(c);
               return (
                 <tr>
                   <td class="wrap">{c.email}</td>
                   <td><span class="badge">{c.role ? ROLE_LABELS[c.role] : "—"}</span></td>
-                  <td><span class={`badge ${situacao === "accepted" ? "badge-ok" : ""}`}>{situacao}</span></td>
-                  <td class="wrap">{c.convidadoPor ?? "—"}</td>
-                  <td>{formatDateTime(c.expiraEm)}</td>
-                  {podeGerenciar && (
+                  <td><span class={`badge ${status === "accepted" ? "badge-ok" : ""}`}>{status}</span></td>
+                  <td class="wrap">{c.invitedBy ?? "—"}</td>
+                  <td>{formatDateTime(c.expiresAt)}</td>
+                  {canManage && (
                     <td>
-                      {situacao === "pending" || situacao === "expired" ? (
+                      {status === "pending" || status === "expired" ? (
                         <div class="row-actions">
                           <form method="post" action={`/api/w/${ws.workspaceSlug}/invites`} class="inline-form">
                             <input type="hidden" name="action" value="resend" />
                             <input type="hidden" name="email" value={c.email} />
                             <input type="hidden" name="role" value={c.role ?? "viewer"} />
-                            <button class="btn-ghost btn-sm" type="submit">Reenviar</button>
+                            <button class="btn-ghost btn-sm" type="submit">Resend</button>
                           </form>
-                          {situacao === "pending" && (
+                          {status === "pending" && (
                             <form method="post" action={`/api/w/${ws.workspaceSlug}/invites`} class="inline-form">
                               <input type="hidden" name="action" value="cancel" />
                               <input type="hidden" name="id" value={c.id} />
                               <input type="hidden" name="email" value={c.email} />
-                              <button class="btn-danger btn-sm" type="submit">Cancelar</button>
+                              <button class="btn-danger btn-sm" type="submit">Cancel</button>
                             </form>
                           )}
                         </div>

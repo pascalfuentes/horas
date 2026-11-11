@@ -1,39 +1,39 @@
--- Migração dos dados de uma instalação que já existe.
+-- Data migration for an installation that already exists.
 --
--- Roda ANTES dos triggers de invariante (0005) de propósito: o trigger que
--- valida `user.role` recusaria o próprio UPDATE que tira o 'readonly' de
--- circulação. Ordem: schema → dados → invariantes.
+-- Runs BEFORE the invariant triggers (0005) on purpose: the trigger that
+-- validates `user.role` would reject the very UPDATE that takes 'readonly' out
+-- of circulation. Order: schema → data → invariants.
 --
--- Numa instalação nova (banco vazio) nada aqui tem efeito: todos os INSERT são
--- guardados por `WHERE EXISTS (SELECT 1 FROM "user")`.
+-- On a new installation (empty database) nothing here has any effect: every
+-- INSERT is guarded by `WHERE EXISTS (SELECT 1 FROM "user")`.
 
 -- ---------------------------------------------------------------------------
--- 1. Workspace inicial
+-- 1. Initial workspace
 --
--- A instalação atual é uma equipe num espaço só, e é isso que preservamos.
--- Não criamos workspace pessoal para quem já existe: inventaria estrutura que
--- ninguém pediu e deixaria workspaces vazios para sempre. Só cadastro NOVO
--- ganha workspace pessoal automático.
+-- The current installation is one team in a single space, and that is what we
+-- preserve. We do not create a personal workspace for existing people: it would
+-- invent structure nobody asked for and leave workspaces empty forever. Only a
+-- NEW signup gets an automatic personal workspace.
 --
--- Renomeie depois pela interface; o id fixo é só para esta migration se
--- referenciar sem depender de um valor gerado.
+-- Rename it later through the interface; the fixed id only lets this migration
+-- reference itself without depending on a generated value.
 -- ---------------------------------------------------------------------------
 INSERT INTO "organization" ("id", "name", "slug", "createdAt")
 SELECT 'ws_inicial', 'Workspace Inicial', 'workspace-inicial', unixepoch()
 WHERE EXISTS (SELECT 1 FROM "user");
 
 -- ---------------------------------------------------------------------------
--- 2. Todo mundo vira membro, com os papéis mapeados
+-- 2. Everyone becomes a member, with roles mapped
 --
---   admin mais antigo → owner   (só um: 'owner' carrega excluir workspace e
---                                transferir propriedade, poder que não deve ser
---                                distribuído por acidente de migração)
---   demais admin      → admin
+--   oldest admin      → owner   (only one: 'owner' carries deleting the workspace
+--                                and transferring ownership, a power that must not
+--                                be handed out by a migration accident)
+--   other admins      → admin
 --   user              → editor
 --   readonly          → viewer
 --
--- Se a instalação não tiver nenhum admin, o usuário mais antigo vira owner —
--- sem isso o workspace nasceria sem owner e violaria o invariante de 0005.
+-- If the installation has no admin at all, the oldest user becomes owner;
+-- otherwise the workspace would start without an owner and violate the 0005 invariant.
 -- ---------------------------------------------------------------------------
 INSERT INTO "member" ("id", "organizationId", "userId", "role", "createdAt")
 SELECT lower(hex(randomblob(16))), 'ws_inicial', u."id",
@@ -51,10 +51,10 @@ FROM "user" u
 WHERE EXISTS (SELECT 1 FROM "organization" WHERE "id" = 'ws_inicial');
 
 -- ---------------------------------------------------------------------------
--- 3. Convites pendentes viram convites do workspace inicial
+-- 3. Pending invitations become invitations to the initial workspace
 --
--- `inviterId` é NOT NULL no plugin; quando o convite original não tem
--- `invitedBy` (o caso do /setup), cai no owner do workspace.
+-- `inviterId` is NOT NULL in the plugin; when the original invitation has no
+-- `invitedBy` (the /setup case), it falls back to the workspace owner.
 -- ---------------------------------------------------------------------------
 INSERT INTO "org_invitation"
   ("id", "organizationId", "email", "role", "status", "expiresAt", "createdAt", "inviterId")
@@ -72,7 +72,7 @@ WHERE i."acceptedAt" IS NULL
   AND EXISTS (SELECT 1 FROM "organization" WHERE "id" = 'ws_inicial');
 
 -- ---------------------------------------------------------------------------
--- 4. Dado de negócio existente passa a pertencer ao workspace inicial
+-- 4. Existing business data now belongs to the initial workspace
 -- ---------------------------------------------------------------------------
 UPDATE "note"
    SET "workspaceId" = 'ws_inicial'
@@ -85,23 +85,23 @@ UPDATE "audit_log"
    AND EXISTS (SELECT 1 FROM "organization" WHERE "id" = 'ws_inicial');
 
 -- ---------------------------------------------------------------------------
--- 5. Papéis de plataforma encolhem para admin | user
+-- 5. Platform roles shrink to admin | user
 --
--- Quem decide ler/escrever agora é o papel NO WORKSPACE. O `user.role` fica
--- com uma função só: dizer quem é o superadmin da plataforma.
+-- What decides read/write now is the role IN THE WORKSPACE. `user.role` keeps
+-- a single job: saying who the platform superadmin is.
 --
--- O CHECK original da tabela (IN 'admin','user','readonly') vira um
--- superconjunto inofensivo. Estreitá-lo exigiria RECRIAR a tabela "user" no
--- SQLite, com seis FKs e dois triggers apontando para ela — risco que não se
--- paga. O trigger em 0005 faz o mesmo trabalho sem tocar na estrutura.
+-- The table's original CHECK (IN 'admin','user','readonly') becomes a
+-- harmless superset. Narrowing it would require RECREATING the "user" table in
+-- SQLite, with six FKs and two triggers pointing at it: a risk not worth
+-- taking. The trigger in 0005 does the same job without touching the structure.
 -- ---------------------------------------------------------------------------
 UPDATE "user" SET "role" = 'user' WHERE "role" = 'readonly';
 
 -- ---------------------------------------------------------------------------
--- 6. A tabela de convites global é aposentada
+-- 6. The global invitations table is retired
 --
--- Com cadastro aberto, convite global deixa de existir: convite agora é sempre
--- PARA um workspace. Os pendentes já foram migrados no passo 3; o histórico
--- dos aceitos e revogados continua no audit_log.
+-- With open signup, global invitations no longer exist: an invitation is now
+-- always TO a workspace. The pending ones were already migrated in step 3; the
+-- history of accepted and revoked ones stays in audit_log.
 -- ---------------------------------------------------------------------------
 DROP TABLE "invitation";

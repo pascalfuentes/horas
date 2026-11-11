@@ -6,25 +6,25 @@ import { fail, handleAuthResponse, safeNext, str } from "~/lib/http";
 export const prerender = false;
 
 /**
- * Segundo fator no login. A sessão de verdade só nasce aqui — até este ponto
- * a pessoa tem apenas o cookie temporário que o /sign-in/email deixou.
+ * Second factor at login. The real session is only born here — up to this
+ * point the person has just the temporary cookie that /sign-in/email left.
  */
 export const POST: APIRoute = async ({ request, locals }) => {
   const form = await request.formData();
-  const acao = str(form, "action");
-  const codigo = str(form, "code");
+  const action = str(form, "action");
+  const code = str(form, "code");
   const next = safeNext(str(form, "next"));
   const back = `/two-factor?next=${encodeURIComponent(next)}`;
 
-  if (!codigo) return fail(back, "fields");
+  if (!code) return fail(back, "fields");
 
-  const rota = acao === "backup" ? "/two-factor/verify-backup-code" : "/two-factor/verify-totp";
-  const corpo =
-    acao === "backup"
-      ? { code: codigo }
-      : { code: codigo, trustDevice: str(form, "trust") === "1" };
+  const route = action === "backup" ? "/two-factor/verify-backup-code" : "/two-factor/verify-totp";
+  const body =
+    action === "backup"
+      ? { code }
+      : { code, trustDevice: str(form, "trust") === "1" };
 
-  const res = await callAuth(locals.auth, request, rota, corpo);
-  // Código errado volta como Response 4xx, não como exceção.
+  const res = await callAuth(locals.auth, request, route, body);
+  // A wrong code comes back as a 4xx Response, not as an exception.
   return handleAuthResponse(res, next, back);
 };

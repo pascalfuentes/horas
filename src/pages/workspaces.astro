@@ -7,49 +7,49 @@ import { userWorkspaces } from "~/lib/workspaces";
 
 export const prerender = false;
 
-const eu = Astro.locals.user!;
-const meus = await userWorkspaces(Astro.locals.env, eu.id);
+const me = Astro.locals.user!;
+const mine = await userWorkspaces(Astro.locals.env, me.id);
 
-// Aqui a lista vem inteira: esta é a página que responde "de onde eu
-// participo", e um convite pendente faz parte dessa resposta. O layout omite o
-// aviso do topo nesta rota justamente para não duplicar.
-const convites = await pendingInvitesFor(Astro.locals.env, eu.email);
+// Here the list comes in full: this is the page that answers "where do I
+// belong", and a pending invite is part of that answer. The layout omits the
+// top notice on this route precisely to avoid duplicating it.
+const invites = await pendingInvitesFor(Astro.locals.env, me.email);
 ---
 
 <Dashboard
   title="Workspaces"
-  heading="Seus workspaces"
-  description="Cada workspace tem os próprios dados, membros e permissões."
+  heading="Your workspaces"
+  description="Each workspace has its own data, members and permissions."
 >
-  {convites.length > 0 && (
-    <PendingInvites convites={convites} verificado={eu.emailVerified} />
+  {invites.length > 0 && (
+    <PendingInvites invites={invites} verified={me.emailVerified} />
   )}
 
   <div class="card">
-    <h2>Criar workspace</h2>
-    <span class="muted">Você entra como dono e can convidar quem quiser depois.</span>
+    <h2>Create workspace</h2>
+    <span class="muted">You join as owner and can invite anyone you like later.</span>
 
     <form method="post" action="/api/workspaces" class="row">
       <div class="field">
-        <label for="nome">Nome</label>
-        <input id="nome" name="name" type="text" maxlength="60" required />
+        <label for="name">Name</label>
+        <input id="name" name="name" type="text" maxlength="60" required />
       </div>
-      <div><button type="submit">Criar</button></div>
+      <div><button type="submit">Create</button></div>
     </form>
   </div>
 
   <div class="card">
-    <h2>Onde você participa ({meus.length})</h2>
+    <h2>Where you belong ({mine.length})</h2>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Workspace</th><th>Seu papel</th><th>O que isso permite</th><th></th></tr></thead>
+        <thead><tr><th>Workspace</th><th>Your role</th><th>What it allows</th><th></th></tr></thead>
         <tbody>
-          {meus.map((w) => (
+          {mine.map((w) => (
             <tr>
               <td class="wrap"><strong>{w.workspaceName}</strong><br /><small class="muted">/w/{w.workspaceSlug}</small></td>
               <td><span class={`badge ${w.role === "owner" ? "badge-admin" : ""}`}>{ROLE_LABELS[w.role]}</span></td>
               <td class="wrap"><small class="muted">{ROLE_DESCRIPTIONS[w.role]}</small></td>
-              <td><a class="btn btn-ghost btn-sm" href={`/w/${w.workspaceSlug}`}>Abrir</a></td>
+              <td><a class="btn btn-ghost btn-sm" href={`/w/${w.workspaceSlug}`}>Open</a></td>
             </tr>
           ))}
         </tbody>

@@ -17,22 +17,22 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const ws = currentWorkspace(locals);
   const me = actor(locals);
   const form = await request.formData();
-  const acao = str(form, "action");
+  const action = str(form, "action");
   const PAGE = `/w/${ws.workspaceSlug}/members`;
 
   try {
-    if (acao === "invite") {
+    if (action === "invite") {
       const email = str(form, "email").toLowerCase();
-      const papel = str(form, "role") as WorkspaceRole;
+      const role = str(form, "role") as WorkspaceRole;
 
       if (!isEmail(email)) return fail(PAGE, "invalid_email");
-      // Validamos o papel ANTES do plugin: a validação dele une os papéis
-      // padrão aos nossos, então "member" passaria — e criaria alguém com zero
-      // permissões, um estado que não existe na nossa matriz.
-      if (!(WORKSPACE_ROLES as readonly string[]).includes(papel)) return fail(PAGE, "invalid_role");
-      // Ninguém convida para `owner`: dono se torna por transferência, que é
-      // uma ação deliberada de quem já é dono.
-      if (papel === "owner") return fail(PAGE, "invalid_role");
+      // We validate the role BEFORE the plugin: its validation merges the
+      // default roles with ours, so "member" would pass — and would create
+      // someone with zero permissions, a state that does not exist in our matrix.
+      if (!(WORKSPACE_ROLES as readonly string[]).includes(role)) return fail(PAGE, "invalid_role");
+      // Nobody invites to `owner`: one becomes owner by transfer, which is a
+      // deliberate action by someone who already is one.
+      if (role === "owner") return fail(PAGE, "invalid_role");
 
       if (await isAlreadyMember(locals.env, ws.workspaceId, email)) return fail(PAGE, "already_member");
       if (await hasPendingInvite(locals.env, ws.workspaceId, email)) {
@@ -41,7 +41,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
       const res = await callAuth(locals.auth, request, "/organization/invite-member", {
         email,
-        role: papel,
+        role,
         organizationId: ws.workspaceId,
       });
       if (!res.ok) return handleAuthResponse(res, PAGE, PAGE);
@@ -52,7 +52,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         actorEmail: me.email,
         targetEmail: email,
         workspaceId: ws.workspaceId,
-        details: { papel },
+        details: { role },
         request,
       });
       return ok(PAGE, "ok_invite_sent");
@@ -61,7 +61,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const id = str(form, "id");
     if (!id) return fail(PAGE, "fields");
 
-    if (acao === "cancel") {
+    if (action === "cancel") {
       const res = await callAuth(locals.auth, request, "/organization/cancel-invitation", {
         invitationId: id,
       });
@@ -78,16 +78,16 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return ok(PAGE, "ok_invite_cancelled");
     }
 
-    if (acao === "resend") {
+    if (action === "resend") {
       const email = str(form, "email").toLowerCase();
-      const papel = (str(form, "role") || "viewer") as WorkspaceRole;
+      const role = (str(form, "role") || "viewer") as WorkspaceRole;
       if (!isEmail(email)) return fail(PAGE, "invalid_email");
 
-      // `cancelPendingInvitationsOnReInvite` está ligado: o convite anterior é
-      // cancelado e um novo sai, com validade nova.
+      // `cancelPendingInvitationsOnReInvite` is on: the previous invite is
+      // cancelled and a new one goes out, with a fresh expiry.
       const res = await callAuth(locals.auth, request, "/organization/invite-member", {
         email,
-        role: papel,
+        role,
         organizationId: ws.workspaceId,
         resend: true,
       });
@@ -99,7 +99,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         actorEmail: me.email,
         targetEmail: email,
         workspaceId: ws.workspaceId,
-        details: { papel, reenvio: true },
+        details: { role, resend: true },
         request,
       });
       return ok(PAGE, "ok_invite_sent");
@@ -107,7 +107,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     return fail(PAGE, "fields");
   } catch (error) {
-    console.error("convites do workspace:", error);
+    console.error("workspace invites:", error);
     return fail(PAGE, codeFromAuthError(error));
   }
 };

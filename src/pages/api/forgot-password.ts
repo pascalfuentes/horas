@@ -25,8 +25,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
       redirectTo: "/reset-password",
     });
   } catch (error) {
-    // Silenciado de propósito. Responder diferente quando o e-mail não existe
-    // transforma este formulário num verificador de contas.
+    // Silenced on purpose. Responding differently when the email does not exist
+    // turns this form into an account checker.
     console.error("forgetPassword:", error);
   }
 

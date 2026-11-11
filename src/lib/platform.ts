@@ -5,7 +5,7 @@ import { getDb } from "~/lib/auth";
 import type { AppEnv } from "~/lib/env";
 
 /**
- * Consultas sobre a PLATAFORMA (a instalação inteira), não sobre um workspace.
+ * Queries about the PLATFORM (the whole installation), not about a workspace.
  */
 
 export async function countUsers(env: AppEnv): Promise<number> {
@@ -14,9 +14,9 @@ export async function countUsers(env: AppEnv): Promise<number> {
 }
 
 /**
- * Superadmins ativos. É esta contagem que decide se `/setup` ainda funciona:
- * com cadastro aberto, "banco vazio" virou uma corrida — bastava alguém se
- * cadastrar antes para o superadmin ficar impossível de criar.
+ * Active superadmins. This count is what decides whether `/setup` still works:
+ * with open signup, "empty database" became a race — someone signing up first
+ * was enough to make the superadmin impossible to create.
  */
 export async function countPlatformAdmins(env: AppEnv): Promise<number> {
   const row = await getDb(env)

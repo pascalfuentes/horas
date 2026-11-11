@@ -4,56 +4,56 @@ import { countPlatformAdmins } from "~/lib/platform";
 
 export const prerender = false;
 
-// Só existe enquanto não houver superadmin. Com cadastro aberto, "banco vazio"
-// seria uma corrida: alguém se cadastra antes e o posto fica inalcançável.
+// Only exists while there is no superadmin. With open signup, "empty database"
+// would be a race: someone signs up first and the post becomes unreachable.
 if ((await countPlatformAdmins(Astro.locals.env)) > 0) return Astro.redirect("/login");
 
 const hasSecret = Boolean(Astro.locals.env.SETUP_SECRET);
 ---
 
 <Auth
-  title="Primeiro administrador"
-  heading="Primeiro administrador"
-  subheading="Ainda não existe um superadmin. Crie a conta que vai administrar a plataforma."
+  title="First administrator"
+  heading="First administrator"
+  subheading="There is no superadmin yet. Create the account that will administer the platform."
 >
   {hasSecret ? (
     <form method="post" action="/api/setup" class="stack">
       <div class="field">
         <label for="secret">SETUP_SECRET</label>
         <input id="secret" name="secret" type="password" required autofocus autocomplete="off" />
-        <span class="hint">O valor que está em <code>.dev.vars</code> ou nos secrets do Worker.</span>
+        <span class="hint">The value set in <code>.dev.vars</code> or in the Worker secrets.</span>
       </div>
 
       <div class="field">
-        <label for="nome">Nome</label>
-        <input id="nome" name="name" type="text" autocomplete="name" required />
+        <label for="name">Name</label>
+        <input id="name" name="name" type="text" autocomplete="name" required />
       </div>
 
       <div class="field">
-        <label for="email">E-mail</label>
+        <label for="email">Email</label>
         <input id="email" name="email" type="email" autocomplete="username" required />
       </div>
 
       <div class="field">
-        <label for="senha">Senha</label>
-        <input id="senha" name="password" type="password" minlength="10" autocomplete="new-password" required />
-        <span class="hint">Mínimo de 10 caracteres.</span>
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" minlength="10" autocomplete="new-password" required />
+        <span class="hint">At least 10 characters.</span>
       </div>
 
       <div class="field">
-        <label for="confirma">Confirmar senha</label>
-        <input id="confirma" name="confirm" type="password" minlength="10" autocomplete="new-password" required />
+        <label for="confirm">Confirm password</label>
+        <input id="confirm" name="confirm" type="password" minlength="10" autocomplete="new-password" required />
       </div>
 
-      <button class="btn-block" type="submit">Criar administrador</button>
+      <button class="btn-block" type="submit">Create administrator</button>
       <p class="muted">
-        <small>Depois de criar, remova <code>SETUP_SECRET</code> do ambiente.</small>
+        <small>After creating it, remove <code>SETUP_SECRET</code> from the environment.</small>
       </p>
     </form>
   ) : (
     <p class="alert alert-error">
-      <span><code>SETUP_SECRET</code> não está configurada. Defina em <code>.dev.vars</code> (dev)
-      ou com <code>wrangler secret put SETUP_SECRET</code> (produção) e recarregue.</span>
+      <span><code>SETUP_SECRET</code> is not configured. Set it in <code>.dev.vars</code> (dev)
+      or with <code>wrangler secret put SETUP_SECRET</code> (production) and reload.</span>
     </p>
   )}
 </Auth>

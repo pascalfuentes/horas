@@ -3,17 +3,17 @@ import Auth from "~/layouts/Auth.astro";
 export const prerender = false;
 
 /**
- * O Astro passa o erro em `Astro.props.error`. Ele NÃO vai para a tela:
- * mensagem de erro interna costuma revelar caminho de arquivo, nome de tabela
- * e versão de biblioteca — informação gratuita para quem estiver sondando.
+ * Astro passes the error in `Astro.props.error`. It does NOT go to the screen:
+ * internal error messages tend to reveal file paths, table names and library
+ * versions — free information for anyone probing.
  */
 const { error } = Astro.props;
-if (error) console.error("Erro não tratado:", error);
+if (error) console.error("Unhandled error:", error);
 ---
-<Auth title="Algo deu errado" heading="Algo deu errado" subheading="A falha foi registrada do nosso lado.">
+<Auth title="Something went wrong" heading="Something went wrong" subheading="The failure was logged on our side.">
   <p class="muted">
-    Tente de novo em instantes. Se continuar acontecendo, avise um administrador — o horário exato
-    ajuda a encontrar o registro.
+    Try again in a moment. If it keeps happening, let an administrator know — the exact time
+    helps find the log entry.
   </p>
-  <a class="btn btn-block" href="/login">Voltar ao início</a>
+  <a class="btn btn-block" href="/login">Back to start</a>
 </Auth>

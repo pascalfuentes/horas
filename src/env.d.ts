@@ -8,33 +8,34 @@ import type { Membership } from "~/lib/workspaces";
 type SessionPayload = NonNullable<Awaited<ReturnType<Auth["api"]["getSession"]>>>;
 
 /**
- * O plugin two-factor acrescenta este campo em runtime, mas ele não aparece no
- * tipo inferido da sessão. Sem isto, o gate de 2FA do middleware dependeria de
- * um cast silencioso — e um gate de segurança não deveria depender disso.
+ * The two-factor plugin adds this field at runtime, but it does not show up in
+ * the inferred session type. Without this, the middleware's 2FA gate would
+ * depend on a silent cast — and a security gate should not depend on that.
  */
-type UsuarioDaSessao = SessionPayload["user"] & { twoFactorEnabled?: boolean | null };
+type SessionUser = SessionPayload["user"] & { twoFactorEnabled?: boolean | null };
 
 declare global {
   namespace App {
-    // O adapter já declara `Locals extends Runtime` (com `cfContext`);
-    // esta declaração funde os nossos campos nela.
+    // The adapter already declares `Locals extends Runtime` (with `cfContext`);
+    // this declaration merges our fields into it.
     interface Locals {
-      /** Instância do Better Auth desta requisição (cacheada por isolate). */
+      /** This request's Better Auth instance (cached per isolate). */
       auth: Auth;
-      /** Bindings e secrets do Worker. */
+      /** The Worker's bindings and secrets. */
       env: AppEnv;
 
-      /** Resolvidos pelo middleware. `null` = anônimo. */
-      user: UsuarioDaSessao | null;
+      /** Resolved by the middleware. `null` = anonymous. */
+      user: SessionUser | null;
       session: SessionPayload["session"] | null;
 
       /**
-       * O workspace da URL e o papel da pessoa nele, resolvidos pelo middleware
-       * a partir do slug em `/w/[slug]/…`.
+       * The workspace in the URL and the person's role in it, resolved by the
+       * middleware from the slug in `/w/[slug]/…`.
        *
-       * `null` fora de uma rota de workspace. Quando existe, já foi conferido
-       * contra a membership — é ele que autoriza, nunca o `activeOrganizationId`
-       * da sessão, que é só memória do último usado.
+       * `null` outside a workspace route. When present, it has already been
+       * checked against the membership — it is what authorizes, never the
+       * session's `activeOrganizationId`, which is only a memory of the last
+       * one used.
        */
       membership: Membership | null;
     }

@@ -2,136 +2,137 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
-import { abortar, parseJsonc } from "./config.mjs";
+import { abort, parseJsonc } from "./config.mjs";
 
 /**
- * Transforma um clone do template num projeto novo.
+ * Turns a clone of the template into a new project.
  *
- * Escreve `wrangler.local.jsonc` (fora do Git) com os ids reais e ajusta o
- * nome da aplicação. O `wrangler.jsonc` versionado continua com placeholders,
- * para que o próximo clone também comece sem id de banco válido.
+ * Writes `wrangler.local.jsonc` (out of Git) with the real ids and sets the
+ * application name. The versioned `wrangler.jsonc` keeps its placeholders, so
+ * that the next clone also starts without a valid database id.
  */
 
-const c = (cor, t) => `\x1b[${cor}m${t}\x1b[0m`;
+const c = (color, t) => `\x1b[${color}m${t}\x1b[0m`;
 
 /**
- * Modo não-interativo, para automação e para os testes:
+ * Non-interactive mode, for automation and for the tests:
  *
- *   node scripts/new-project.mjs --nome "Meu App" --id <uuid> [--worker x]
- *                                 [--banco x] [--sitekey x] [--sem-banco] [--forcar]
+ *   node scripts/new-project.mjs --name "My App" --id <uuid> [--worker x]
+ *                                 [--database x] [--sitekey x] [--no-database] [--force]
  *
- * Fora de um terminal, perguntar não funciona — então em vez de travar
- * esperando uma resposta que nunca vem, o script diz qual flag faltou.
+ * Outside a terminal, asking does not work. So instead of hanging while
+ * waiting for an answer that never comes, the script says which flag is missing.
  */
 const flags = {};
 for (let i = 2; i < process.argv.length; i++) {
   const a = process.argv[i];
   if (!a.startsWith("--")) continue;
-  const chave = a.slice(2);
-  const prox = process.argv[i + 1];
-  if (prox && !prox.startsWith("--")) { flags[chave] = prox; i++; }
-  else flags[chave] = true;
+  const key = a.slice(2);
+  const next = process.argv[i + 1];
+  if (next && !next.startsWith("--")) { flags[key] = next; i++; }
+  else flags[key] = true;
 }
 
-const interativo = process.stdin.isTTY === true;
-const rl = interativo ? createInterface({ input: process.stdin, output: process.stdout }) : null;
+const interactive = process.stdin.isTTY === true;
+const rl = interactive ? createInterface({ input: process.stdin, output: process.stdout }) : null;
 
-const perguntar = async (label, padrao, flag) => {
+const ask = async (label, fallback, flag) => {
   if (flag && flags[flag] !== undefined && flags[flag] !== true) return String(flags[flag]);
-  // `padrao` can ser "" legitimamente (sitekey vazia = sem Turnstile), então
-  // a checagem é por `undefined`, não por valor falsy.
-  if (!interativo) {
-    if (padrao !== undefined) return padrao;
-    abortar(`Sem terminal para perguntar "${label}". Passe --${flag ?? "?"} na linha de comando.`);
+  // `fallback` can legitimately be "" (empty sitekey = no Turnstile), so the
+  // check is for `undefined`, not for a falsy value.
+  if (!interactive) {
+    if (fallback !== undefined) return fallback;
+    abort(`No terminal to ask "${label}". Pass --${flag ?? "?"} on the command line.`);
   }
-  const r = (await rl.question(`  ${label}${padrao ? ` ${c(90, `[${padrao}]`)}` : ""}: `)).trim();
-  return r || padrao || "";
+  const r = (await rl.question(`  ${label}${fallback ? ` ${c(90, `[${fallback}]`)}` : ""}: `)).trim();
+  return r || fallback || "";
 };
 
-/** `flagNao` desliga: `--sem-banco` sempre responde não, nunca o contrário. */
-const confirmar = async (label, padrao, flagNao) => {
-  if (flagNao && flags[flagNao]) return false;
-  if (!interativo) return padrao;
-  const r = (await rl.question(`  ${label} ${c(90, padrao ? "[S/n]" : "[s/N]")}: `)).trim().toLowerCase();
-  return r ? r === "s" : padrao;
+/** `noFlag` turns it off: `--no-database` always answers no, never the opposite. */
+const askYesNo = async (label, fallback, noFlag) => {
+  if (noFlag && flags[noFlag]) return false;
+  if (!interactive) return fallback;
+  const r = (await rl.question(`  ${label} ${c(90, fallback ? "[Y/n]" : "[y/N]")}: `)).trim().toLowerCase();
+  return r ? r === "y" : fallback;
 };
 const slug = (s) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
    .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
-console.log(`\n${c(1, "Novo projeto a partir do template")}\n`);
+console.log(`\n${c(1, "New project from the template")}\n`);
 
-if (existsSync("wrangler.local.jsonc") && !flags.forcar) {
-  const atual = parseJsonc(readFileSync("wrangler.local.jsonc", "utf8"));
-  console.log(c(33, `  Já existe wrangler.local.jsonc (worker "${atual.name}").`));
-  if (!(await confirmar("Sobrescrever?", false))) {
+if (existsSync("wrangler.local.jsonc") && !flags.force) {
+  const current = parseJsonc(readFileSync("wrangler.local.jsonc", "utf8"));
+  console.log(c(33, `  wrangler.local.jsonc already exists (worker "${current.name}").`));
+  if (!(await askYesNo("Overwrite?", false))) {
     rl?.close();
-    console.log("\n  Nada alterado.\n");
+    console.log("\n  Nothing changed.\n");
     process.exit(0);
   }
   console.log();
 }
 
-const appName = await perguntar("Nome da aplicação (aparece na interface)", flags.nome ? undefined : "Minha Aplicação", "nome");
-const workerName = await perguntar("Nome do Worker", slug(appName), "worker");
-const dbName = await perguntar("Nome do banco D1", `${slug(appName).replace(/-/g, "_")}_db`, "banco");
+const appName = await ask("Application name (shown in the interface)", flags.name ? undefined : "My Application", "name");
+const workerName = await ask("Worker name", slug(appName), "worker");
+const dbName = await ask("D1 database name", `${slug(appName).replace(/-/g, "_")}_db`, "database");
 
-// --- banco ---
+// --- database ---
 let databaseId = "";
 console.log();
-if (await confirmar(`Criar o banco D1 "${dbName}" agora?`, true, "sem-banco")) {
+if (await askYesNo(`Create the D1 database "${dbName}" now?`, true, "no-database")) {
   console.log(c(90, `\n  $ wrangler d1 create ${dbName}`));
   spawnSync("npx", ["wrangler", "d1", "create", dbName], { stdio: "inherit" });
 
-  const listagem = spawnSync("npx", ["wrangler", "d1", "list", "--json"], { encoding: "utf8" });
+  const listing = spawnSync("npx", ["wrangler", "d1", "list", "--json"], { encoding: "utf8" });
   try {
-    databaseId = JSON.parse(listagem.stdout).find((d) => d.name === dbName)?.uuid ?? "";
+    databaseId = JSON.parse(listing.stdout).find((d) => d.name === dbName)?.uuid ?? "";
   } catch {
-    /* cai no prompt manual abaixo */
+    /* falls through to the manual prompt below */
   }
 }
-if (!databaseId) databaseId = await perguntar("database_id (wrangler d1 list)", undefined, "id");
+if (!databaseId) databaseId = await ask("database_id (wrangler d1 list)", undefined, "id");
 if (!databaseId) {
   rl?.close();
-  abortar("Sem database_id não dá para continuar. Rode de novo depois de criar o banco.");
+  abort("Cannot continue without a database_id. Run again after creating the database.");
 }
 
-const siteKey = await perguntar("Sitekey do Turnstile (vazio = sem Turnstile)", "", "sitekey");
+const siteKey = await ask("Turnstile sitekey (empty = no Turnstile)", "", "sitekey");
 rl?.close();
 
-// --- escreve wrangler.local.jsonc a partir do template ---
+// --- writes wrangler.local.jsonc from the template ---
 //
-// As substituições casam pela CHAVE, não pelo valor placeholder. Casar pelo
-// valor já quebrou uma vez: mudei os placeholders no template, as substituições
-// deixaram de encontrar nada, e o arquivo saiu com a config do template — sem
-// nenhum erro. Por isso o resultado é conferido logo abaixo.
-const trocar = (texto, chave, valor) =>
-  texto.replace(new RegExp(`("${chave}":\\s*)"[^"]*"`), `$1${JSON.stringify(valor)}`);
+// The replacements match by KEY, not by the placeholder value. Matching by
+// value already broke once: I changed the placeholders in the template, the
+// replacements stopped finding anything, and the file came out with the
+// template config, without any error. That is why the result is checked right
+// below.
+const replaceValue = (text, key, value) =>
+  text.replace(new RegExp(`("${key}":\\s*)"[^"]*"`), `$1${JSON.stringify(value)}`);
 
 let local = readFileSync("wrangler.jsonc", "utf8").replace(
-  /^\/\/ Versão do TEMPLATE[\s\S]*?\n(?=\{)/m,
-  "// Config DESTE deploy. Fora do Git (ver .gitignore).\n" +
-    "// Quando existe, vence sobre o wrangler.jsonc, que é a versão do template.\n",
+  /^\/\/ TEMPLATE version[\s\S]*?\n(?=\{)/m,
+  "// THIS deploy's config. Out of Git (see .gitignore).\n" +
+    "// When it exists, it wins over wrangler.jsonc, which is the template version.\n",
 );
-local = trocar(local, "name", workerName);
-local = trocar(local, "database_name", dbName);
-local = trocar(local, "database_id", databaseId);
-local = trocar(local, "PUBLIC_TURNSTILE_SITE_KEY", siteKey);
+local = replaceValue(local, "name", workerName);
+local = replaceValue(local, "database_name", dbName);
+local = replaceValue(local, "database_id", databaseId);
+local = replaceValue(local, "PUBLIC_TURNSTILE_SITE_KEY", siteKey);
 writeFileSync("wrangler.local.jsonc", local);
 
-// Relê do disco: se alguma substituição não pegou, falha agora e alto.
+// Re-reads from disk: if any replacement did not take, fail now and loudly.
 {
-  const escrito = parseJsonc(readFileSync("wrangler.local.jsonc", "utf8"));
-  const d1 = escrito.d1_databases?.[0] ?? {};
-  const erros = [
-    escrito.name !== workerName && `name ficou "${escrito.name}"`,
-    d1.database_name !== dbName && `database_name ficou "${d1.database_name}"`,
-    d1.database_id !== databaseId && `database_id ficou "${d1.database_id}"`,
+  const written = parseJsonc(readFileSync("wrangler.local.jsonc", "utf8"));
+  const d1 = written.d1_databases?.[0] ?? {};
+  const errors = [
+    written.name !== workerName && `name ended up as "${written.name}"`,
+    d1.database_name !== dbName && `database_name ended up as "${d1.database_name}"`,
+    d1.database_id !== databaseId && `database_id ended up as "${d1.database_id}"`,
   ].filter(Boolean);
-  if (erros.length) {
-    abortar(
-      `wrangler.local.jsonc saiu errado (${erros.join("; ")}).\n` +
-        "Provavelmente as chaves do wrangler.jsonc mudaram de formato.",
+  if (errors.length) {
+    abort(
+      `wrangler.local.jsonc came out wrong (${errors.join("; ")}).\n` +
+        "The keys in wrangler.jsonc probably changed format.",
     );
   }
 }
@@ -144,22 +145,22 @@ pkg.name = workerName;
 writeFileSync("package.json", `${JSON.stringify(pkg, null, 2)}\n`);
 
 console.log(`
-${c(32, "✓")} wrangler.local.jsonc  ${c(90, `worker "${workerName}", banco "${dbName}"`)}
+${c(32, "✓")} wrangler.local.jsonc  ${c(90, `worker "${workerName}", database "${dbName}"`)}
 ${c(32, "✓")} src/config.ts         ${c(90, `APP_NAME = "${appName}"`)}
 ${c(32, "✓")} package.json          ${c(90, `name = "${workerName}"`)}
 
-${c(1, "Falta:")}
+${c(1, "Remaining:")}
 
-  1. cp .dev.vars.example .dev.vars   ${c(90, "e preencha os dois secrets")}
-  2. npm run db:local                 ${c(90, "migrations no banco local")}
-  3. npm run dev                      ${c(90, "abra /setup e crie o primeiro admin")}
+  1. cp .dev.vars.example .dev.vars   ${c(90, "and fill in the two secrets")}
+  2. npm run db:local                 ${c(90, "migrations on the local database")}
+  3. npm run dev                      ${c(90, "open /setup and create the first admin")}
 
-  Para produção, depois:
+  For production, later:
 
   4. npm run db:remote
   5. npx wrangler secret put BETTER_AUTH_SECRET   ${c(90, "openssl rand -base64 32")}
-     npx wrangler secret put BETTER_AUTH_URL      ${c(90, "a URL pública final")}
-     npx wrangler secret put SETUP_SECRET         ${c(90, "apague depois do 1º admin")}
+     npx wrangler secret put BETTER_AUTH_URL      ${c(90, "the final public URL")}
+     npx wrangler secret put SETUP_SECRET         ${c(90, "delete after the 1st admin")}
      npx wrangler secret put RESEND_API_KEY
      npx wrangler secret put EMAIL_FROM
   6. npm run deploy

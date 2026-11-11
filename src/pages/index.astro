@@ -7,38 +7,38 @@ export const prerender = false;
 
 if (Astro.locals.user) return Astro.redirect("/dashboard");
 
-// Sem superadmin = instalação nova, manda para o bootstrap.
-// Com cadastro aberto, "banco vazio" não serviria como condição: bastava
-// alguém se cadastrar antes para o posto ficar inalcançável.
+// No superadmin = fresh install, send to the bootstrap.
+// With open signup, "empty database" would not work as the condition: someone
+// signing up first would be enough to make the role unreachable.
 if ((await countPlatformAdmins(Astro.locals.env)) === 0) return Astro.redirect("/setup");
 
-const autor = operator(Astro.locals.env).nome;
-const descricao =
-  "Controle de tempo gratuito que conversa com a sua IA. Inicie timers, lance horas e peça relatórios pelo Claude ou qualquer cliente MCP.";
+const author = operator(Astro.locals.env).name;
+const description =
+  "A free time tracker that talks to your AI. Start timers, log hours and ask for reports through Claude or any MCP client.";
 
-const recursos = [
-  ["Timer de um clique", "Comece, pare e continue de onde parou. O relógio segue na aba do navegador e sincroniza entre dispositivos."],
-  ["Projetos e faturamento", "Organize por projeto e cliente, defina o valor por hora e veja quanto faturar no fim do mês."],
-  ["Relatórios e CSV", "Veja para onde a semana foi, por dia, projeto, cliente ou tag — e exporte quando precisar."],
-  ["Workspaces e convites", "Um espaço só seu ou compartilhado com o time, com papéis por pessoa."],
-  ["Conta protegida", "Login com e-mail e senha, Google ou GitHub, verificação em duas etapas e sessões por dispositivo."],
-  ["Seus dados são seus", "Baixe tudo ou apague a conta quando quiser. Sem anúncios, sem rastreadores."],
+const features = [
+  ["One-click timer", "Start, stop and pick up where you left off. The clock keeps running in the browser tab and syncs across devices."],
+  ["Projects and billing", "Organize by project and client, set an hourly rate and see how much to invoice at the end of the month."],
+  ["Reports and CSV", "See where the week went, by day, project, client or tag — and export whenever you need."],
+  ["Workspaces and invites", "A space of your own or shared with the team, with a role per person."],
+  ["Protected account", "Log in with email and password, Google or GitHub, two-step verification and per-device sessions."],
+  ["Your data is yours", "Download everything or delete your account whenever you want. No ads, no trackers."],
 ];
 
-const ferramentas = ["get_status", "start_timer", "stop_timer", "add_entry", "summary_report", "list_entries", "list_projects", "list_tags"];
+const tools = ["get_status", "start_timer", "stop_timer", "add_entry", "summary_report", "list_entries", "list_projects", "list_tags"];
 ---
 
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content={descricao} />
-    <meta property="og:title" content={`${APP_NAME} — controle de tempo que conversa com a sua IA`} />
-    <meta property="og:description" content={descricao} />
+    <meta name="description" content={description} />
+    <meta property="og:title" content={`${APP_NAME} — the time tracker that talks to your AI`} />
+    <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <title>{APP_NAME} — controle de tempo que conversa com a sua IA</title>
+    <title>{APP_NAME} — the time tracker that talks to your AI</title>
   </head>
   <body class="lp">
     <div class="lp-top">
@@ -46,49 +46,49 @@ const ferramentas = ["get_status", "start_timer", "stop_timer", "add_entry", "su
         <a class="brand" href="/"><span class="logo" aria-hidden="true"></span>{APP_NAME}</a>
         <nav>
           <a href="#mcp">MCP</a>
-          <a href="#recursos">Recursos</a>
-          <a href="/login">Entrar</a>
-          <a class="btn btn-coral" href="/signup">Criar conta</a>
+          <a href="#features">Features</a>
+          <a href="/login">Log in</a>
+          <a class="btn btn-coral" href="/signup">Create account</a>
         </nav>
       </header>
 
       <section class="lp-hero">
         <div class="lp-copy">
-          <span class="badge badge-sun">Gratuito · feito para trabalhar com IA</span>
-          <h1>O controle de tempo que você não precisa abrir.</h1>
-          <svg class="lp-rabisco" viewBox="0 0 342 16" aria-hidden="true"><path d="M2 10C60 2 130 14 200 6C250 1 300 9 340 5" /></svg>
+          <span class="badge badge-sun">Free · built to work with AI</span>
+          <h1>The time tracker you don't need to open.</h1>
+          <svg class="lp-squiggle" viewBox="0 0 342 16" aria-hidden="true"><path d="M2 10C60 2 130 14 200 6C250 1 300 9 340 5" /></svg>
           <p class="lp-lead">
-            {APP_NAME} é um time tracker simples com um servidor MCP embutido. Diga ao Claude
-            “comecei a revisão do site” e o timer já está rodando.
+            {APP_NAME} is a simple time tracker with a built-in MCP server. Tell Claude
+            “I just started the site review” and the timer is already running.
           </p>
           <div class="lp-cta">
-            <a class="btn" href="/signup">Começar de graça</a>
-            <a class="btn btn-ghost" href="/login">Já tenho conta</a>
+            <a class="btn" href="/signup">Start for free</a>
+            <a class="btn btn-ghost" href="/login">I already have an account</a>
           </div>
         </div>
 
         <div class="lp-demo" aria-hidden="true">
           <div class="lp-chat">
-            <div class="lp-msg lp-eu">Comece um timer para a revisão do site, projeto Acme.</div>
-            <div class="lp-msg lp-ia"><small>start_timer</small>Pronto — timer rodando em Acme desde 09:12.</div>
-            <div class="lp-msg lp-eu">Quanto trabalhei essa semana?</div>
-            <div class="lp-msg lp-ia"><small>summary_report</small>18h 40min: Acme 11h 05min, Portfólio 5h 20min, Estudos 2h 15min.</div>
+            <div class="lp-msg lp-me">Start a timer for the site review, project Acme.</div>
+            <div class="lp-msg lp-ai"><small>start_timer</small>Done — timer running on Acme since 09:12.</div>
+            <div class="lp-msg lp-me">How much did I work this week?</div>
+            <div class="lp-msg lp-ai"><small>summary_report</small>18h 40min: Acme 11h 05min, Portfolio 5h 20min, Study 2h 15min.</div>
           </div>
           <div class="lp-timer">
-            <i></i><span>Revisão do site</span><b>0:42:17</b><em>Parar</em>
+            <i></i><span>Site review</span><b>0:42:17</b><em>Stop</em>
           </div>
         </div>
       </section>
     </div>
 
     <main>
-      <section class="lp-section" id="recursos">
-        <h2>Tudo o que um time tracker precisa. Nada além.</h2>
+      <section class="lp-section" id="features">
+        <h2>Everything a time tracker needs. Nothing more.</h2>
         <div class="lp-grid">
-          {recursos.map(([titulo, texto], i) => (
+          {features.map(([title, text], i) => (
             <div class={`lp-feat lp-feat-${i % 3}`}>
-              <h3>{titulo}</h3>
-              <p>{texto}</p>
+              <h3>{title}</h3>
+              <p>{text}</p>
             </div>
           ))}
         </div>
@@ -96,14 +96,14 @@ const ferramentas = ["get_status", "start_timer", "stop_timer", "add_entry", "su
 
       <section class="lp-mcp" id="mcp">
         <div>
-          <h2>Conecte em um minuto</h2>
+          <h2>Connect in a minute</h2>
           <p>
-            Gere um token pessoal no painel e cole a URL no seu cliente. Funciona com Claude,
-            Claude Code, Cursor, VS Code e qualquer aplicativo compatível com o Model Context
-            Protocol. Para scripts, a mesma coisa está disponível como API REST.
+            Generate a personal token in the dashboard and paste the URL into your client. Works
+            with Claude, Claude Code, Cursor, VS Code and any app compatible with the Model Context
+            Protocol. For scripts, the same thing is available as a REST API.
           </p>
           <ul class="lp-tools">
-            {ferramentas.map((f, i) => <li class={`lp-tool-${i % 5}`}>{f}</li>)}
+            {tools.map((f, i) => <li class={`lp-tool-${i % 5}`}>{f}</li>)}
           </ul>
         </div>
         <pre class="lp-code">{`claude mcp add --transport http horas \\
@@ -112,21 +112,21 @@ const ferramentas = ["get_status", "start_timer", "stop_timer", "add_entry", "su
       </section>
 
       <section class="lp-final">
-        <h2>Comece a marcar seu tempo hoje.</h2>
-        <p>Gratuito. Sem anúncios, sem rastreadores.</p>
-        <a class="btn btn-dark" href="/signup">Criar conta</a>
+        <h2>Start tracking your time today.</h2>
+        <p>Free. No ads, no trackers.</p>
+        <a class="btn btn-dark" href="/signup">Create account</a>
       </section>
     </main>
 
     <footer class="lp-foot">
-      <span>Feito por {autor} · Astro, Cloudflare Workers e D1</span>
-      <a href="/privacy">Privacidade</a>
+      <span>Made by {author} · Astro, Cloudflare Workers and D1</span>
+      <a href="/privacy">Privacy</a>
     </footer>
   </body>
 </html>
 
 <style>
-  /* Landing: página branca com painéis coloridos bem arredondados. */
+  /* Landing: white page with heavily rounded colored panels. */
   .lp { background: var(--surface); padding: 20px; display: flex; flex-direction: column; gap: 20px; }
   .lp main { display: flex; flex-direction: column; gap: 20px; }
   .lp-top, .lp-section, .lp-mcp, .lp-final, .lp-foot { width: 100%; max-width: 1400px; margin: 0 auto; }
@@ -139,8 +139,8 @@ const ferramentas = ["get_status", "start_timer", "stop_timer", "add_entry", "su
 
   .lp-hero { display: grid; grid-template-columns: 1.2fr 1fr; gap: clamp(32px, 5vw, 64px); align-items: center; margin-top: clamp(40px, 6vw, 72px); }
   .lp-copy h1 { font-size: clamp(2.5rem, 5.2vw, 4rem); line-height: 1.06; margin: 24px 0 0; text-wrap: balance; }
-  .lp-rabisco { display: block; width: min(342px, 70%); margin: 14px 0 20px; }
-  .lp-rabisco path { fill: none; stroke: var(--accent); stroke-width: 5; stroke-linecap: round; }
+  .lp-squiggle { display: block; width: min(342px, 70%); margin: 14px 0 20px; }
+  .lp-squiggle path { fill: none; stroke: var(--accent); stroke-width: 5; stroke-linecap: round; }
   .lp-lead { font-size: 1.125rem; line-height: 1.55; color: var(--text-muted); max-width: 52ch; margin: 0 0 28px; }
   .lp-cta { display: flex; gap: 12px; flex-wrap: wrap; }
 
@@ -148,9 +148,9 @@ const ferramentas = ["get_status", "start_timer", "stop_timer", "add_entry", "su
   .lp-chat, .lp-timer { background: var(--surface); border-radius: var(--radius-xl); box-shadow: var(--shadow); }
   .lp-chat { display: flex; flex-direction: column; gap: 12px; padding: 20px 24px; }
   .lp-msg { padding: 12px 16px; border-radius: var(--radius-lg); max-width: 88%; }
-  .lp-eu { background: var(--ink); color: var(--ink-text); align-self: flex-end; border-bottom-right-radius: 6px; }
-  .lp-ia { background: var(--surface-2); align-self: flex-start; border-bottom-left-radius: 6px; }
-  .lp-ia small { display: block; font-family: var(--mono); font-size: 0.875rem; color: var(--text-muted); margin-bottom: 2px; }
+  .lp-me { background: var(--ink); color: var(--ink-text); align-self: flex-end; border-bottom-right-radius: 6px; }
+  .lp-ai { background: var(--surface-2); align-self: flex-start; border-bottom-left-radius: 6px; }
+  .lp-ai small { display: block; font-family: var(--mono); font-size: 0.875rem; color: var(--text-muted); margin-bottom: 2px; }
   .lp-timer { display: flex; align-items: center; gap: 12px; padding: 16px 20px; font-weight: 500; }
   .lp-timer i { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); flex: none; }
   .lp-timer span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

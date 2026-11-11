@@ -6,30 +6,30 @@ export const prerender = false;
 const user = Astro.locals.user! as typeof Astro.locals.user & { phone?: string | null };
 ---
 
-<Dashboard title="Meus dados" heading="Meus dados" description="Atualize suas informações pessoais.">
+<Dashboard title="My details" heading="My details" description="Update your personal information.">
   <div class="card">
-    <h2>Informações pessoais</h2>
-    <span class="muted">O e-mail é alterado na aba Segurança, com confirmação.</span>
+    <h2>Personal information</h2>
+    <span class="muted">The email is changed in the Security tab, with confirmation.</span>
 
     <form method="post" action="/api/profile" class="stack">
       <div class="field">
-        <label for="nome">Nome</label>
-        <input id="nome" name="name" type="text" value={user.name} autocomplete="name" required />
+        <label for="name">Name</label>
+        <input id="name" name="name" type="text" value={user.name} autocomplete="name" required />
       </div>
 
       <div class="field">
-        <label for="telefone">Telefone</label>
-        <input id="telefone" name="phone" type="tel" value={user.phone ?? ""} autocomplete="tel" />
-        <span class="hint">Opcional.</span>
+        <label for="phone">Phone</label>
+        <input id="phone" name="phone" type="tel" value={user.phone ?? ""} autocomplete="tel" />
+        <span class="hint">Optional.</span>
       </div>
 
       <div class="field">
-        <label for="email">E-mail</label>
+        <label for="email">Email</label>
         <input id="email" type="email" value={user.email} disabled />
-        <span class="hint"><a href="/dashboard/security">Trocar e-mail</a></span>
+        <span class="hint"><a href="/dashboard/security">Change email</a></span>
       </div>
 
-      <div><button type="submit">Salvar alterações</button></div>
+      <div><button type="submit">Save changes</button></div>
     </form>
   </div>
 </Dashboard>

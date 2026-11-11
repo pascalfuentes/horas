@@ -10,44 +10,44 @@ import { PERMISSIONS, can } from "~/lib/permissions";
 export const prerender = false;
 
 /**
- * Servidor MCP remoto (Streamable HTTP, stateless).
+ * Remote MCP server (Streamable HTTP, stateless).
  *
- * Duas formas de autenticar, para caber em qualquer cliente:
- *   POST /mcp            com  Authorization: Bearer hrs_…   (preferida)
- *   POST /mcp/hrs_…      token na URL, para clientes que só aceitam uma URL
+ * Two ways to authenticate, to fit any client:
+ *   POST /mcp            with Authorization: Bearer hrs_…   (preferred)
+ *   POST /mcp/hrs_…      token in the URL, for clients that only accept a URL
  *
- * Stateless: cada requisição monta o servidor, responde em JSON e termina. Não
- * há sessão MCP para guardar, o que é exatamente o que um Worker quer.
+ * Stateless: each request builds the server, responds in JSON and ends. There
+ * is no MCP session to keep, which is exactly what a Worker wants.
  */
 export const POST: APIRoute = async ({ request, locals, params }) => {
-  const portador = await authenticateToken(locals.env, tokenFromHeader(request) ?? params.token ?? null);
-  if (!portador) {
-    const resposta = jsonError("Token ausente ou inválido.", 401);
-    resposta.headers.set("www-authenticate", "Bearer");
-    return resposta;
+  const bearer = await authenticateToken(locals.env, tokenFromHeader(request) ?? params.token ?? null);
+  if (!bearer) {
+    const response = jsonError("Missing or invalid token.", 401);
+    response.headers.set("www-authenticate", "Bearer");
+    return response;
   }
 
   const store = createStore(locals.env.DB, {
-    workspaceId: portador.workspaceId,
-    userId: portador.userId,
-    tz: portador.tz,
+    workspaceId: bearer.workspaceId,
+    userId: bearer.userId,
+    tz: bearer.tz,
   });
 
-  const servidor = createMcpServer(store, can(portador.role, PERMISSIONS.CONTENT_WRITE));
-  const transporte = new WebStandardStreamableHTTPServerTransport({
+  const server = createMcpServer(store, can(bearer.role, PERMISSIONS.CONTENT_WRITE));
+  const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,
   });
-  await servidor.connect(transporte);
-  return transporte.handleRequest(request);
+  await server.connect(transport);
+  return transport.handleRequest(request);
 };
 
-/** Sem stream iniciado pelo servidor nem sessão para encerrar. */
-const naoSuportado: APIRoute = () =>
+/** No server-initiated stream and no session to close. */
+const notSupported: APIRoute = () =>
   new Response(JSON.stringify({ jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed." }, id: null }), {
     status: 405,
     headers: { allow: "POST", "content-type": "application/json" },
   });
 
-export const GET = naoSuportado;
-export const DELETE = naoSuportado;
+export const GET = notSupported;
+export const DELETE = notSupported;

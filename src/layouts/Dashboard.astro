@@ -15,61 +15,62 @@ interface Props {
 
 const { title, heading, description } = Astro.props;
 const user = Astro.locals.user!;
-const atual = Astro.locals.membership;
+const current = Astro.locals.membership;
 const superadmin = canAdministerPlatform(user.role);
 const path = Astro.url.pathname;
 const params = Astro.url.searchParams;
 
-// Para o seletor. Uma consulta por página renderizada é barata e evita que a
-// lista fique velha depois de criar ou sair de um workspace.
-const meusWorkspaces = await userWorkspaces(Astro.locals.env, user.id);
+// For the switcher. One query per rendered page is cheap and keeps the list
+// from going stale after creating or leaving a workspace.
+const myWorkspaces = await userWorkspaces(Astro.locals.env, user.id);
 
-// Convite só existia no link do e-mail. Quem apagou a mensagem ficava sem
-// caminho nenhum, mesmo já estando logado — daí o aviso no topo do painel.
-// Em `/workspaces` ele é omitido porque lá a lista completa já aparece inteira.
-const mostrarConvites = path !== "/workspaces";
-const convitesPendentes = mostrarConvites
+// An invite used to exist only in the email link. Whoever deleted the message
+// had no way in at all, even while logged in — hence the notice at the top of
+// the dashboard. On `/workspaces` it is omitted because the full list is already
+// shown there.
+const showInvites = path !== "/workspaces";
+const pendingInvites = showInvites
   ? await pendingInvitesFor(Astro.locals.env, user.email)
   : [];
 
-const grupos = [
-  ...(atual
+const groups = [
+  ...(current
     ? [
         {
-          grupo: atual.workspaceName,
-          itens: [
-            ...(can(atual.role, PERMISSIONS.CONTENT_READ)
+          group: current.workspaceName,
+          items: [
+            ...(can(current.role, PERMISSIONS.CONTENT_READ)
               ? [
-                  { href: `/w/${atual.workspaceSlug}/time`, label: "Tempo" },
-                  { href: `/w/${atual.workspaceSlug}/reports`, label: "Relatórios" },
-                  { href: `/w/${atual.workspaceSlug}/projects`, label: "Projetos" },
-                  { href: `/w/${atual.workspaceSlug}/integrations`, label: "API e MCP" },
+                  { href: `/w/${current.workspaceSlug}/time`, label: "Time" },
+                  { href: `/w/${current.workspaceSlug}/reports`, label: "Reports" },
+                  { href: `/w/${current.workspaceSlug}/projects`, label: "Projects" },
+                  { href: `/w/${current.workspaceSlug}/integrations`, label: "API & MCP" },
                 ]
               : []),
-            ...(can(atual.role, PERMISSIONS.MEMBERS_READ)
-              ? [{ href: `/w/${atual.workspaceSlug}/members`, label: "Membros" }]
+            ...(can(current.role, PERMISSIONS.MEMBERS_READ)
+              ? [{ href: `/w/${current.workspaceSlug}/members`, label: "Members" }]
               : []),
-            ...(can(atual.role, PERMISSIONS.WORKSPACE_READ)
-              ? [{ href: `/w/${atual.workspaceSlug}/settings`, label: "Configurações" }]
+            ...(can(current.role, PERMISSIONS.WORKSPACE_READ)
+              ? [{ href: `/w/${current.workspaceSlug}/settings`, label: "Settings" }]
               : []),
           ],
         },
       ]
     : []),
   {
-    grupo: "Conta",
-    itens: [
-      { href: "/dashboard/profile", label: "Meus dados" },
-      { href: "/dashboard/security", label: "Segurança" },
+    group: "Account",
+    items: [
+      { href: "/dashboard/profile", label: "My details" },
+      { href: "/dashboard/security", label: "Security" },
     ],
   },
   ...(superadmin
     ? [
         {
-          grupo: "Plataforma",
-          itens: [
-            { href: "/dashboard/admin/users", label: "Usuários" },
-            { href: "/dashboard/admin/audit", label: "Auditoria" },
+          group: "Platform",
+          items: [
+            { href: "/dashboard/admin/users", label: "Users" },
+            { href: "/dashboard/admin/audit", label: "Audit log" },
           ],
         },
       ]
@@ -78,7 +79,7 @@ const grupos = [
 ---
 
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -88,23 +89,23 @@ const grupos = [
   </head>
   <body>
     <div class="app">
-      <nav class="sidenav" aria-label="Navegação principal">
+      <nav class="sidenav" aria-label="Main navigation">
         <a class="brand" href="/dashboard"><span class="logo" aria-hidden="true"></span>{APP_NAME}</a>
-        <details class="seletor-ws" open={!atual}>
-          <summary>{atual ? atual.workspaceName : "Escolher workspace"}</summary>
-          {meusWorkspaces.map((w) => (
-            <a href={`/w/${w.workspaceSlug}/time`} aria-current={w.workspaceSlug === atual?.workspaceSlug ? "true" : undefined}>
+        <details class="ws-picker" open={!current}>
+          <summary>{current ? current.workspaceName : "Choose workspace"}</summary>
+          {myWorkspaces.map((w) => (
+            <a href={`/w/${w.workspaceSlug}/time`} aria-current={w.workspaceSlug === current?.workspaceSlug ? "true" : undefined}>
               {w.workspaceName}
               <small class="muted"> · {ROLE_LABELS[w.role]}</small>
             </a>
           ))}
-          <a href="/workspaces">+ Novo workspace</a>
+          <a href="/workspaces">+ New workspace</a>
         </details>
 
-        {grupos.map((g) => (
+        {groups.map((g) => (
           <>
-            <div class="group">{g.grupo}</div>
-            {g.itens.map((item) => (
+            <div class="group">{g.group}</div>
+            {g.items.map((item) => (
               <a href={item.href} aria-current={path === item.href ? "page" : undefined}>{item.label}</a>
             ))}
           </>
@@ -120,20 +121,20 @@ const grupos = [
           <div class="who">
             <span>
               {user.name}<br />
-              {atual
-                ? <span class="badge">{ROLE_LABELS[atual.role]} · {atual.workspaceName}</span>
+              {current
+                ? <span class="badge">{ROLE_LABELS[current.role]} · {current.workspaceName}</span>
                 : superadmin
-                  ? <span class="badge badge-admin">Superadmin da plataforma</span>
-                  : <span class="badge">Conta</span>}
+                  ? <span class="badge badge-admin">Platform superadmin</span>
+                  : <span class="badge">Account</span>}
             </span>
             <span class="avatar" aria-hidden="true">{user.name.trim().charAt(0).toUpperCase()}</span>
             <form method="post" action="/api/logout" class="inline-form">
-              <button class="btn-ghost btn-sm" type="submit">Sair</button>
+              <button class="btn-ghost btn-sm" type="submit">Log out</button>
             </form>
           </div>
         </div>
         <Alert error={params.get("e")} success={params.get("ok")} />
-        <PendingInvites convites={convitesPendentes} verificado={user.emailVerified} limite={3} />
+        <PendingInvites invites={pendingInvites} verified={user.emailVerified} limit={3} />
         <slot />
       </main>
     </div>

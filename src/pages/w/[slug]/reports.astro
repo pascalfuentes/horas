@@ -6,19 +6,19 @@ import "~/styles/horas.css";
 export const prerender = false;
 
 const ws = Astro.locals.membership!;
-const titulo = `Relatórios — ${ws.workspaceName}`;
+const title = `Reports — ${ws.workspaceName}`;
 ---
 
-<Dashboard title={titulo} heading="Relatórios" description="Para onde foi o seu tempo.">
+<Dashboard title={title} heading="Reports" description="Where your time went.">
   <div
     id="horas-app"
     data-view="reports"
-    data-title={titulo}
+    data-title={title}
     data-base={`/api/w/${ws.workspaceSlug}/horas`}
     data-write={can(ws.role, PERMISSIONS.CONTENT_WRITE) ? "1" : "0"}
   >
-    <p class="muted">Carregando…</p>
+    <p class="muted">Loading…</p>
   </div>
-  <noscript><p class="alert alert-error">Esta tela precisa de JavaScript.</p></noscript>
+  <noscript><p class="alert alert-error">This screen needs JavaScript.</p></noscript>
   <script is:inline src="/app/horas.js" defer></script>
 </Dashboard>

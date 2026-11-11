@@ -9,25 +9,25 @@ import { ROLE_LABELS } from "~/lib/permissions";
 export const prerender = false;
 
 /**
- * Página de aceite. Pública de propósito: quem ainda não tem conta precisa
- * chegar aqui, entender o que é, e criar a conta com o e-mail certo.
+ * Acceptance page. Public on purpose: someone who has no account yet needs to
+ * get here, understand what it is, and create the account with the right email.
  *
- * O que ela mostra é o nome do workspace e o e-mail convidado — informação que
- * quem tem o link já recebeu no próprio e-mail. O id é um UUID, então segue a
- * mesma lógica de um token: só chega aqui quem recebeu.
+ * What it shows is the workspace name and the invited email — information the
+ * holder of the link already received in the email itself. The id is a UUID,
+ * so it follows the same logic as a token: only whoever received it gets here.
  *
- * O aceite em si é que tem as travas, e são do plugin: e-mail da sessão igual
- * ao do convite, e e-mail verificado.
+ * The acceptance itself is what has the locks, and they belong to the plugin:
+ * session email equal to the invite's, and a verified email.
  */
 const id = Astro.params.id ?? "";
 
-const convite = await getDb(Astro.locals.env)
+const invite = await getDb(Astro.locals.env)
   .select({
     id: orgInvitation.id,
     email: orgInvitation.email,
     role: orgInvitation.role,
     status: orgInvitation.status,
-    expiraEm: orgInvitation.expiresAt,
+    expiresAt: orgInvitation.expiresAt,
     workspace: organization.name,
   })
   .from(orgInvitation)
@@ -35,64 +35,64 @@ const convite = await getDb(Astro.locals.env)
   .where(eq(orgInvitation.id, id))
   .get();
 
-const valido =
-  convite && convite.status === "pending" && convite.expiraEm.getTime() > Date.now();
+const valid =
+  invite && invite.status === "pending" && invite.expiresAt.getTime() > Date.now();
 
-const eu = Astro.locals.user;
-const emailConfere = eu && convite && eu.email.toLowerCase() === convite.email.toLowerCase();
-const precisaVerificar = eu && emailConfere && !eu.emailVerified;
+const me = Astro.locals.user;
+const emailMatches = me && invite && me.email.toLowerCase() === invite.email.toLowerCase();
+const needsVerification = me && emailMatches && !me.emailVerified;
 ---
 
 <Auth
-  title="Convite"
-  heading={valido ? `Convite para ${convite!.workspace}` : "Convite indisponível"}
-  subheading={valido ? `Como ${ROLE_LABELS[convite!.role ?? "viewer"]}` : undefined}
+  title="Invite"
+  heading={valid ? `Invite to ${invite!.workspace}` : "Invite unavailable"}
+  subheading={valid ? `As ${ROLE_LABELS[invite!.role ?? "viewer"]}` : undefined}
 >
-  {!valido ? (
+  {!valid ? (
     <>
       <p class="alert alert-error">
-        Este convite é inválido, já foi usado, foi cancelado ou expirou. Peça outro a quem
-        administra o workspace.
+        This invite is invalid, has already been used, was canceled or has expired. Ask whoever
+        administers the workspace for another one.
       </p>
-      <a class="btn btn-block btn-ghost" href="/login">Ir para o login</a>
+      <a class="btn btn-block btn-ghost" href="/login">Go to login</a>
     </>
-  ) : !eu ? (
+  ) : !me ? (
     <>
       <p class="muted">
-        O convite é para <strong>{convite!.email}</strong>. Entre com essa conta, ou crie uma
-        com esse mesmo e-mail — o convite só vale para o endereço que o recebeu.
+        The invite is for <strong>{invite!.email}</strong>. Log in with that account, or create one
+        with that same email — the invite is only valid for the address that received it.
       </p>
       <div class="stack">
-        <a class="btn btn-block" href={`/login?next=${encodeURIComponent(`/invite/${id}`)}`}>Entrar</a>
-        <a class="btn btn-block btn-ghost" href="/signup">Criar conta</a>
+        <a class="btn btn-block" href={`/login?next=${encodeURIComponent(`/invite/${id}`)}`}>Log in</a>
+        <a class="btn btn-block btn-ghost" href="/signup">Create account</a>
       </div>
     </>
-  ) : !emailConfere ? (
+  ) : !emailMatches ? (
     <>
       <p class="alert alert-error">
-        Este convite é para <strong>{convite!.email}</strong>, e você está como
-        <strong> {eu.email}</strong>. Saia e entre com a conta certa.
+        This invite is for <strong>{invite!.email}</strong>, and you are logged in as
+        <strong> {me.email}</strong>. Log out and log in with the right account.
       </p>
-      <form method="post" action="/api/logout"><button class="btn-block btn-ghost" type="submit">Sair</button></form>
+      <form method="post" action="/api/logout"><button class="btn-block btn-ghost" type="submit">Log out</button></form>
     </>
-  ) : precisaVerificar ? (
+  ) : needsVerification ? (
     <>
       <p class="alert alert-info">
-        <span>Confirme seu e-mail antes de aceitar. Sem isso, bastaria cadastrar-se com o
-        endereço de um convidado para herdar o convite dele.</span>
+        <span>Confirm your email before accepting. Without that, signing up with an
+        invitee's address would be enough to inherit their invite.</span>
       </p>
-      <a class="btn btn-block" href="/verify-email">Confirmar e-mail</a>
+      <a class="btn btn-block" href="/verify-email">Confirm email</a>
     </>
   ) : (
     <div class="stack">
       <form method="post" action="/api/invite/accept">
         <input type="hidden" name="id" value={id} />
-        <button class="btn-block" type="submit">Entrar no workspace</button>
+        <button class="btn-block" type="submit">Join workspace</button>
       </form>
       <form method="post" action="/api/invite/accept">
         <input type="hidden" name="id" value={id} />
         <input type="hidden" name="action" value="decline" />
-        <button class="btn-block btn-ghost" type="submit">Recusar</button>
+        <button class="btn-block btn-ghost" type="submit">Decline</button>
       </form>
     </div>
   )}

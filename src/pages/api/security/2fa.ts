@@ -15,18 +15,18 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (denied) return denied;
 
   const form = await request.formData();
-  const acao = str(form, "action");
+  const action = str(form, "action");
   const me = actor(locals);
 
   try {
-    if (acao === "confirm") {
-      const codigo = str(form, "code");
-      if (!codigo) return fail(SETUP, "fields");
+    if (action === "confirm") {
+      const code = str(form, "code");
+      if (!code) return fail(SETUP, "fields");
 
-      // Só aqui o 2FA passa a valer de verdade: `enable` gerou o segredo, mas
-      // `twoFactorEnabled` continua falso até um código ser aceito.
+      // Only here does 2FA really take effect: `enable` generated the secret,
+      // but `twoFactorEnabled` stays false until a code is accepted.
       const res = await callAuth(locals.auth, request, "/two-factor/verify-totp", {
-        code: codigo,
+        code,
       });
       if (!res.ok) return handleAuthResponse(res, SETUP, SETUP);
 
@@ -40,12 +40,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return handleAuthResponse(res, `${PAGE}?ok=ok_2fa_enabled`, SETUP);
     }
 
-    if (acao === "disable") {
-      const senha = str(form, "password");
-      if (!senha) return fail(PAGE, "fields");
+    if (action === "disable") {
+      const password = str(form, "password");
+      if (!password) return fail(PAGE, "fields");
 
       const res = await callAuth(locals.auth, request, "/two-factor/disable", {
-        password: senha,
+        password,
       });
       if (!res.ok) {
         return handleAuthResponse(res, PAGE, PAGE, (c) =>
@@ -65,7 +65,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     return fail(PAGE, "fields");
   } catch (error) {
-    console.error("seguranca/2fa:", error);
+    console.error("security/2fa:", error);
     return fail(PAGE, codeFromAuthError(error));
   }
 };

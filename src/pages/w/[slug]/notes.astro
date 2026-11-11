@@ -10,17 +10,17 @@ import { PERMISSIONS, can } from "~/lib/permissions";
 export const prerender = false;
 
 const ws = Astro.locals.membership!;
-const podeEscrever = can(ws.role, PERMISSIONS.CONTENT_WRITE);
+const canWrite = can(ws.role, PERMISSIONS.CONTENT_WRITE);
 
-// TODA query de dado de negócio filtra por workspace. Sem este `where`, uma
-// pessoa veria o conteúdo de workspaces dos quais nem é membro.
-const notas = await getDb(Astro.locals.env)
+// EVERY business data query filters by workspace. Without this `where`, a
+// person would see the content of workspaces they are not even a member of.
+const notes = await getDb(Astro.locals.env)
   .select({
     id: note.id,
     title: note.title,
     body: note.body,
     createdAt: note.createdAt,
-    autor: userTable.name,
+    author: userTable.name,
   })
   .from(note)
   .leftJoin(userTable, eq(note.authorId, userTable.id))
@@ -31,49 +31,49 @@ const notas = await getDb(Astro.locals.env)
 ---
 
 <Dashboard
-  title={`Anotações — ${ws.workspaceName}`}
-  heading="Anotações"
-  description="Módulo de demonstração — existe para mostrar os papéis de workspace funcionando."
+  title={`Notes — ${ws.workspaceName}`}
+  heading="Notes"
+  description="Demo module — it exists to show workspace roles at work."
 >
-  {podeEscrever ? (
+  {canWrite ? (
     <div class="card">
-      <h2>Nova anotação</h2>
+      <h2>New note</h2>
       <form method="post" action={`/api/w/${ws.workspaceSlug}/notes`} class="stack">
         <div class="field">
-          <label for="titulo">Título</label>
-          <input id="titulo" name="title" type="text" maxlength="160" required />
+          <label for="title">Title</label>
+          <input id="title" name="title" type="text" maxlength="160" required />
         </div>
         <div class="field">
-          <label for="corpo">Conteúdo</label>
-          <textarea id="corpo" name="body" maxlength="4000"></textarea>
+          <label for="body">Content</label>
+          <textarea id="body" name="body" maxlength="4000"></textarea>
         </div>
-        <div><button type="submit">Salvar</button></div>
+        <div><button type="submit">Save</button></div>
       </form>
     </div>
   ) : (
     <p class="alert alert-info">
       <span>
-        Seu papel aqui é somente leitura, então o formulário não aparece. Mais importante:
-        um POST direto em <code>/api/w/{ws.workspaceSlug}/notes</code> também leva 403 — a
-        autorização está no servidor, não na interface.
+        Your role here is read-only, so the form does not show. More importantly:
+        a direct POST to <code>/api/w/{ws.workspaceSlug}/notes</code> also gets a 403 —
+        authorization lives on the server, not in the interface.
       </span>
     </p>
   )}
 
   <div class="card">
-    <h2>Anotações deste workspace ({notas.length})</h2>
-    {notas.length === 0 ? (
-      <p class="empty">Nenhuma anotação ainda.</p>
+    <h2>Notes in this workspace ({notes.length})</h2>
+    {notes.length === 0 ? (
+      <p class="empty">No notes yet.</p>
     ) : (
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Título</th><th>Conteúdo</th><th>Autor</th><th>Criada em</th></tr></thead>
+          <thead><tr><th>Title</th><th>Content</th><th>Author</th><th>Created</th></tr></thead>
           <tbody>
-            {notas.map((n) => (
+            {notes.map((n) => (
               <tr>
                 <td class="wrap"><strong>{n.title}</strong></td>
                 <td class="wrap">{n.body.slice(0, 120)}</td>
-                <td>{n.autor ?? "—"}</td>
+                <td>{n.author ?? "—"}</td>
                 <td>{formatDateTime(n.createdAt)}</td>
               </tr>
             ))}

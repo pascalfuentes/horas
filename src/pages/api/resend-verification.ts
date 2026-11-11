@@ -6,9 +6,9 @@ import { fail, isEmail, ok, str } from "~/lib/http";
 export const prerender = false;
 
 /**
- * Reenvia o link de verificação. Responde igual para endereço existente,
- * inexistente ou já verificado — senão viraria um verificador de contas, do
- * mesmo jeito que o `/forgot-password` já evita ser.
+ * Resends the verification link. Responds the same for an existing,
+ * nonexistent or already verified address — otherwise it would become an
+ * account checker, just as `/forgot-password` already avoids being.
  */
 export const POST: APIRoute = async ({ request, locals }) => {
   const email = str(await request.formData(), "email").toLowerCase();
@@ -20,8 +20,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
       callbackURL: "/login?ok=ok_email_verified",
     });
   } catch (error) {
-    // Silenciado de propósito: ver comentário acima.
-    console.error("reenviar-verificacao:", error);
+    // Silenced on purpose: see the comment above.
+    console.error("resend-verification:", error);
   }
 
   return ok("/verify-email", "ok_verification_resent");

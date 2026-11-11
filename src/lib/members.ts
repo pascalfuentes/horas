@@ -10,14 +10,14 @@ import {
 import { getDb } from "~/lib/auth";
 import type { AppEnv } from "~/lib/env";
 
-/** Membros de um workspace, com os dados da pessoa. */
+/** Members of a workspace, with the person's details. */
 export type WorkspaceMember = {
   memberId: string;
   userId: string;
-  nome: string;
+  name: string;
   email: string;
   role: WorkspaceRole;
-  desde: Date;
+  since: Date;
 };
 
 export async function listMembers(env: AppEnv, workspaceId: string): Promise<WorkspaceMember[]> {
@@ -25,10 +25,10 @@ export async function listMembers(env: AppEnv, workspaceId: string): Promise<Wor
     .select({
       memberId: member.id,
       userId: member.userId,
-      nome: userTable.name,
+      name: userTable.name,
       email: userTable.email,
       role: member.role,
-      desde: member.createdAt,
+      since: member.createdAt,
     })
     .from(member)
     .innerJoin(userTable, eq(userTable.id, member.userId))
@@ -42,9 +42,9 @@ export type WorkspaceInvite = {
   email: string;
   role: WorkspaceRole | null;
   status: string;
-  expiraEm: Date;
-  criadoEm: Date;
-  convidadoPor: string | null;
+  expiresAt: Date;
+  createdAt: Date;
+  invitedBy: string | null;
 };
 
 export async function listInvites(env: AppEnv, workspaceId: string): Promise<WorkspaceInvite[]> {
@@ -54,9 +54,9 @@ export async function listInvites(env: AppEnv, workspaceId: string): Promise<Wor
       email: orgInvitation.email,
       role: orgInvitation.role,
       status: orgInvitation.status,
-      expiraEm: orgInvitation.expiresAt,
-      criadoEm: orgInvitation.createdAt,
-      convidadoPor: userTable.email,
+      expiresAt: orgInvitation.expiresAt,
+      createdAt: orgInvitation.createdAt,
+      invitedBy: userTable.email,
     })
     .from(orgInvitation)
     .leftJoin(userTable, eq(userTable.id, orgInvitation.inviterId))
@@ -66,47 +66,48 @@ export async function listInvites(env: AppEnv, workspaceId: string): Promise<Wor
     .all();
 }
 
-/** Um convite pendente e ainda válido não é "expired" nem "cancelado". */
+/** A pending and still valid invite is neither "expired" nor "canceled". */
 export function isPending(c: WorkspaceInvite): boolean {
-  return c.status === "pending" && c.expiraEm.getTime() > Date.now();
+  return c.status === "pending" && c.expiresAt.getTime() > Date.now();
 }
 
 export function inviteStatus(c: WorkspaceInvite): string {
   if (c.status === "accepted") return "accepted";
-  if (c.status === "rejected") return "recusado";
-  if (c.status === "canceled") return "cancelado";
-  return c.expiraEm.getTime() <= Date.now() ? "expired" : "pending";
+  if (c.status === "rejected") return "declined";
+  if (c.status === "canceled") return "canceled";
+  return c.expiresAt.getTime() <= Date.now() ? "expired" : "pending";
 }
 
 /**
- * Transfere a propriedade do workspace.
+ * Transfers ownership of the workspace.
  *
- * A ORDEM importa: promove a pessoa nova primeiro (o workspace fica com dois
- * owners por um instante) e só então rebaixa quem transferiu. Na ordem inversa,
- * o trigger `keep_one_owner_on_update` abortaria — e estaria certo, porque o
- * workspace ficaria sem dono no meio do caminho.
+ * The ORDER matters: it promotes the new person first (the workspace has two
+ * owners for an instant) and only then demotes whoever transferred. In the
+ * reverse order, the `keep_one_owner_on_update` trigger would abort — and it
+ * would be right, because the workspace would be left without an owner halfway
+ * through.
  *
- * Quem transfere vira `admin`: continua podendo trabalhar, perde só o que é
- * exclusivo de dono (excluir o workspace e transferir de novo).
+ * Whoever transfers becomes `admin`: they can keep working and lose only what
+ * is exclusive to the owner (deleting the workspace and transferring again).
  */
 export async function transferOwnership(
   env: AppEnv,
-  input: { workspaceId: string; deMemberId: string; paraMemberId: string },
+  input: { workspaceId: string; fromMemberId: string; toMemberId: string },
 ): Promise<void> {
   const db = getDb(env);
 
   await db
     .update(member)
     .set({ role: "owner" })
-    .where(and(eq(member.id, input.paraMemberId), eq(member.organizationId, input.workspaceId)));
+    .where(and(eq(member.id, input.toMemberId), eq(member.organizationId, input.workspaceId)));
 
   await db
     .update(member)
     .set({ role: "admin" })
-    .where(and(eq(member.id, input.deMemberId), eq(member.organizationId, input.workspaceId)));
+    .where(and(eq(member.id, input.fromMemberId), eq(member.organizationId, input.workspaceId)));
 }
 
-/** Quantos owners ativos o workspace tem. Usado para mensagens, não para garantir. */
+/** How many active owners the workspace has. Used for messages, not as a guarantee. */
 export async function countOwners(env: AppEnv, workspaceId: string): Promise<number> {
   const row = await getDb(env)
     .select({ n: sql<number>`count(*)` })
@@ -116,7 +117,7 @@ export async function countOwners(env: AppEnv, workspaceId: string): Promise<num
   return Number(row?.n ?? 0);
 }
 
-/** A membership de uma pessoa específica dentro do workspace. */
+/** The membership of a specific person inside the workspace. */
 export async function memberById(env: AppEnv, workspaceId: string, memberId: string) {
   return getDb(env)
     .select({
@@ -124,7 +125,7 @@ export async function memberById(env: AppEnv, workspaceId: string, memberId: str
       userId: member.userId,
       role: member.role,
       email: userTable.email,
-      nome: userTable.name,
+      name: userTable.name,
     })
     .from(member)
     .innerJoin(userTable, eq(userTable.id, member.userId))
@@ -132,7 +133,7 @@ export async function memberById(env: AppEnv, workspaceId: string, memberId: str
     .get();
 }
 
-/** Já existe convite pendente para este e-mail neste workspace? */
+/** Is there already a pending invite for this email in this workspace? */
 export async function hasPendingInvite(
   env: AppEnv,
   workspaceId: string,
@@ -152,7 +153,7 @@ export async function hasPendingInvite(
   return Boolean(row);
 }
 
-/** Essa pessoa já é membro deste workspace? */
+/** Is this person already a member of this workspace? */
 export async function isAlreadyMember(env: AppEnv, workspaceId: string, email: string): Promise<boolean> {
   const row = await getDb(env)
     .select({ id: member.id })
@@ -163,39 +164,40 @@ export async function isAlreadyMember(env: AppEnv, workspaceId: string, email: s
   return Boolean(row);
 }
 
-/** Convite que espera por uma pessoa, visto do lado de quem foi convidado. */
+/** An invite waiting for a person, seen from the invitee's side. */
 export type PendingInvite = {
   id: string;
   workspaceName: string;
   role: WorkspaceRole;
-  convidadoPor: string | null;
-  expiraEm: Date;
+  invitedBy: string | null;
+  expiresAt: Date;
 };
 
 /**
- * Convites válidos endereçados a este e-mail, em qualquer workspace.
+ * Valid invites addressed to this email, in any workspace.
  *
- * Existe para quem já está logado: sem isso o único caminho até um convite é o
- * link do e-mail, e quem apagou a mensagem fica sem saída.
+ * It exists for people who are already signed in: without it the only way to an
+ * invite is the link in the email, and whoever deleted the message is stuck.
  *
- * Casa por e-mail, não por usuário, porque é o e-mail que o convite endereça —
- * a mesma chave que o plugin confere na hora de aceitar. Aqui isso só decide o
- * que aparece na tela; quem autoriza o aceite continua sendo o plugin.
+ * It matches by email, not by user, because the email is what the invite
+ * addresses — the same key the plugin checks at acceptance time. Here it only
+ * decides what shows up on screen; what authorizes the acceptance is still the
+ * plugin.
  *
- * O teto de 20 é anti-abuso: criar workspace é livre, então alguém poderia
- * abrir dezenas e convidar a mesma pessoa de cada um para entulhar a tela dela.
+ * The cap of 20 is anti-abuse: creating a workspace is free, so someone could
+ * open dozens and invite the same person from each one to clutter their screen.
  */
 export async function pendingInvitesFor(
   env: AppEnv,
   email: string,
 ): Promise<PendingInvite[]> {
-  const linhas = await getDb(env)
+  const rows = await getDb(env)
     .select({
       id: orgInvitation.id,
       workspaceName: organization.name,
       role: orgInvitation.role,
-      convidadoPor: userTable.email,
-      expiraEm: orgInvitation.expiresAt,
+      invitedBy: userTable.email,
+      expiresAt: orgInvitation.expiresAt,
     })
     .from(orgInvitation)
     .innerJoin(organization, eq(organization.id, orgInvitation.organizationId))
@@ -211,6 +213,6 @@ export async function pendingInvitesFor(
     .limit(20)
     .all();
 
-  // `role` é nullable no runtime do plugin; o convite sem papel cai no menor.
-  return linhas.map((l) => ({ ...l, role: l.role ?? "viewer" }));
+  // `role` is nullable in the plugin's runtime; an invite with no role falls back to the lowest.
+  return rows.map((l) => ({ ...l, role: l.role ?? "viewer" }));
 }

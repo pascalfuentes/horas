@@ -1,21 +1,21 @@
 import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 /**
- * Espelho em Drizzle das migrations SQL em `migrations/`.
+ * Drizzle mirror of the SQL migrations in `migrations/`.
  *
- * As migrations são escritas à mão (o drizzle-kit não gera os TRIGGERs do
- * invariante de último admin). Este arquivo existe para dar tipagem às
- * queries e para o adapter do Better Auth — mantenha os dois em sincronia.
+ * The migrations are written by hand (drizzle-kit does not generate the
+ * TRIGGERs for the last-admin invariant). This file exists to give typing to
+ * the queries and for the Better Auth adapter — keep the two in sync.
  */
 
 /**
- * Dois níveis de papel, de propósito.
+ * Two levels of role, on purpose.
  *
- * PLATAFORMA (`user.role`) responde uma pergunta só: quem é o superadmin da
- * instalação. Não decide nada dentro de workspace nenhum.
+ * PLATFORM (`user.role`) answers a single question: who is the installation's
+ * superadmin. It decides nothing inside any workspace.
  *
- * WORKSPACE (`member.role`) é quem decide ler e escrever. É por workspace, então
- * a mesma pessoa can ser `owner` num e `viewer` noutro.
+ * WORKSPACE (`member.role`) is what decides reading and writing. It is per
+ * workspace, so the same person can be `owner` in one and `viewer` in another.
  */
 export const PLATFORM_ROLES = ["admin", "user"] as const;
 export type PlatformRole = (typeof PLATFORM_ROLES)[number];
@@ -33,14 +33,14 @@ export const user = sqliteTable("user", {
   image: text("image"),
   createdAt: ts("createdAt").notNull(),
   updatedAt: ts("updatedAt").notNull(),
-  // plugin admin
+  // admin plugin
   role: text("role").$type<PlatformRole>().notNull().default("user"),
   banned: integer("banned", { mode: "boolean" }).default(false),
   banReason: text("banReason"),
   banExpires: ts("banExpires"),
-  // plugin two-factor
+  // two-factor plugin
   twoFactorEnabled: integer("twoFactorEnabled", { mode: "boolean" }).default(false),
-  // aplicação
+  // application
   phone: text("phone"),
 });
 
@@ -59,9 +59,10 @@ export const session = sqliteTable(
     userAgent: text("userAgent"),
     impersonatedBy: text("impersonatedBy"),
     /**
-     * Lembra o último workspace usado, para saber para onde redirecionar.
-     * NUNCA autoriza: a autorização vem do slug na URL, conferido contra a
-     * membership. Um valor único por sessão não sobrevive a duas abas.
+     * Remembers the last workspace used, to know where to redirect.
+     * It NEVER authorizes: authorization comes from the slug in the URL,
+     * checked against the membership. A single value per session does not
+     * survive two tabs.
      */
     activeOrganizationId: text("activeOrganizationId"),
   },
@@ -104,8 +105,8 @@ export const verification = sqliteTable(
 );
 
 /**
- * Segredo TOTP e códigos de recuperação, já criptografados pelo Better Auth.
- * `verified` só vira 1 quando a pessoa confirma o primeiro código.
+ * TOTP secret and recovery codes, already encrypted by Better Auth.
+ * `verified` only becomes 1 when the person confirms the first code.
  */
 export const twoFactor = sqliteTable(
   "twoFactor",
@@ -123,7 +124,7 @@ export const twoFactor = sqliteTable(
   (t) => [index("twoFactor_userId_idx").on(t.userId), index("twoFactor_secret_idx").on(t.secret)],
 );
 
-/** Rate limiting do Better Auth. `lastRequest` é Date.now() em MILISSEGUNDOS. */
+/** Better Auth rate limiting. `lastRequest` is Date.now() in MILLISECONDS. */
 export const rateLimit = sqliteTable("rateLimit", {
   id: text("id").primaryKey(),
   key: text("key").notNull().unique(),
@@ -132,8 +133,8 @@ export const rateLimit = sqliteTable("rateLimit", {
 });
 
 /**
- * Workspace. É a `organization` do plugin — o nome no produto é "workspace",
- * o nome na tabela é o que o plugin espera.
+ * Workspace. It is the plugin's `organization` — the name in the product is
+ * "workspace", the name in the table is what the plugin expects.
  */
 export const organization = sqliteTable(
   "organization",
@@ -143,13 +144,13 @@ export const organization = sqliteTable(
     slug: text("slug").notNull().unique(),
     logo: text("logo"),
     createdAt: ts("createdAt").notNull(),
-    /** JSON serializado pelo plugin. */
+    /** JSON serialized by the plugin. */
     metadata: text("metadata"),
   },
   (t) => [index("organization_slug_idx").on(t.slug)],
 );
 
-/** Quem participa de qual workspace, e com que papel. */
+/** Who belongs to which workspace, and with what role. */
 export const member = sqliteTable(
   "member",
   {
@@ -171,9 +172,9 @@ export const member = sqliteTable(
 );
 
 /**
- * Convite para um workspace. O plugin chama de `invitation`; renomeada aqui
- * porque esse nome já era da tabela de convites global deste projeto (que a
- * migration 0004 aposentou). O `modelName` em src/lib/auth.ts faz a ligação.
+ * Invite to a workspace. The plugin calls it `invitation`; renamed here because
+ * that name already belonged to this project's global invite table (which
+ * migration 0004 retired). The `modelName` in src/lib/auth.ts makes the link.
  */
 export const orgInvitation = sqliteTable(
   "org_invitation",
@@ -183,9 +184,9 @@ export const orgInvitation = sqliteTable(
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
     email: text("email").notNull(),
-    /** Nullable: é o que o runtime do plugin declara. */
+    /** Nullable: that is what the plugin's runtime declares. */
     role: text("role").$type<WorkspaceRole>(),
-    /** O adapter grava mesmo com teams desligado. */
+    /** The adapter writes it even with teams turned off. */
     teamId: text("teamId"),
     status: text("status").notNull().default("pending"),
     expiresAt: ts("expiresAt").notNull(),
@@ -213,8 +214,8 @@ export const auditLog = sqliteTable(
     details: text("details"),
     ip: text("ip"),
     /**
-     * SET NULL, não CASCADE: apagar um workspace não can apagar o registro de
-     * que ele existiu e de quem fez o quê nele.
+     * SET NULL, not CASCADE: deleting a workspace must not delete the record
+     * that it existed and of who did what in it.
      */
     workspaceId: text("workspaceId").references(() => organization.id, { onDelete: "set null" }),
   },
@@ -224,7 +225,7 @@ export const auditLog = sqliteTable(
   ],
 );
 
-/** MÓDULO DE DEMONSTRAÇÃO — ver comentário na migration 0000. */
+/** DEMO MODULE — see the comment in migration 0000. */
 export const note = sqliteTable(
   "note",
   {
@@ -232,7 +233,7 @@ export const note = sqliteTable(
     title: text("title").notNull(),
     body: text("body").notNull().default(""),
     authorId: text("authorId").references(() => user.id, { onDelete: "set null" }),
-    /** Todo dado de negócio pertence a um workspace. */
+    /** All business data belongs to a workspace. */
     workspaceId: text("workspaceId").references(() => organization.id, { onDelete: "cascade" }),
     createdAt: ts("createdAt").notNull(),
     updatedAt: ts("updatedAt").notNull(),
@@ -241,11 +242,11 @@ export const note = sqliteTable(
 );
 
 /**
- * CONTROLE DE TEMPO — ver migration 0006.
+ * TIME TRACKING — see migration 0006.
  *
- * Estes espelhos existem pela tipagem e pela regra da casa (migration e schema
- * andam juntos). O módulo em si (`src/lib/horas.ts`) fala SQL direto com o D1:
- * as queries de relatório ficam mais legíveis assim.
+ * These mirrors exist for the typing and for the house rule (migration and
+ * schema go together). The module itself (`src/lib/horas.ts`) speaks SQL
+ * directly to D1: the report queries are more readable that way.
  */
 export const timeProject = sqliteTable(
   "time_project",
@@ -257,13 +258,13 @@ export const timeProject = sqliteTable(
     color: text("color").notNull().default("#3b82f6"),
     archived: integer("archived", { mode: "boolean" }).notNull().default(false),
     createdAt: text("createdAt").notNull(),
-    /** Valor por hora. NULL = usa o padrão do workspace (migration 0007). */
+    /** Hourly rate. NULL = uses the workspace default (migration 0007). */
     hourlyRate: real("hourlyRate"),
   },
   (t) => [uniqueIndex("time_project_workspace_name_idx").on(t.workspaceId, t.name)],
 );
 
-/** Moeda e taxa padrão do workspace — ver migration 0007. */
+/** The workspace's currency and default rate — see migration 0007. */
 export const timeSettings = sqliteTable("time_settings", {
   workspaceId: text("workspaceId").primaryKey().references(() => organization.id, { onDelete: "cascade" }),
   currency: text("currency").notNull().default("BRL"),
@@ -281,9 +282,9 @@ export const timeEntry = sqliteTable(
     /** JSON: string[] */
     tags: text("tags").notNull().default("[]"),
     billable: integer("billable", { mode: "boolean" }).notNull().default(false),
-    /** ISO-8601 em UTC. */
+    /** ISO-8601 in UTC. */
     start: text("start").notNull(),
-    /** NULL = timer rodando. */
+    /** NULL = timer running. */
     end: text("end"),
     createdAt: text("createdAt").notNull(),
   },
@@ -297,7 +298,7 @@ export const apiToken = sqliteTable(
     userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
     workspaceId: text("workspaceId").notNull().references(() => organization.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    /** SHA-256 do token. O valor em claro nunca é gravado. */
+    /** SHA-256 of the token. The plaintext value is never stored. */
     tokenHash: text("tokenHash").notNull().unique(),
     prefix: text("prefix").notNull(),
     timezone: text("timezone").notNull().default("America/Sao_Paulo"),
@@ -316,9 +317,9 @@ export const schema = {
   rateLimit,
   organization,
   member,
-  // A chave precisa ser o `modelName` configurado no plugin (`org_invitation`),
-  // e não o nome lógico `invitation`: o adapter do Drizzle resolve o modelo pelo
-  // nome da TABELA. Com a chave errada ele acusa "Missing tables: org_invitation".
+  // The key must be the `modelName` configured in the plugin (`org_invitation`),
+  // not the logical name `invitation`: the Drizzle adapter resolves the model by
+  // the TABLE name. With the wrong key it reports "Missing tables: org_invitation".
   org_invitation: orgInvitation,
   auditLog,
   note,

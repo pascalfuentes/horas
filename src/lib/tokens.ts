@@ -1,15 +1,15 @@
 /**
- * Tokens de uso único (convite e, se precisar, qualquer outro fluxo por link).
+ * Single-use tokens (invites and, if needed, any other link-based flow).
  *
- * Regra: o token em claro existe apenas dentro da requisição que o gera e no
- * e-mail. O banco guarda somente o SHA-256. Um vazamento do D1 não permite
- * aceitar convite nenhum.
+ * Rule: the plaintext token exists only inside the request that generates it
+ * and in the email. The database stores only the SHA-256. A D1 leak does not
+ * allow accepting any invite.
  */
 
 const b64url = (bytes: Uint8Array) =>
   btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
-/** 32 bytes de entropia — 256 bits, inadivinhável. */
+/** 32 bytes of entropy — 256 bits, unguessable. */
 export function generateToken(): string {
   return b64url(crypto.getRandomValues(new Uint8Array(32)));
 }
@@ -20,8 +20,8 @@ export async function hashToken(token: string): Promise<string> {
 }
 
 /**
- * Comparação de tempo constante. Comparar segredo com `===` vaza informação
- * pelo tempo de resposta (para no primeiro byte diferente).
+ * Constant-time comparison. Comparing a secret with `===` leaks information
+ * through response time (it stops at the first differing byte).
  */
 export async function timingSafeEqual(a: string, b: string): Promise<boolean> {
   const [ha, hb] = await Promise.all([hashToken(a), hashToken(b)]);

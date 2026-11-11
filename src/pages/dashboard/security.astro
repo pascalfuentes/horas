@@ -6,72 +6,72 @@ import { REQUIRE_2FA_FOR_ADMINS } from "~/config";
 export const prerender = false;
 
 const user = Astro.locals.user!;
-const atual = Astro.locals.session!;
+const current = Astro.locals.session!;
 
-const doisFatoresAtivo = Boolean((user as { twoFactorEnabled?: boolean }).twoFactorEnabled);
-const exigido = REQUIRE_2FA_FOR_ADMINS && user.role === "admin";
+const twoFactorActive = Boolean((user as { twoFactorEnabled?: boolean }).twoFactorEnabled);
+const enforced = REQUIRE_2FA_FOR_ADMINS && user.role === "admin";
 
-const sessoes = await Astro.locals.auth.api.listSessions({ headers: Astro.request.headers });
-const ordenadas = [...sessoes].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+const sessions = await Astro.locals.auth.api.listSessions({ headers: Astro.request.headers });
+const sorted = [...sessions].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 ---
 
-<Dashboard title="Segurança" heading="Segurança" description="Senha, e-mail e dispositivos conectados.">
+<Dashboard title="Security" heading="Security" description="Password, email and connected devices.">
   <div class="card">
-    <h2>Trocar senha</h2>
-    <span class="muted">Ao trocar, todas as outras sessões são encerradas.</span>
+    <h2>Change password</h2>
+    <span class="muted">When you change it, all other sessions are ended.</span>
 
     <form method="post" action="/api/security/password" class="stack">
       <div class="field">
-        <label for="atual">Senha atual</label>
-        <input id="atual" name="current_password" type="password" autocomplete="current-password" required />
+        <label for="current">Current password</label>
+        <input id="current" name="current_password" type="password" autocomplete="current-password" required />
       </div>
       <div class="row">
         <div class="field">
-          <label for="nova">Nova senha</label>
-          <input id="nova" name="new_password" type="password" minlength="10" autocomplete="new-password" required />
+          <label for="new-password">New password</label>
+          <input id="new-password" name="new_password" type="password" minlength="10" autocomplete="new-password" required />
         </div>
         <div class="field">
-          <label for="confirma">Confirmar nova senha</label>
-          <input id="confirma" name="confirm" type="password" minlength="10" autocomplete="new-password" required />
+          <label for="confirm">Confirm new password</label>
+          <input id="confirm" name="confirm" type="password" minlength="10" autocomplete="new-password" required />
         </div>
       </div>
-      <div><button type="submit">Trocar senha</button></div>
+      <div><button type="submit">Change password</button></div>
     </form>
   </div>
 
   <div class="card">
     <h2>
-      Verificação em duas etapas
-      {doisFatoresAtivo
-        ? <> <span class="badge badge-ok">ativa</span></>
-        : <> <span class="badge">desativada</span></>}
+      Two-step verification
+      {twoFactorActive
+        ? <> <span class="badge badge-ok">on</span></>
+        : <> <span class="badge">off</span></>}
     </h2>
     <span class="muted">
-      {doisFatoresAtivo
-        ? "Ao entrar, pedimos um código de seis dígitos do seu app autenticador além da senha."
-        : "Uma segunda prova além da senha. Se a sua senha vazar em outro site, ela sozinha não abre esta conta."}
+      {twoFactorActive
+        ? "When you log in, we ask for a six-digit code from your authenticator app in addition to your password."
+        : "A second proof beyond the password. If your password leaks on another site, it alone will not open this account."}
     </span>
 
-    {doisFatoresAtivo ? (
+    {twoFactorActive ? (
       <div class="row">
-        <a class="btn btn-ghost" href="/dashboard/security/2fa">Gerar novos códigos de recuperação</a>
-        {!exigido && (
+        <a class="btn btn-ghost" href="/dashboard/security/2fa">Generate new recovery codes</a>
+        {!enforced && (
           <form method="post" action="/api/security/2fa" class="inline-form">
             <input type="hidden" name="action" value="disable" />
-            <input name="password" type="password" placeholder="Sua senha" autocomplete="current-password" required />
-            <button class="btn-danger btn-sm" type="submit">Desativar</button>
+            <input name="password" type="password" placeholder="Your password" autocomplete="current-password" required />
+            <button class="btn-danger btn-sm" type="submit">Disable</button>
           </form>
         )}
       </div>
     ) : (
-      <a class="btn" href="/dashboard/security/2fa">Ativar</a>
+      <a class="btn" href="/dashboard/security/2fa">Enable</a>
     )}
 
-    {exigido && doisFatoresAtivo && (
+    {enforced && twoFactorActive && (
       <p class="muted" style="margin:14px 0 0">
         <small>
-          Sua conta é de administrador, então a verificação em duas etapas é obrigatória e não
-          can ser desativada. Para desligar, mude <code>REQUIRE_2FA_FOR_ADMINS</code> em
+          Yours is an administrator account, so two-step verification is mandatory and cannot
+          be disabled. To turn it off, change <code>REQUIRE_2FA_FOR_ADMINS</code> in
           <code>src/config.ts</code>.
         </small>
       </p>
@@ -79,94 +79,94 @@ const ordenadas = [...sessoes].sort((a, b) => b.createdAt.getTime() - a.createdA
   </div>
 
   <div class="card">
-    <h2>Trocar e-mail</h2>
+    <h2>Change email</h2>
     <span class="muted">
-      Enviamos um link de confirmação para <strong>{user.email}</strong> — o endereço atual.
-      A troca só acontece depois que você clicar nele.
+      We send a confirmation link to <strong>{user.email}</strong> — the current address.
+      The change only happens after you click it.
     </span>
 
     <form method="post" action="/api/security/email" class="stack">
       <div class="field">
-        <label for="email">Novo e-mail</label>
+        <label for="email">New email</label>
         <input id="email" name="email" type="email" autocomplete="email" required />
       </div>
-      <div><button type="submit" class="btn-ghost">Pedir troca de e-mail</button></div>
+      <div><button type="submit" class="btn-ghost">Request email change</button></div>
     </form>
   </div>
 
   <div class="card">
-    <h2>Seus dados</h2>
+    <h2>Your data</h2>
     <span class="muted">
-      A <a href="/privacy">política de privacidade</a> explica o que guardamos e por quê.
-      Aqui você exerce os dois direitos que ela promete.
+      The <a href="/privacy">privacy policy</a> explains what we store and why.
+      Here you exercise the two rights it promises.
     </span>
 
     <div class="row">
-      <a class="btn btn-ghost" href="/api/account/export" download>Baixar meus dados (JSON)</a>
+      <a class="btn btn-ghost" href="/api/account/export" download>Download my data (JSON)</a>
     </div>
     <span class="hint muted">
       <small>
-        Senha, segredo de 2FA e códigos de recuperação não vão no arquivo — são credenciais de
-        acesso, não informação sobre você, e exportá-las só criaria um jeito novo de vazar a conta.
+        Password, 2FA secret and recovery codes are not in the file — they are access
+        credentials, not information about you, and exporting them would only create a new way to leak the account.
       </small>
     </span>
   </div>
 
   <div class="card">
-    <h2>Apagar minha conta</h2>
+    <h2>Delete my account</h2>
     <span class="muted">
-      Apaga seus dados de conta, sessões e métodos de login. <strong>Não tem volta.</strong>
-      A trilha de auditoria é preservada de forma desassociada: a ação e o horário continuam,
-      quem fez não — ela existe para a segurança de todas as pessoas do sistema.
+      Deletes your account data, sessions and login methods. <strong>There is no going back.</strong>
+      The audit trail is preserved in dissociated form: the action and the time remain,
+      who did it does not — it exists for the security of everyone in the system.
     </span>
 
     <form method="post" action="/api/account/delete" class="stack" style="max-width:520px">
       <div class="field">
-        <label for="confirmacao">Digite seu e-mail para confirmar</label>
-        <input id="confirmacao" name="confirmation" type="text" autocomplete="off"
+        <label for="confirmation">Type your email to confirm</label>
+        <input id="confirmation" name="confirmation" type="text" autocomplete="off"
                placeholder={user.email} required />
       </div>
       <div class="field">
-        <label for="senha-apagar">Sua senha</label>
-        <input id="senha-apagar" name="password" type="password" autocomplete="current-password" required />
+        <label for="delete-password">Your password</label>
+        <input id="delete-password" name="password" type="password" autocomplete="current-password" required />
       </div>
-      <div><button class="btn-danger" type="submit">Apagar minha conta definitivamente</button></div>
+      <div><button class="btn-danger" type="submit">Delete my account permanently</button></div>
     </form>
 
-    {exigido && (
+    {enforced && (
       <p class="muted" style="margin:14px 0 0">
         <small>
-          Se você for o único administrador ativo, o banco não permite apagar esta conta —
-          promova outra pessoa antes.
+          If you are the only active administrator, the database does not allow deleting this
+          account — promote someone else first.
         </small>
       </p>
     )}
   </div>
 
   <div class="card">
-    <h2>Sessões ativas</h2>
-    <span class="muted">Dispositivos com acesso à sua conta agora.</span>
+    <h2>Active sessions</h2>
+    <span class="muted">Devices with access to your account right now.</span>
 
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Dispositivo</th><th>IP</th><th>Início</th><th>Expira</th><th></th></tr>
+          <tr><th>Device</th><th>IP</th><th>Started</th><th>Expires</th><th></th></tr>
         </thead>
         <tbody>
-          {ordenadas.map((s) => (
+          {sorted.map((s) => (
             <tr>
               <td class="wrap">
-                {s.userAgent ? s.userAgent.slice(0, 60) : "Desconhecido"}
-                {s.token === atual.token && <> <span class="badge badge-ok">esta sessão</span></>}
+                {s.userAgent ? s.userAgent.slice(0, 60) : "Unknown"}
+                {s.token === current.token && <> <span class="badge badge-ok">this session</span></>}
               </td>
               <td>{s.ipAddress || "—"}</td>
               <td>{formatDateTime(s.createdAt)}</td>
               <td>{formatDateTime(s.expiresAt)}</td>
               <td>
-                {s.token !== atual.token && (
+                {s.token !== current.token && (
                   <form method="post" action="/api/security/session" class="inline-form">
                     <input type="hidden" name="token" value={s.token} />
-                    <button class="btn-danger btn-sm" type="submit">Encerrar</button>
+                    <button class="btn-danger btn-sm" type="submit">End</button>
                   </form>
                 )}
               </td>

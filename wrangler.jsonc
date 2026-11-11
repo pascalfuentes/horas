@@ -1,13 +1,13 @@
-// Versão do TEMPLATE.
+// TEMPLATE version.
 //
-// O database_id é um placeholder reconhecível. Ele tem formato válido de
-// propósito, para um clone rodar localmente (`npm run db:local && npm run dev`)
-// sem configurar nada — mas `npm run db:remote` recusa enquanto ele estiver
-// aqui, senão migrations de um projeto novo cairiam no banco de produção de
-// outro sem reclamar.
+// The database_id is a recognizable placeholder. It has a valid format on
+// purpose, so a clone can run locally (`npm run db:local && npm run dev`)
+// without configuring anything. But `npm run db:remote` refuses while it is
+// here, otherwise a new project's migrations would land in another project's
+// production database without complaint.
 //
-// `npm run new-project` grava os valores reais em wrangler.local.jsonc, que
-// fica fora do Git e vence sobre este arquivo.
+// `npm run new-project` writes the real values to wrangler.local.jsonc, which
+// stays out of Git and wins over this file.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "horas",
@@ -15,9 +15,9 @@
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
 
-  // Pública de propósito: a sitekey do Turnstile é renderizada no HTML.
-  // A chave secreta correspondente é um secret (`wrangler secret put`).
-  // Vazia = sem Turnstile; o widget some e a verificação é ignorada.
+  // Public on purpose: the Turnstile sitekey is rendered in the HTML.
+  // The matching secret key is a secret (`wrangler secret put`).
+  // Empty = no Turnstile; the widget disappears and verification is skipped.
   "vars": {
     "OPERATOR_NAME": "",
     "OPERATOR_CONTACT": "",
@@ -33,11 +33,11 @@
     }
   ]
 
-  // Secrets (NUNCA no repositório — use `wrangler secret put <NOME>`):
+  // Secrets (NEVER in the repository: use `wrangler secret put <NAME>`):
   //   BETTER_AUTH_SECRET   openssl rand -base64 32
-  //   BETTER_AUTH_URL      https://seu-dominio.com
-  //   RESEND_API_KEY       opcional — sem ele, e-mails vão para o log
-  //   EMAIL_FROM           "Nome <no-reply@seu-dominio.com>"
-  //   SETUP_SECRET         usado uma única vez para criar o primeiro admin
-  //   TURNSTILE_SECRET_KEY opcional (a sitekey pública fica em "vars" acima)
+  //   BETTER_AUTH_URL      https://your-domain.com
+  //   RESEND_API_KEY       optional: without it, e-mails go to the log
+  //   EMAIL_FROM           "Name <no-reply@your-domain.com>"
+  //   SETUP_SECRET         used a single time to create the first admin
+  //   TURNSTILE_SECRET_KEY optional (the public sitekey lives in "vars" above)
 }

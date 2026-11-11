@@ -9,31 +9,31 @@ export const prerender = false;
 const next = safeNext(Astro.url.searchParams.get("next") ?? "");
 ---
 
-<Auth title="Entrar" heading="Entrar" subheading="Acesse sua conta para continuar.">
+<Auth title="Log in" heading="Log in" subheading="Access your account to continue.">
   <form method="post" action="/api/login" class="stack">
     <input type="hidden" name="next" value={next} />
 
     <div class="field">
-      <label for="email">E-mail</label>
+      <label for="email">Email</label>
       <input id="email" name="email" type="email" autocomplete="username" required autofocus />
     </div>
 
     <div class="field">
-      <label for="senha">Senha</label>
-      <input id="senha" name="password" type="password" autocomplete="current-password" required />
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required />
     </div>
 
     <Turnstile />
-    <button class="btn-block" type="submit">Entrar</button>
+    <button class="btn-block" type="submit">Log in</button>
   </form>
 
-  <SocialButtons next={next} verbo="Entrar com" />
+  <SocialButtons next={next} verb="Log in with" />
 
   <p class="auth-foot">
-    <a href="/forgot-password">Esqueci minha senha</a>
+    <a href="/forgot-password">Forgot my password</a>
   </p>
-  <p class="auth-foot">Ainda não tem conta? <a href="/signup">Criar conta</a></p>
+  <p class="auth-foot">Don't have an account yet? <a href="/signup">Create account</a></p>
   <p class="auth-foot muted">
-    <small><a href="/privacy">Política de privacidade</a></small>
+    <small><a href="/privacy">Privacy policy</a></small>
   </p>
 </Auth>

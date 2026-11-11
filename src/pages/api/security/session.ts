@@ -15,7 +15,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!token) return fail("/dashboard/security", "fields");
 
   try {
-    // O Better Auth só revoga sessões do próprio usuário por esta rota.
+    // Better Auth only revokes the user's own sessions through this route.
     await locals.auth.api.revokeSession({ body: { token }, headers: request.headers });
   } catch (error) {
     return fail("/dashboard/security", codeFromAuthError(error));

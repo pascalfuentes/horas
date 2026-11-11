@@ -4,29 +4,30 @@ import Auth from "~/layouts/Auth.astro";
 export const prerender = false;
 
 /**
- * O e-mail NÃO viaja na URL de propósito: ficaria no histórico do navegador e
- * no Referer de qualquer link clicado a partir daqui. Quem quiser reenviar
- * digita de novo — e o reenvio responde igual para endereço existente ou não.
+ * The email does NOT travel in the URL on purpose: it would end up in the
+ * browser history and in the Referer of any link clicked from here. Whoever
+ * wants a resend types it again — and the resend responds the same whether the
+ * address exists or not.
  */
 ---
 
 <Auth
-  title="Confirme seu e-mail"
-  heading="Confirme seu e-mail"
-  subheading="Enviamos um link para o endereço informado."
+  title="Confirm your email"
+  heading="Confirm your email"
+  subheading="We sent a link to the address you provided."
 >
   <p class="muted">
-    Abra o link para ativar sua conta. Ele vale por 1 hora. Se não chegou em alguns minutos,
-    confira a caixa de spam ou peça outro abaixo.
+    Open the link to activate your account. It is valid for 1 hour. If it has not arrived in a
+    few minutes, check your spam folder or request another one below.
   </p>
 
   <form method="post" action="/api/resend-verification" class="stack">
     <div class="field">
-      <label for="email">E-mail do cadastro</label>
+      <label for="email">Signup email</label>
       <input id="email" name="email" type="email" autocomplete="username" required />
     </div>
-    <button class="btn-ghost btn-block" type="submit">Reenviar o link</button>
+    <button class="btn-ghost btn-block" type="submit">Resend the link</button>
   </form>
 
-  <p class="auth-foot"><a href="/login">Voltar ao login</a></p>
+  <p class="auth-foot"><a href="/login">Back to login</a></p>
 </Auth>

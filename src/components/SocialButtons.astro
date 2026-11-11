@@ -2,28 +2,28 @@
 import { socialProviders } from "~/lib/env";
 
 interface Props {
-  /** Para onde voltar depois de entrar. */
+  /** Where to return to after logging in. */
   next?: string;
-  /** Texto dos botões: "Entrar com" no login, "Criar conta com" no convite. */
-  verbo?: string;
+  /** Button text: "Log in with" on login, "Create account with" on the invite. */
+  verb?: string;
 }
 
-const { next = "/dashboard", verbo = "Entrar com" } = Astro.props;
-const provedores = socialProviders(Astro.locals.env);
+const { next = "/dashboard", verb = "Log in with" } = Astro.props;
+const providers = socialProviders(Astro.locals.env);
 
-const NOMES = { google: "Google", github: "GitHub" } as const;
+const NAMES = { google: "Google", github: "GitHub" } as const;
 ---
 
-{provedores.length > 0 && (
+{providers.length > 0 && (
   <>
-    <div class="divisor"><span>ou</span></div>
+    <div class="divider"><span>or</span></div>
 
     <div class="stack">
-      {provedores.map((p) => (
+      {providers.map((p) => (
         <form method="post" action="/api/social">
           <input type="hidden" name="provider" value={p} />
           <input type="hidden" name="next" value={next} />
-          <button class="btn-ghost btn-block" type="submit">{verbo} {NOMES[p]}</button>
+          <button class="btn-ghost btn-block" type="submit">{verb} {NAMES[p]}</button>
         </form>
       ))}
     </div>

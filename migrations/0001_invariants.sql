@@ -1,10 +1,10 @@
--- "Sempre tem que ter um admin" — o invariante mora no BANCO, não na aplicação.
--- Checagem em JavaScript não protege contra duas requisições simultâneas
--- rebaixando os dois últimos admins. Estes triggers são atômicos.
+-- "There must always be an admin": the invariant lives in the DATABASE, not
+-- in the application. A JavaScript check does not protect against two
+-- simultaneous requests demoting the last two admins. These triggers are atomic.
 --
--- Admin "ativo" = role 'admin' E não banido.
--- Ao violar, o SQLite aborta com a mensagem 'LAST_ADMIN', que a camada de
--- aplicação traduz numa mensagem legível.
+-- "Active" admin = role 'admin' AND not banned.
+-- On violation, SQLite aborts with the message 'LAST_ADMIN', which the
+-- application layer translates into a readable message.
 
 CREATE TRIGGER "keep_one_admin_on_update"
 BEFORE UPDATE OF "role", "banned" ON "user"

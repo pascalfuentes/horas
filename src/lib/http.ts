@@ -1,79 +1,79 @@
 /**
- * Mensagens de feedback viajam como CÓDIGO na querystring, nunca como texto
- * livre. Assim nada que o usuário digitou volta refletido na URL.
+ * Feedback messages travel as a CODE in the query string, never as free text.
+ * That way nothing the user typed comes back reflected in the URL.
  */
 export const MESSAGES: Record<string, string> = {
-  // erros
-  fields: "Preencha todos os campos obrigatórios.",
-  credentials: "E-mail ou senha incorretos.",
-  password_short: "A senha precisa de pelo menos 10 caracteres.",
-  password_mismatch: "As senhas não conferem.",
-  current_password: "A senha atual está incorreta.",
-  invalid_email: "Informe um e-mail válido.",
-  email_in_use: "Não foi possível usar este e-mail.",
-  invalid_invite: "Convite inválido, expirado ou já utilizado.",
-  duplicate_invite: "Já existe um convite pendente para este e-mail.",
-  user_exists: "Já existe uma conta com este e-mail.",
-  last_admin: "Esta é a única conta de administrador ativa. Promova outra pessoa antes.",
+  // errors
+  fields: "Fill in all required fields.",
+  credentials: "Incorrect email or password.",
+  password_short: "Password must be at least 10 characters.",
+  password_mismatch: "Passwords don't match.",
+  current_password: "Current password is incorrect.",
+  invalid_email: "Enter a valid email.",
+  email_in_use: "This email can't be used.",
+  invalid_invite: "This invitation is invalid, expired or already used.",
+  duplicate_invite: "There is already a pending invitation for this email.",
+  user_exists: "An account with this email already exists.",
+  last_admin: "This is the only active administrator account. Promote someone else first.",
   not_recipient:
-    "Este convite é para outro e-mail. Entre com a conta do endereço que recebeu o convite.",
-  invite_expired: "Este convite expirou ou já foi usado. Peça outro.",
-  already_member: "Essa pessoa já participa deste workspace.",
-  invite_pending: "Já existe um convite pendente para esse e-mail.",
-  own_membership: "Você não can fazer isso com a sua própria participação.",
-  invalid_role: "Papel inválido.",
+    "This invitation is for another email. Sign in with the account for the address that received it.",
+  invite_expired: "This invitation has expired or was already used. Ask for a new one.",
+  already_member: "This person is already a member of this workspace.",
+  invite_pending: "There is already a pending invitation for this email.",
+  own_membership: "You can't do this to your own membership.",
+  invalid_role: "Invalid role.",
   last_owner:
-    "Você é a única pessoa dona de um workspace que tem outros membros. Transfira a propriedade antes de apagar a conta.",
-  no_permission: "Você não tem permissão para esta ação.",
-  email_not_verified: "Confirme seu e-mail antes de entrar. Reenviamos o link, se precisar.",
-  turnstile: "Não foi possível confirmar que você não é um robô. Tente de novo.",
-  social_unavailable: "Esse método de login não está disponível.",
+    "You are the sole owner of a workspace that has other members. Transfer ownership before deleting your account.",
+  no_permission: "You don't have permission to do this.",
+  email_not_verified: "Confirm your email before signing in. We can resend the link if you need it.",
+  turnstile: "We couldn't confirm you're not a robot. Try again.",
+  social_unavailable: "This sign-in method isn't available.",
   social_failed:
-    "Não foi possível entrar com essa conta. Se ela estiver desativada, fale com um administrador.",
-  rate_limit: "Muitas tentativas. Espere um pouco e tente de novo.",
-  own_role: "Você não can mudar o próprio papel.",
-  own_status: "Você não can desativar a própria conta.",
-  confirm_name: "Digite o nome do workspace exatamente como aparece para confirmar.",
-  confirm_email: "Digite seu e-mail exatamente como aparece na conta para confirmar.",
-  error: "Algo deu errado. Tente de novo.",
-  invalid_code: "Código incorreto. Confira o app e tente de novo.",
-  code_locked: "Muitas tentativas erradas. Espere 15 minutos.",
-  two_factor_active: "A verificação em duas etapas já está ativa nesta conta.",
-  two_factor_required: "Contas de administrador precisam da verificação em duas etapas.",
+    "We couldn't sign you in with this account. If it has been disabled, contact an administrator.",
+  rate_limit: "Too many attempts. Wait a moment and try again.",
+  own_role: "You can't change your own role.",
+  own_status: "You can't disable your own account.",
+  confirm_name: "Type the workspace name exactly as shown to confirm.",
+  confirm_email: "Type your email exactly as it appears on your account to confirm.",
+  error: "Something went wrong. Try again.",
+  invalid_code: "Incorrect code. Check the app and try again.",
+  code_locked: "Too many wrong attempts. Wait 15 minutes.",
+  two_factor_active: "Two-step verification is already enabled on this account.",
+  two_factor_required: "Administrator accounts require two-step verification.",
 
-  // sucessos
-  ok_profile: "Perfil atualizado.",
-  ok_password: "Senha alterada. As outras sessões foram encerradas.",
-  ok_email: "Enviamos um link de confirmação para o seu e-mail atual.",
-  ok_invite: "Convite enviado.",
-  ok_invite_resent: "Convite reenviado.",
-  ok_invite_revoked: "Convite revogado.",
-  ok_role: "Papel atualizado.",
-  ok_disabled: "Usuário desativado.",
-  ok_enabled: "Usuário reativado.",
-  ok_sessions: "Sessões revogadas.",
-  ok_2fa_reset: "Verificação em duas etapas removida. A pessoa vai configurar de novo no próximo acesso.",
-  no_2fa: "Esta conta não tem verificação em duas etapas ativa.",
-  ok_session: "Sessão encerrada.",
-  ok_reset: "Se existir uma conta com este e-mail, enviamos o link de redefinição.",
-  ok_signup: "Conta criada. Confirme o e-mail para entrar.",
-  ok_verification_resent: "Se o endereço precisar de confirmação, enviamos o link de novo.",
-  ok_email_verified: "E-mail confirmado. Agora é só entrar.",
-  ok_note: "Anotação salva.",
-  ok_workspace_created: "Workspace criado. Você é o dono dele.",
-  ok_workspace_renamed: "Workspace renomeado.",
-  ok_workspace_deleted: "Workspace excluído.",
-  ok_invite_sent: "Convite enviado.",
-  ok_invite_cancelled: "Convite cancelado.",
-  ok_member_role: "Papel atualizado.",
-  ok_member_removed: "Membro removido.",
-  ok_left: "Você saiu do workspace.",
-  ok_transferred: "Propriedade transferida. Você agora é administrador.",
-  ok_invite_accepted: "Convite aceito. Bem-vindo!",
-  ok_account_deleted: "Sua conta foi apagada.",
-  ok_2fa_enabled: "Verificação em duas etapas ativada.",
-  ok_2fa_disabled: "Verificação em duas etapas desativada.",
-  ok_2fa_codes: "Novos códigos de recuperação gerados. Os antigos não valem mais.",
+  // successes
+  ok_profile: "Profile updated.",
+  ok_password: "Password changed. Your other sessions were signed out.",
+  ok_email: "We sent a confirmation link to your current email.",
+  ok_invite: "Invitation sent.",
+  ok_invite_resent: "Invitation resent.",
+  ok_invite_revoked: "Invitation revoked.",
+  ok_role: "Role updated.",
+  ok_disabled: "User disabled.",
+  ok_enabled: "User re-enabled.",
+  ok_sessions: "Sessions revoked.",
+  ok_2fa_reset: "Two-step verification removed. They will set it up again the next time they sign in.",
+  no_2fa: "This account doesn't have two-step verification enabled.",
+  ok_session: "Session signed out.",
+  ok_reset: "If an account exists for this email, we sent a reset link.",
+  ok_signup: "Account created. Confirm your email to sign in.",
+  ok_verification_resent: "If the address needs confirmation, we sent the link again.",
+  ok_email_verified: "Email confirmed. You can sign in now.",
+  ok_note: "Note saved.",
+  ok_workspace_created: "Workspace created. You are its owner.",
+  ok_workspace_renamed: "Workspace renamed.",
+  ok_workspace_deleted: "Workspace deleted.",
+  ok_invite_sent: "Invitation sent.",
+  ok_invite_cancelled: "Invitation canceled.",
+  ok_member_role: "Role updated.",
+  ok_member_removed: "Member removed.",
+  ok_left: "You left the workspace.",
+  ok_transferred: "Ownership transferred. You are now an administrator.",
+  ok_invite_accepted: "Invitation accepted. Welcome!",
+  ok_account_deleted: "Your account was deleted.",
+  ok_2fa_enabled: "Two-step verification enabled.",
+  ok_2fa_disabled: "Two-step verification disabled.",
+  ok_2fa_codes: "New recovery codes generated. The old ones no longer work.",
 };
 
 export function messageFor(code: string | null): string | null {
@@ -81,13 +81,13 @@ export function messageFor(code: string | null): string | null {
   return MESSAGES[code] ?? null;
 }
 
-/** Redireciona de volta para `path` com um código de erro. */
+/** Redirects back to `path` with an error code. */
 export function fail(path: string, code: keyof typeof MESSAGES | string, extra?: string): Response {
   const url = `${path}${path.includes("?") ? "&" : "?"}e=${encodeURIComponent(code)}${extra ?? ""}`;
   return new Response(null, { status: 303, headers: { Location: url } });
 }
 
-/** Redireciona de volta para `path` com um código de sucesso. */
+/** Redirects back to `path` with a success code. */
 export function ok(path: string, code?: keyof typeof MESSAGES | string): Response {
   const url = code ? `${path}${path.includes("?") ? "&" : "?"}ok=${encodeURIComponent(code)}` : path;
   return new Response(null, { status: 303, headers: { Location: url } });
@@ -103,8 +103,9 @@ export function str(form: FormData, key: string): string {
 }
 
 /**
- * Cloudflare Turnstile. Sem `TURNSTILE_SECRET_KEY` configurada, passa direto —
- * o template roda sem exigir que você crie um widget primeiro.
+ * Cloudflare Turnstile. Without `TURNSTILE_SECRET_KEY` configured, it passes
+ * straight through — the template runs without requiring you to create a
+ * widget first.
  */
 export async function verifyTurnstile(
   secret: string | undefined,
@@ -132,8 +133,8 @@ export async function verifyTurnstile(
 }
 
 /**
- * Better Auth devolve `Response` com os cookies de sessão. Formulários HTML
- * precisam de um 303, não de JSON — então transplantamos os Set-Cookie.
+ * Better Auth returns a `Response` with the session cookies. HTML forms need a
+ * 303, not JSON — so we transplant the Set-Cookie headers.
  */
 export function redirectWithCookies(from: Response, location: string): Response {
   const headers = new Headers({ Location: location });
@@ -142,18 +143,18 @@ export function redirectWithCookies(from: Response, location: string): Response 
 }
 
 /**
- * Com `asResponse: true`, o Better Auth NÃO lança em erro — devolve um
- * `Response` 4xx com `{ code, message }` no corpo. Redirecionar sem olhar o
- * status manda a pessoa para o dashboard como se tivesse entrado, ela é
- * expulsa de volta para o login e não recebe explicação nenhuma.
+ * With `asResponse: true`, Better Auth does NOT throw on error — it returns a
+ * 4xx `Response` with `{ code, message }` in the body. Redirecting without
+ * looking at the status sends the person to the dashboard as if they had signed
+ * in, they get kicked back to the login and receive no explanation at all.
  *
- * Toda chamada com `asResponse` passa por aqui.
+ * Every call with `asResponse` goes through here.
  */
 export async function handleAuthResponse(
   res: Response,
   onSuccess: string,
   onFailure: string,
-  /** Reescreve o código de erro antes de redirecionar (ex.: "senha atual errada"). */
+  /** Rewrites the error code before redirecting (e.g. "wrong current password"). */
   rewrite?: (code: string) => string,
 ): Promise<Response> {
   if (res.ok) return redirectWithCookies(res, onSuccess);
@@ -163,7 +164,7 @@ export async function handleAuthResponse(
   return fail(onFailure, rewrite ? rewrite(code) : code);
 }
 
-/** Erro lançado pelo Better Auth → código de mensagem nosso. */
+/** Error thrown by Better Auth → our message code. */
 export function codeFromAuthError(error: unknown): string {
   const raw = `${(error as { body?: { code?: string; message?: string } })?.body?.code ?? ""} ${
     (error as { message?: string })?.message ?? ""
@@ -171,7 +172,7 @@ export function codeFromAuthError(error: unknown): string {
   return mapAuthCode(raw, (error as { statusCode?: number })?.statusCode);
 }
 
-/** Nunca vaza detalhe interno: mapeia para as mensagens de `MESSAGES`. */
+/** Never leaks internal detail: maps to the messages in `MESSAGES`. */
 function mapAuthCode(input: string, status?: number): string {
   const raw = input.toUpperCase();
   if (status === 429) return "rate_limit";
@@ -186,7 +187,7 @@ function mapAuthCode(input: string, status?: number): string {
   if (raw.includes("ALREADY_MEMBER") || raw.includes("ALREADY_EXISTS_IN_ORGANIZATION")) return "already_member";
   if (raw.includes("INVITATION_ALREADY")) return "invite_pending";
   if (raw.includes("EMAIL_NOT_VERIFIED")) return "email_not_verified";
-  // Nomes vindos de TWO_FACTOR_ERROR_CODES do Better Auth.
+  // Names from Better Auth's TWO_FACTOR_ERROR_CODES.
   if (raw.includes("TEMPORARILY_LOCKED") || raw.includes("TOO_MANY_ATTEMPTS")) return "code_locked";
   if (raw.includes("ALREADY_ENABLED")) return "two_factor_active";
   if (raw.includes("INVALID_CODE") || raw.includes("INVALID_BACKUP_CODE") || raw.includes("OTP_HAS_EXPIRED")) {
@@ -198,8 +199,8 @@ function mapAuthCode(input: string, status?: number): string {
 }
 
 /**
- * Evita open redirect: só aceita caminho relativo da própria aplicação.
- * `//evil.com` e `https://evil.com` são descartados.
+ * Prevents open redirects: only accepts a relative path within the application
+ * itself. `//evil.com` and `https://evil.com` are discarded.
  */
 export function safeNext(value: string, fallback = "/dashboard"): string {
   if (!value.startsWith("/") || value.startsWith("//")) return fallback;

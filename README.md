@@ -1,163 +1,168 @@
 # Horas
 
-Controle de tempo gratuito que conversa com a sua IA. Timer, projetos e
-relatórios na web — e um servidor MCP embutido, para o Claude (ou qualquer
-cliente MCP) iniciar timers, lançar horas e responder "quanto trabalhei essa
-semana?" por você.
+Free time tracking that talks to your AI. Timer, projects and reports on the
+web, plus a built-in MCP server, so Claude (or any MCP client) can start
+timers, log hours and answer "how much did I work this week?" for you.
 
 ```
 Astro 7 (SSR)  ·  Cloudflare Workers  ·  D1  ·  Better Auth  ·  MCP (Streamable HTTP)
 ```
 
-## O que tem
+## What's included
 
 | | |
 |---|---|
-| **Timer** | iniciar, parar, continuar um lançamento; um timer por pessoa, sincronizado entre abas e com a IA |
-| **Lançamento manual** | dia, início, fim ou duração digitada (`1h30`, `1:30`, `90`); editar, duplicar e excluir |
-| **Projetos** | por workspace, com cliente, cor, valor por hora e arquivamento |
-| **Faturamento** | moeda e valor/hora padrão do workspace; valor calculado em cada lançamento faturável |
-| **Relatórios** | resumo (por projeto, cliente, tag ou descrição) e detalhado; filtros por projeto, cliente, tag e faturável; CSV |
-| **MCP** | 13 ferramentas em `/mcp`, autenticadas por token pessoal |
-| **API REST** | as mesmas operações em `/api/v1/…` |
-| **Contas** | e-mail e senha, Google, GitHub, 2FA, sessões por dispositivo |
-| **Workspaces** | um pessoal por conta, convites e papéis (`owner`, `admin`, `editor`, `viewer`) |
-| **LGPD** | exportar os próprios dados (com as horas) e apagar a conta |
+| **Timer** | start, stop, continue an entry; one timer per person, synced across tabs and with the AI |
+| **Manual entry** | day, start, end or typed duration (`1h30`, `1:30`, `90`); edit, duplicate and delete |
+| **Projects** | per workspace, with client, color, hourly rate and archiving |
+| **Billing** | workspace currency and default hourly rate; amount computed on every billable entry |
+| **Reports** | summary (by project, client, tag or description) and detailed; filters by project, client, tag and billable; CSV |
+| **MCP** | 13 tools at `/mcp`, authenticated by personal token |
+| **REST API** | the same operations at `/api/v1/…` |
+| **Accounts** | e-mail and password, Google, GitHub, 2FA, per-device sessions |
+| **Workspaces** | a personal one per account, invitations and roles (`owner`, `admin`, `editor`, `viewer`) |
+| **LGPD** | export your own data (with the hours) and delete the account |
 
-A parte de contas, workspaces e permissões vem do
-[astro-auth-template](docs/base-de-autenticacao.md) — aquele documento explica
-as decisões de segurança e continua valendo aqui.
+The accounts, workspaces and permissions part comes from the
+[astro-auth-template](docs/auth-foundation.md). That document explains the
+security decisions and still applies here.
 
-## Rodar localmente
+## Run locally
 
 ```bash
 npm install
-cp .dev.vars.example .dev.vars   # troque os dois segredos
+cp .dev.vars.example .dev.vars   # change the two secrets
 npm run db:local
 npm run dev
 ```
 
-Abra <http://localhost:4321>. Sem superadmin você cai em `/setup` — use o
-`SETUP_SECRET` do `.dev.vars`. Depois disso a home vira a landing page e
-qualquer pessoa cria conta em `/signup`. Sem `RESEND_API_KEY`, os e-mails
-(verificação, convite, senha) são impressos no terminal.
+Open <http://localhost:4321>. Without a superadmin you land on `/setup`; use
+the `SETUP_SECRET` from `.dev.vars`. After that the home page becomes the
+landing page and anyone can create an account at `/signup`. Without
+`RESEND_API_KEY`, e-mails (verification, invitation, password) are printed to
+the terminal.
 
 ```bash
-npm run smoke   # bateria de ponta a ponta da autenticação (com o dev rodando)
+npm run smoke   # end-to-end authentication suite (with dev running)
 ```
 
-## Conectar uma IA
+## Connect an AI
 
-No painel, **API e MCP → Gerar token**. O token aparece uma vez; a própria
-tela já mostra os comandos preenchidos.
+In the dashboard, **API & MCP → Generate token**. The token is shown once;
+the screen itself already shows the commands filled in.
 
 ```bash
-claude mcp add --transport http horas https://SEU-DOMINIO/mcp \
+claude mcp add --transport http horas https://YOUR-DOMAIN/mcp \
   --header "Authorization: Bearer hrs_…"
 ```
 
-Clientes que só aceitam uma URL (conector personalizado do Claude, por exemplo)
-usam `https://SEU-DOMINIO/mcp/hrs_…` — o token vai na URL, então trate-a como
-senha.
+Clients that only accept a URL (Claude's custom connector, for example) use
+`https://YOUR-DOMAIN/mcp/hrs_…`. The token goes in the URL, so treat it as a
+password.
 
-Ferramentas: `get_status`, `list_entries`, `summary_report`, `list_projects`,
+Tools: `get_status`, `list_entries`, `summary_report`, `list_projects`,
 `list_tags`, `get_settings`, `start_timer`, `stop_timer`, `add_entry`,
-`update_entry`, `delete_entry`, `create_project`, `update_project`. Quem é
-`viewer` no workspace só recebe as seis primeiras.
+`update_entry`, `delete_entry`, `create_project`, `update_project`. A `viewer`
+in the workspace only gets the first six.
 
-### API REST
+### REST API
 
 ```bash
-curl https://SEU-DOMINIO/api/v1/status -H "Authorization: Bearer hrs_…"
+curl https://YOUR-DOMAIN/api/v1/status -H "Authorization: Bearer hrs_…"
 ```
 
-| Método | Rota | |
+| Method | Route | |
 |---|---|---|
-| GET | `/status` | timer rodando, total de hoje e da semana |
-| POST | `/timer/start` · `/timer/stop` | corpo opcional: `description`, `project`, `tags`, `billable`, `start`/`end` |
-| GET · POST | `/entries` | filtros: `from`, `to`, `project`, `project_id`, `client`, `tag`, `billable`, `q`, `limit` |
+| GET | `/status` | running timer, totals for today and for the week |
+| POST | `/timer/start` · `/timer/stop` | optional body: `description`, `project`, `tags`, `billable`, `start`/`end` |
+| GET · POST | `/entries` | filters: `from`, `to`, `project`, `project_id`, `client`, `tag`, `billable`, `q`, `limit` |
 | GET · PATCH · DELETE | `/entries/:id` | |
-| GET · POST | `/projects` | `?archived=1` inclui arquivados |
+| GET · POST | `/projects` | `?archived=1` includes archived ones |
 | PATCH · DELETE | `/projects/:id` | |
-| GET | `/summary` | mesmos filtros de `/entries`; devolve totais, valor e grupos por projeto, cliente, tag, dia e descrição |
-| GET | `/tags` | tags já usadas |
-| GET · PATCH | `/settings` | `currency` e `default_rate` do workspace |
-| GET | `/export.csv` | mesmos filtros de `/entries` |
+| GET | `/summary` | same filters as `/entries`; returns totals, amount and groups by project, client, tag, day and description |
+| GET | `/tags` | tags already used |
+| GET · PATCH | `/settings` | the workspace's `currency` and `default_rate` |
+| GET | `/export.csv` | same filters as `/entries` |
 
-Datas: ISO-8601. Sem offset (`2026-11-11T09:00`), valem no fuso do token — o
-do navegador que o criou. `from`/`to` aceitam `YYYY-MM-DD`.
+Dates: ISO-8601. Without an offset (`2026-11-11T09:00`), they are interpreted
+in the token's time zone, the one of the browser that created it. `from`/`to`
+accept `YYYY-MM-DD`.
 
-## Publicar (GitHub + Cloudflare)
+## Deploy (GitHub + Cloudflare)
 
 ```bash
-npm run new-project        # cria o banco D1 e grava wrangler.local.jsonc (fora do Git)
+npm run new-project        # creates the D1 database and writes wrangler.local.jsonc (out of Git)
 npm run db:remote
 
 npm run cf -- secret put BETTER_AUTH_SECRET   # openssl rand -base64 32
-npm run cf -- secret put BETTER_AUTH_URL      # a URL pública final, exata
-npm run cf -- secret put SETUP_SECRET         # apague depois do 1º admin
-npm run cf -- secret put RESEND_API_KEY       # sem ele ninguém recebe e-mail de verificação
+npm run cf -- secret put BETTER_AUTH_URL      # the final public URL, exact
+npm run cf -- secret put SETUP_SECRET         # delete after the 1st admin
+npm run cf -- secret put RESEND_API_KEY       # without it nobody receives the verification e-mail
 npm run cf -- secret put EMAIL_FROM
 
 npm run deploy
 ```
 
-Depois abra `/setup` uma vez para criar o superadmin (ele é obrigado a ativar
-2FA) e apague o `SETUP_SECRET`.
+Then open `/setup` once to create the superadmin (they are required to enable
+2FA) and delete `SETUP_SECRET`.
 
-**Antes de abrir ao público**, três coisas que deixam de ser opcionais:
+**Before opening to the public**, three things stop being optional:
 
-1. **E-mail de verdade** (Resend com domínio verificado). O cadastro exige
-   confirmar o e-mail; sem envio, ninguém além de quem lê o log consegue entrar.
-2. **Turnstile** nas telas de cadastro e login — veja o documento da base.
-3. **Login social**: crie os apps OAuth no Google e no GitHub com o redirect
-   `https://SEU-DOMINIO/api/auth/callback/google` (ou `/github`) e grave
-   `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` e `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET`
-   como secrets. Cada botão só aparece quando o par existe.
+1. **Real e-mail** (Resend with a verified domain). Signup requires confirming
+   the e-mail; without sending, nobody other than whoever reads the log can
+   get in.
+2. **Turnstile** on the signup and login screens: see the auth foundation
+   document.
+3. **Social login**: create the OAuth apps at Google and GitHub with the
+   redirect `https://YOUR-DOMAIN/api/auth/callback/google` (or `/github`) and
+   store `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` and
+   `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET` as secrets. Each button only
+   appears when the pair exists.
 
-Para deploy automático a cada push, conecte o repositório em **Workers & Pages →
-Create → Import a repository** (Workers Builds), com `npm run build` como build
-e `npx wrangler deploy` como deploy.
+For automatic deploys on every push, connect the repository in **Workers & Pages →
+Create → Import a repository** (Workers Builds), with `npm run build` as the
+build and `npx wrangler deploy` as the deploy.
 
-## Onde está o quê
+## Where things are
 
 ```
-migrations/0006_horas.sql         tabelas time_project, time_entry, api_token
-migrations/0007_faturamento.sql   valor por hora do projeto e ajustes do workspace
-src/lib/horas.ts                  núcleo: toda regra de tempo, amarrada a (workspace, pessoa)
-src/lib/horas-api.ts              roteador JSON, o mesmo para web e token
-src/lib/horas-mcp.ts              ferramentas MCP
-src/lib/api-tokens.ts             criar, revogar e autenticar tokens (só o SHA-256 é guardado)
-src/pages/api/w/[slug]/horas/     API da web (sessão por cookie)
-src/pages/api/v1/                 API por token
-src/pages/mcp/                    servidor MCP
-src/pages/w/[slug]/               tempo · relatorios · projetos · integracoes
-public/app/horas.js               interface, sem build e sem dependências
+migrations/0006_horas.sql         tables time_project, time_entry, api_token
+migrations/0007_faturamento.sql   project hourly rate and workspace settings
+src/lib/horas.ts                  core: every time rule, tied to (workspace, person)
+src/lib/horas-api.ts              JSON router, the same for web and token
+src/lib/horas-mcp.ts              MCP tools
+src/lib/api-tokens.ts             create, revoke and authenticate tokens (only the SHA-256 is stored)
+src/pages/api/w/[slug]/horas/     web API (cookie session)
+src/pages/api/v1/                 token API
+src/pages/mcp/                    MCP server
+src/pages/w/[slug]/               time · reports · projects · integrations
+public/app/horas.js               interface, no build and no dependencies
 src/pages/index.astro             landing page
 ```
 
-Decisões que valem saber:
+Decisions worth knowing:
 
-- **Cada lançamento é de uma pessoa num workspace.** O store do núcleo nasce
-  com os dois ids e toda query filtra por ambos; não há função que aceite outro
-  dono por parâmetro. Projetos são do workspace, compartilhados.
-- **O token não carrega papel.** Ele aponta para (pessoa, workspace) e o papel
-  é lido de `member` a cada requisição — rebaixar ou remover alguém vale na
-  hora.
-- **Um timer por pessoa por workspace**, garantido por índice único parcial no
-  banco, não só na aplicação.
-- **O valor de um lançamento não é gravado.** É horas × taxa do projeto (ou a
-  padrão do workspace) calculado na leitura; mudar uma taxa recalcula o que já
-  foi lançado.
-- **MCP stateless.** Cada requisição monta o servidor e responde em JSON; não
-  há sessão para guardar, que é o que um Worker quer.
+- **Every entry belongs to one person in one workspace.** The core store is
+  created with both ids and every query filters by both; there is no function
+  that accepts another owner as a parameter. Projects belong to the workspace,
+  shared.
+- **The token carries no role.** It points to (person, workspace) and the role
+  is read from `member` on every request, so demoting or removing someone
+  takes effect immediately.
+- **One timer per person per workspace**, guaranteed by a partial unique index
+  in the database, not only in the application.
+- **The amount of an entry is not stored.** It is hours × the project's rate
+  (or the workspace default) computed on read; changing a rate recalculates
+  what was already logged.
+- **Stateless MCP.** Each request builds the server and answers in JSON; there
+  is no session to keep, which is what a Worker wants.
 
-## O que ainda não tem
+## What's not there yet
 
-- OAuth para o MCP (hoje é token pessoal). Vale fazer se a ideia for aparecer
-  em diretórios de conectores.
-- Relatório do time: cada pessoa vê só as próprias horas, mesmo o dono.
-- Planilha semanal (timesheet), calendário e tarefas dentro de projetos.
-- Conversão entre moedas: a moeda do workspace é só formatação.
-- O módulo de exemplo "Anotações" do template continua no código (a bateria de
-  testes de permissão depende dele), só saiu do menu.
+- OAuth for MCP (today it is a personal token). Worth doing if the idea is to
+  show up in connector directories.
+- Team report: each person sees only their own hours, even the owner.
+- Weekly timesheet, calendar and tasks inside projects.
+- Currency conversion: the workspace currency is formatting only.
+- The template's "Notes" example module is still in the code (the permission
+  test suite depends on it); it was only removed from the menu.

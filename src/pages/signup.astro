@@ -7,40 +7,40 @@ export const prerender = false;
 ---
 
 <Auth
-  title="Criar conta"
-  heading="Criar conta"
-  subheading="Você vai receber um e-mail para confirmar o endereço antes de entrar."
+  title="Create account"
+  heading="Create account"
+  subheading="You will receive an email to confirm your address before logging in."
 >
   <form method="post" action="/api/signup" class="stack">
     <div class="field">
-      <label for="nome">Seu nome</label>
-      <input id="nome" name="name" type="text" autocomplete="name" required autofocus />
+      <label for="name">Your name</label>
+      <input id="name" name="name" type="text" autocomplete="name" required autofocus />
     </div>
 
     <div class="field">
-      <label for="email">E-mail</label>
+      <label for="email">Email</label>
       <input id="email" name="email" type="email" autocomplete="username" required />
     </div>
 
     <div class="field">
-      <label for="senha">Senha</label>
-      <input id="senha" name="password" type="password" minlength="10" autocomplete="new-password" required />
-      <span class="hint">Mínimo de 10 caracteres.</span>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" minlength="10" autocomplete="new-password" required />
+      <span class="hint">At least 10 characters.</span>
     </div>
 
     <div class="field">
-      <label for="confirma">Confirmar senha</label>
-      <input id="confirma" name="confirm" type="password" minlength="10" autocomplete="new-password" required />
+      <label for="confirm">Confirm password</label>
+      <input id="confirm" name="confirm" type="password" minlength="10" autocomplete="new-password" required />
     </div>
 
     <Turnstile />
-    <button class="btn-block" type="submit">Criar conta</button>
+    <button class="btn-block" type="submit">Create account</button>
   </form>
 
-  <SocialButtons verbo="Criar conta com" />
+  <SocialButtons verb="Create account with" />
 
-  <p class="auth-foot">Já tem conta? <a href="/login">Entrar</a></p>
+  <p class="auth-foot">Already have an account? <a href="/login">Log in</a></p>
   <p class="auth-foot muted">
-    <small><a href="/privacy">Política de privacidade</a></small>
+    <small><a href="/privacy">Privacy policy</a></small>
   </p>
 </Auth>

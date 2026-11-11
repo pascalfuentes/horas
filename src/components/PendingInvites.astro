@@ -3,57 +3,58 @@ import type { PendingInvite } from "~/lib/members";
 import { ROLE_LABELS } from "~/lib/permissions";
 
 interface Props {
-  convites: PendingInvite[];
+  invites: PendingInvite[];
   /**
-   * Sem e-mail confirmado o plugin recusa o aceite. Melhor não oferecer o botão
-   * do que oferecer um que falha — a mesma escolha da página `/invite/[id]`.
+   * Without a confirmed email the plugin refuses the acceptance. Better not to
+   * offer the button than to offer one that fails — the same choice as the
+   * `/invite/[id]` page.
    */
-  verificado: boolean;
-  /** Quantos mostrar antes de mandar para a lista completa. 0 = todos. */
-  limite?: number;
+  verified: boolean;
+  /** How many to show before pointing to the full list. 0 = all. */
+  limit?: number;
 }
 
-const { convites, verificado, limite = 0 } = Astro.props;
-const mostrados = limite > 0 ? convites.slice(0, limite) : convites;
-const restantes = convites.length - mostrados.length;
+const { invites, verified, limit = 0 } = Astro.props;
+const shown = limit > 0 ? invites.slice(0, limit) : invites;
+const remaining = invites.length - shown.length;
 ---
 
-{convites.length > 0 && (
-  <div class="alert alert-info convites" role="status">
+{invites.length > 0 && (
+  <div class="alert alert-info invites" role="status">
     <strong>
-      {convites.length === 1
-        ? "Você tem um convite esperando"
-        : `Você tem ${convites.length} convites esperando`}
+      {invites.length === 1
+        ? "You have an invite waiting"
+        : `You have ${invites.length} invites waiting`}
     </strong>
 
-    {!verificado && (
+    {!verified && (
       <p class="muted">
         <small>
-          Confirme seu e-mail para poder aceitar. <a href="/verify-email">Confirmar agora</a>
+          Confirm your email to be able to accept. <a href="/verify-email">Confirm now</a>
         </small>
       </p>
     )}
 
     <ul>
-      {mostrados.map((c) => (
+      {shown.map((c) => (
         <li>
           <span class="wrap">
             <strong>{c.workspaceName}</strong>
             <small class="muted">
-              {" "}· como {ROLE_LABELS[c.role]}
-              {c.convidadoPor && <> · de {c.convidadoPor}</>}
+              {" "}· as {ROLE_LABELS[c.role]}
+              {c.invitedBy && <> · from {c.invitedBy}</>}
             </small>
           </span>
-          {verificado && (
+          {verified && (
             <span class="row-actions">
               <form method="post" action="/api/invite/accept" class="inline-form">
                 <input type="hidden" name="id" value={c.id} />
-                <button class="btn-sm" type="submit">Aceitar</button>
+                <button class="btn-sm" type="submit">Accept</button>
               </form>
               <form method="post" action="/api/invite/accept" class="inline-form">
                 <input type="hidden" name="id" value={c.id} />
                 <input type="hidden" name="action" value="decline" />
-                <button class="btn-ghost btn-sm" type="submit">Recusar</button>
+                <button class="btn-ghost btn-sm" type="submit">Decline</button>
               </form>
             </span>
           )}
@@ -61,8 +62,8 @@ const restantes = convites.length - mostrados.length;
       ))}
     </ul>
 
-    {restantes > 0 && (
-      <a href="/workspaces">Ver os outros {restantes}</a>
+    {remaining > 0 && (
+      <a href="/workspaces">See the other {remaining}</a>
     )}
   </div>
 )}

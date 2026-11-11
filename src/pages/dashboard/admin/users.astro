@@ -10,9 +10,9 @@ import { PLATFORM_ROLE_LABELS } from "~/lib/permissions";
 export const prerender = false;
 
 const db = getDb(Astro.locals.env);
-const eu = Astro.locals.user!;
+const me = Astro.locals.user!;
 
-const usuarios = await db
+const users = await db
   .select({
     id: userTable.id,
     name: userTable.name,
@@ -27,47 +27,47 @@ const usuarios = await db
   .limit(500)
   .all();
 
-// Só para a interface — a garantia de verdade é o trigger em
-// migrations/0001_invariants.sql, que aborta a transação.
-const adminsAtivos = usuarios.filter((u) => u.role === "admin" && !u.banned).length;
-const ultimoAdmin = (u: (typeof usuarios)[number]) =>
-  u.role === "admin" && !u.banned && adminsAtivos === 1;
+// For the interface only — the real guarantee is the trigger in
+// migrations/0001_invariants.sql, which aborts the transaction.
+const activeAdmins = users.filter((u) => u.role === "admin" && !u.banned).length;
+const isLastAdmin = (u: (typeof users)[number]) =>
+  u.role === "admin" && !u.banned && activeAdmins === 1;
 ---
 
 <Dashboard
-  title="Usuários"
-  heading="Usuários"
-  description={`${usuarios.length} conta${usuarios.length === 1 ? "" : "s"} · ${adminsAtivos} administrador${adminsAtivos === 1 ? "" : "es"} ativo${adminsAtivos === 1 ? "" : "s"}`}
+  title="Users"
+  heading="Users"
+  description={`${users.length} account${users.length === 1 ? "" : "s"} · ${activeAdmins} active admin${activeAdmins === 1 ? "" : "s"}`}
 >
-  {adminsAtivos === 1 && (
+  {activeAdmins === 1 && (
     <p class="alert alert-info">
       <span>
-        Existe apenas um administrador ativo. O banco não permite rebaixá-lo nem desativá-lo —
-        promova outra pessoa antes.
+        There is only one active administrator. The database does not allow demoting or
+        disabling them — promote someone else first.
       </span>
     </p>
   )}
 
   <div class="card">
-    <h2>Contas</h2>
+    <h2>Accounts</h2>
     <span class="muted">
-      Desativar preserva o histórico; é preferível a apagar. "Destravar" remove a verificação
-      em duas etapas de quem perdeu o celular <em>e</em> os códigos de recuperação — a pessoa
-      volta a entrar só com a senha e configura de novo.
+      Disabling preserves the history; it is preferable to deleting. "Unlock" removes two-step
+      verification for someone who lost their phone <em>and</em> the recovery codes — the person
+      logs in with just the password again and sets it up anew.
     </span>
 
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Pessoa</th><th>Papel</th><th>Situação</th><th>2FA</th><th>Criada em</th><th>Ações</th></tr>
+          <tr><th>Person</th><th>Role</th><th>Status</th><th>2FA</th><th>Created</th><th>Actions</th></tr>
         </thead>
         <tbody>
-          {usuarios.map((u) => (
+          {users.map((u) => (
             <tr>
               <td class="wrap">
                 <strong>{u.name}</strong><br />
                 <small class="muted">{u.email}</small>
-                {u.id === eu.id && <> <span class="badge">você</span></>}
+                {u.id === me.id && <> <span class="badge">you</span></>}
               </td>
 
               <td>
@@ -75,21 +75,21 @@ const ultimoAdmin = (u: (typeof usuarios)[number]) =>
                   <input type="hidden" name="action" value="role" />
                   <input type="hidden" name="userId" value={u.id} />
                   <input type="hidden" name="email" value={u.email} />
-                  <select name="role" disabled={u.id === eu.id || ultimoAdmin(u)}>
+                  <select name="role" disabled={u.id === me.id || isLastAdmin(u)}>
                     {PLATFORM_ROLES.map((r) => (
                       <option value={r} selected={r === u.role}>{PLATFORM_ROLE_LABELS[r]}</option>
                     ))}
                   </select>
-                  <button class="btn-ghost btn-sm" type="submit" disabled={u.id === eu.id || ultimoAdmin(u)}>
-                    Aplicar
+                  <button class="btn-ghost btn-sm" type="submit" disabled={u.id === me.id || isLastAdmin(u)}>
+                    Apply
                   </button>
                 </form>
               </td>
 
               <td>
                 {u.banned
-                  ? <span class="badge">desativado</span>
-                  : <span class="badge badge-ok">ativo</span>}
+                  ? <span class="badge">disabled</span>
+                  : <span class="badge badge-ok">active</span>}
               </td>
 
               <td>
@@ -98,14 +98,14 @@ const ultimoAdmin = (u: (typeof usuarios)[number]) =>
                     <input type="hidden" name="action" value="reset-2fa" />
                     <input type="hidden" name="userId" value={u.id} />
                     <input type="hidden" name="email" value={u.email} />
-                    <span class="badge badge-ok">ativo</span>
+                    <span class="badge badge-ok">active</span>
                     <button class="btn-danger btn-sm" type="submit"
-                            title="Use quando a pessoa perder o celular e os códigos de recuperação">
-                      Destravar
+                            title="Use when the person loses their phone and the recovery codes">
+                      Unlock
                     </button>
                   </form>
                 ) : (
-                  <span class="badge">não</span>
+                  <span class="badge">no</span>
                 )}
               </td>
 
@@ -118,15 +118,15 @@ const ultimoAdmin = (u: (typeof usuarios)[number]) =>
                       <input type="hidden" name="action" value="enable" />
                       <input type="hidden" name="userId" value={u.id} />
                       <input type="hidden" name="email" value={u.email} />
-                      <button class="btn-ghost btn-sm" type="submit">Reativar</button>
+                      <button class="btn-ghost btn-sm" type="submit">Re-enable</button>
                     </form>
                   ) : (
                     <form method="post" action="/api/admin/users" class="inline-form">
                       <input type="hidden" name="action" value="disable" />
                       <input type="hidden" name="userId" value={u.id} />
                       <input type="hidden" name="email" value={u.email} />
-                      <button class="btn-danger btn-sm" type="submit" disabled={u.id === eu.id || ultimoAdmin(u)}>
-                        Desativar
+                      <button class="btn-danger btn-sm" type="submit" disabled={u.id === me.id || isLastAdmin(u)}>
+                        Disable
                       </button>
                     </form>
                   )}
@@ -135,7 +135,7 @@ const ultimoAdmin = (u: (typeof usuarios)[number]) =>
                     <input type="hidden" name="action" value="revoke-sessions" />
                     <input type="hidden" name="userId" value={u.id} />
                     <input type="hidden" name="email" value={u.email} />
-                    <button class="btn-ghost btn-sm" type="submit">Encerrar sessões</button>
+                    <button class="btn-ghost btn-sm" type="submit">End sessions</button>
                   </form>
                 </div>
               </td>

@@ -4,29 +4,30 @@ import { userWorkspaces } from "~/lib/workspaces";
 export const prerender = false;
 
 /**
- * `/dashboard` não tem conteúdo próprio: ele decide para onde a pessoa vai.
+ * `/dashboard` has no content of its own: it decides where the person goes.
  *
- * Usa o `activeOrganizationId` da sessão — que serve exatamente para isto,
- * lembrar o último workspace usado. Se ele não valer mais (a pessoa saiu do
- * workspace, ou ele foi excluído), cai no primeiro da lista.
+ * It uses the session's `activeOrganizationId` — which exists exactly for this,
+ * remembering the last workspace used. If it is no longer valid (the person
+ * left the workspace, or it was deleted), it falls back to the first in the list.
  */
-const meus = await userWorkspaces(Astro.locals.env, Astro.locals.user!.id);
-const ultimo = Astro.locals.session?.activeOrganizationId;
+const mine = await userWorkspaces(Astro.locals.env, Astro.locals.user!.id);
+const last = Astro.locals.session?.activeOrganizationId;
 
-const slug = meus.find((w) => w.workspaceId === ultimo)?.workspaceSlug ?? meus[0]?.workspaceSlug;
-const destino = slug ? `/w/${slug}/time` : "/workspaces";
+const slug = mine.find((w) => w.workspaceId === last)?.workspaceSlug ?? mine[0]?.workspaceSlug;
+const destination = slug ? `/w/${slug}/time` : "/workspaces";
 
-// O aviso precisa sobreviver ao salto. Quem aceita um convite passa por aqui a
-// caminho do workspace novo, e sem isso a confirmação se perdia no caminho —
-// a pessoa era teleportada para outro lugar sem nenhuma explicação.
-// Só `ok` e `e` seguem adiante; repassar o query inteiro seria carregar para
-// dentro do painel qualquer coisa que alguém pendurasse na URL.
-const avisos = new URLSearchParams();
-for (const chave of ["ok", "e"] as const) {
-  const valor = Astro.url.searchParams.get(chave);
-  if (valor) avisos.set(chave, valor);
+// The notice has to survive the hop. Whoever accepts an invite passes through
+// here on the way to the new workspace, and without this the confirmation got
+// lost along the way — the person was teleported somewhere else with no
+// explanation at all.
+// Only `ok` and `e` go forward; forwarding the whole query would carry into the
+// dashboard anything someone hung on the URL.
+const notices = new URLSearchParams();
+for (const key of ["ok", "e"] as const) {
+  const value = Astro.url.searchParams.get(key);
+  if (value) notices.set(key, value);
 }
 
-const query = avisos.toString();
-return Astro.redirect(query ? `${destino}?${query}` : destino);
+const query = notices.toString();
+return Astro.redirect(query ? `${destination}?${query}` : destination);
 ---

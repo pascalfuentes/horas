@@ -33,16 +33,16 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   try {
     const res = await callAuth(locals.auth, request, "/sign-in/email", { email, password });
-    // Credenciais erradas chegam como Response 401, não como exceção.
-    // Mensagem genérica de propósito: não revela se o e-mail existe.
+    // Wrong credentials arrive as a 401 Response, not as an exception.
+    // Generic message on purpose: it does not reveal whether the email exists.
     if (!res.ok) return handleAuthResponse(res, next, back);
 
-    // Senha certa mas a conta tem 2FA: o Better Auth ainda não abriu sessão,
-    // só deixou um cookie temporário. Falta o segundo fator.
-    const corpo = (await res.clone().json().catch(() => null)) as
+    // Right password but the account has 2FA: Better Auth has not opened a
+    // session yet, it only left a temporary cookie. The second factor is missing.
+    const body = (await res.clone().json().catch(() => null)) as
       | { twoFactorRedirect?: boolean }
       | null;
-    if (corpo?.twoFactorRedirect) {
+    if (body?.twoFactorRedirect) {
       return redirectWithCookies(res, `/two-factor?next=${encodeURIComponent(next)}`);
     }
 

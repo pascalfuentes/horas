@@ -1,25 +1,26 @@
 ---
 /**
- * Widget do Cloudflare Turnstile.
+ * Cloudflare Turnstile widget.
  *
- * Só renderiza quando as DUAS chaves existem. Se aparecesse só com a sitekey,
- * a pessoa resolveria o desafio e o servidor não checaria nada — proteção de
- * mentira é pior que proteção nenhuma, porque parece que está lá.
+ * Only renders when BOTH keys exist. If it showed up with just the sitekey,
+ * the person would solve the challenge and the server would check nothing —
+ * fake protection is worse than no protection, because it looks like it is
+ * there.
  *
- * Sem chaves (o caso do desenvolvimento local), o widget some e
- * `verifyTurnstile` deixa passar. Os dois lados combinam sempre.
+ * Without keys (the local development case), the widget disappears and
+ * `verifyTurnstile` lets the request through. The two sides always agree.
  *
- * A renderização é EXPLÍCITA. Dois detalhes que custaram caro aqui:
+ * Rendering is EXPLICIT. Two details that cost a lot here:
  *
- * 1. Só `?onload=` não basta — o script CONTINUA fazendo a varredura
- *    automática por `.cf-turnstile` além de chamar o callback. As duas
- *    renderizações colidiam ("skipped implicit render because a widget
- *    already exists"), o iframe do desafio nunca aparecia e nenhum token era
- *    gerado. Como o servidor exige o token, o login ficava impossível.
- *    `&render=explicit` desliga a varredura automática.
+ * 1. `?onload=` alone is not enough — the script KEEPS doing its automatic
+ *    scan for `.cf-turnstile` in addition to calling the callback. The two
+ *    renders collided ("skipped implicit render because a widget already
+ *    exists"), the challenge iframe never appeared and no token was
+ *    generated. Since the server requires the token, logging in became
+ *    impossible. `&render=explicit` turns the automatic scan off.
  *
- * 2. O `onload` não dispara se o script já tiver carregado, daí a checagem de
- *    `window.turnstile` — e o `data-rendered` impede renderizar duas vezes.
+ * 2. `onload` does not fire if the script has already loaded, hence the
+ *    `window.turnstile` check — and `data-rendered` prevents rendering twice.
  */
 const { PUBLIC_TURNSTILE_SITE_KEY: siteKey, TURNSTILE_SECRET_KEY: secret } = Astro.locals.env;
 const enabled = Boolean(siteKey && secret);
@@ -36,7 +37,7 @@ const enabled = Boolean(siteKey && secret);
           window.turnstile.render(el, { sitekey: el.dataset.sitekey, theme: "auto" });
         });
       };
-      // Se o script já tiver carregado, o `onload` não dispara mais.
+      // If the script has already loaded, `onload` no longer fires.
       if (window.turnstile) window.renderTurnstile();
     </script>
 

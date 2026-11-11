@@ -10,70 +10,70 @@ if (!can(ws.role, PERMISSIONS.WORKSPACE_READ)) {
   return Astro.redirect(`/w/${ws.workspaceSlug}?e=no_permission`);
 }
 
-const podeEditar = can(ws.role, PERMISSIONS.WORKSPACE_WRITE);
-const podeExcluir = can(ws.role, PERMISSIONS.WORKSPACE_DELETE);
-const ehUnicoOwner = ws.role === "owner" && (await countOwners(Astro.locals.env, ws.workspaceId)) === 1;
+const canEdit = can(ws.role, PERMISSIONS.WORKSPACE_WRITE);
+const canDelete = can(ws.role, PERMISSIONS.WORKSPACE_DELETE);
+const isSoleOwner = ws.role === "owner" && (await countOwners(Astro.locals.env, ws.workspaceId)) === 1;
 ---
 
-<Dashboard title={`Configurações — ${ws.workspaceName}`} heading="Configurações" description={`/w/${ws.workspaceSlug}`}>
+<Dashboard title={`Settings — ${ws.workspaceName}`} heading="Settings" description={`/w/${ws.workspaceSlug}`}>
   <div class="card">
-    <h2>Nome</h2>
+    <h2>Name</h2>
     <span class="muted">
-      O endereço (<code>/w/{ws.workspaceSlug}</code>) não muda junto: trocá-lo quebraria
-      todo link já compartilhado deste workspace, inclusive os que estão em e-mails.
+      The address (<code>/w/{ws.workspaceSlug}</code>) does not change with it: changing it would break
+      every link already shared for this workspace, including those in emails.
     </span>
 
-    {podeEditar ? (
+    {canEdit ? (
       <form method="post" action={`/api/w/${ws.workspaceSlug}/workspace`} class="row">
         <input type="hidden" name="action" value="rename" />
         <div class="field">
-          <label for="nome">Nome do workspace</label>
-          <input id="nome" name="name" type="text" value={ws.workspaceName} maxlength="60" required />
+          <label for="name">Workspace name</label>
+          <input id="name" name="name" type="text" value={ws.workspaceName} maxlength="60" required />
         </div>
-        <div><button type="submit">Salvar</button></div>
+        <div><button type="submit">Save</button></div>
       </form>
     ) : (
-      <p class="muted">Seu papel aqui não permite mudar as configurações.</p>
+      <p class="muted">Your role here does not allow changing the settings.</p>
     )}
   </div>
 
   <div class="card">
-    <h2>Sair deste workspace</h2>
+    <h2>Leave this workspace</h2>
     <span class="muted">
-      Você perde o acesso ao conteúdo dele. Para voltar, alguém precisa convidar você de novo.
+      You lose access to its content. To come back, someone has to invite you again.
     </span>
 
-    {ehUnicoOwner ? (
+    {isSoleOwner ? (
       <p class="alert alert-info">
         <span>
-          Você é a única pessoa dona daqui. Passe a propriedade para outra pessoa em
-          <a href={`/w/${ws.workspaceSlug}/members`}> Membros</a> antes de sair — senão o
-          workspace ficaria sem dono.
+          You are the only owner here. Transfer ownership to someone else in
+          <a href={`/w/${ws.workspaceSlug}/members`}> Members</a> before leaving — otherwise the
+          workspace would be left without an owner.
         </span>
       </p>
     ) : (
       <form method="post" action={`/api/w/${ws.workspaceSlug}/members`} class="inline-form">
         <input type="hidden" name="action" value="leave" />
-        <button class="btn-danger btn-sm" type="submit">Sair do workspace</button>
+        <button class="btn-danger btn-sm" type="submit">Leave workspace</button>
       </form>
     )}
   </div>
 
-  {podeExcluir && (
+  {canDelete && (
     <div class="card">
-      <h2>Excluir o workspace</h2>
+      <h2>Delete workspace</h2>
       <span class="muted">
-        Apaga o conteúdo, os convites e a participação de todo mundo. <strong>Não tem volta.</strong>
-        A trilha de auditoria fica, registrando que ele existiu e quem fez o quê nele.
+        Deletes everyone's content, invites and membership. <strong>This cannot be undone.</strong>
+        The audit trail stays, recording that it existed and who did what in it.
       </span>
 
       <form method="post" action={`/api/w/${ws.workspaceSlug}/workspace`} class="stack" style="max-width:520px">
         <input type="hidden" name="action" value="delete" />
         <div class="field">
-          <label for="confirmacao">Digite <strong>{ws.workspaceName}</strong> para confirmar</label>
-          <input id="confirmacao" name="confirmation" type="text" autocomplete="off" required />
+          <label for="confirmation">Type <strong>{ws.workspaceName}</strong> to confirm</label>
+          <input id="confirmation" name="confirmation" type="text" autocomplete="off" required />
         </div>
-        <div><button class="btn-danger" type="submit">Excluir definitivamente</button></div>
+        <div><button class="btn-danger" type="submit">Delete permanently</button></div>
       </form>
     </div>
   )}

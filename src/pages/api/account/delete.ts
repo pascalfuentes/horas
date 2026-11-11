@@ -15,11 +15,12 @@ export const prerender = false;
 const PAGE = "/dashboard/security";
 
 /**
- * Eliminação da conta (LGPD, art. 18, VI).
+ * Account deletion (LGPD, art. 18, VI).
  *
- * A trilha de auditoria é anonimizada em `deleteUser.afterDelete`, no auth.ts.
- * O trigger do banco ainda vale: o último administrador ativo não consegue se
- * apagar, e a mensagem explica o porquê em vez de mostrar erro cru.
+ * The audit trail is anonymized in `deleteUser.afterDelete`, in auth.ts.
+ * The database trigger still holds: the last active administrator cannot
+ * delete themselves, and the message explains why instead of showing a raw
+ * error.
  */
 export const POST: APIRoute = async ({ request, locals }) => {
   const denied = denyAccount(locals);
@@ -27,34 +28,34 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const form = await request.formData();
   const me = actor(locals);
-  const senha = str(form, "password");
+  const password = str(form, "password");
 
-  // Digitar o próprio e-mail evita o clique impulsivo — apagar não tem volta.
+  // Typing your own email prevents the impulsive click — deleting cannot be undone.
   if (str(form, "confirmation").trim().toLowerCase() !== me.email.toLowerCase()) {
     return fail(PAGE, "confirm_email");
   }
-  if (!senha) return fail(PAGE, "fields");
+  if (!password) return fail(PAGE, "fields");
 
   // ------------------------------------------------------------------
-  // Workspaces onde a pessoa é a ÚNICA owner
+  // Workspaces where the person is the ONLY owner
   //
-  // O trigger `keep_one_owner_on_delete` impede remover o último owner de um
-  // workspace que ainda existe — então apagar a conta direto seria recusado
-  // pelo banco com uma mensagem crua. A regra:
+  // The `keep_one_owner_on_delete` trigger prevents removing the last owner of
+  // a workspace that still exists — so deleting the account directly would be
+  // refused by the database with a raw message. The rule:
   //
-  //   • workspace só dela  → apaga o workspace ANTES (o cascade leva a
-  //                          membership junto, e aí o usuário can sair)
-  //   • workspace com mais gente → bloqueia e pede transferência, porque
-  //                          apagar levaria o trabalho de todo mundo junto
+  //   • workspace only theirs → deletes the workspace FIRST (the cascade takes
+  //                          the membership along, and then the user can leave)
+  //   • workspace with more people → blocks and asks for a transfer, because
+  //                          deleting would take everyone's work along
   // ------------------------------------------------------------------
-  const soDela = await workspacesWhereSoleOwner(locals.env, me.id);
-  const compartilhados = soDela.filter((w) => w.totalMembros > 1);
+  const soleOwned = await workspacesWhereSoleOwner(locals.env, me.id);
+  const shared = soleOwned.filter((w) => w.memberCount > 1);
 
-  if (compartilhados.length > 0) {
+  if (shared.length > 0) {
     return fail(PAGE, "last_owner");
   }
 
-  // Registrado ANTES: depois de apagar não há mais ator para registrar.
+  // Recorded BEFORE: after deleting there is no actor left to record.
   await audit(locals.env, {
     action: AUDIT.SELF_ACCOUNT_DELETED,
     actorId: me.id,
@@ -65,20 +66,21 @@ export const POST: APIRoute = async ({ request, locals }) => {
   });
 
   try {
-    // A ordem importa: apagar o usuário primeiro faria o cascade tentar remover
-    // um owner de um workspace que ainda existe, e o trigger recusaria.
+    // Order matters: deleting the user first would make the cascade try to
+    // remove an owner from a workspace that still exists, and the trigger would
+    // refuse.
     const db = getDb(locals.env);
-    for (const ws of soDela) {
+    for (const ws of soleOwned) {
       await db.delete(organization).where(eq(organization.id, ws.id));
     }
 
-    const res = await callAuth(locals.auth, request, "/delete-user", { password: senha });
+    const res = await callAuth(locals.auth, request, "/delete-user", { password });
     if (!res.ok) {
       return handleAuthResponse(res, PAGE, PAGE, (c) => (c === "credentials" ? "current_password" : c));
     }
   } catch (error) {
     if (isLastAdminError(error)) return fail(PAGE, "last_admin");
-    console.error("conta/apagar:", error);
+    console.error("account/delete:", error);
     return fail(PAGE, "error");
   }
 

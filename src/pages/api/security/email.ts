@@ -11,17 +11,17 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (denied) return denied;
 
   const form = await request.formData();
-  const novo = str(form, "email").toLowerCase();
-  if (!isEmail(novo)) return fail("/dashboard/security", "invalid_email");
+  const newEmail = str(form, "email").toLowerCase();
+  if (!isEmail(newEmail)) return fail("/dashboard/security", "invalid_email");
 
   const me = actor(locals);
-  if (novo === me.email.toLowerCase()) return ok("/dashboard/security", "ok_email");
+  if (newEmail === me.email.toLowerCase()) return ok("/dashboard/security", "ok_email");
 
   try {
-    // O link de confirmação vai para o e-mail ATUAL, não para o novo. Quem
-    // não controla a conta hoje não consegue mudar o endereço dela.
+    // The confirmation link goes to the CURRENT email, not the new one. Whoever
+    // does not control the account today cannot change its address.
     await locals.auth.api.changeEmail({
-      body: { newEmail: novo, callbackURL: "/dashboard/security?ok=ok_email" },
+      body: { newEmail, callbackURL: "/dashboard/security?ok=ok_email" },
       headers: request.headers,
     });
   } catch (error) {
@@ -33,7 +33,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     actorId: me.id,
     actorEmail: me.email,
     targetId: me.id,
-    details: { novoEmail: novo },
+    details: { newEmail },
     request,
   });
 

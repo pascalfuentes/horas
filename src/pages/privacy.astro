@@ -5,99 +5,99 @@ import "~/styles/global.css";
 export const prerender = false;
 
 /**
- * Política de privacidade.
+ * Privacy policy.
  *
- * Descreve exatamente o que o schema em `src/db/schema.ts` guarda — se você
- * acrescentar campos à aplicação, acrescente aqui também. Uma política que não
- * corresponde ao que o sistema faz é pior que nenhuma.
+ * Describes exactly what the schema in `src/db/schema.ts` stores — if you add
+ * fields to the application, add them here too. A policy that does not match
+ * what the system does is worse than none.
  *
- * Isto é um texto-base honesto, não parecer jurídico. Se o seu caso envolver
- * dado sensível, menor de idade ou transferência internacional, mande revisar.
+ * This is an honest base text, not legal advice. If your case involves
+ * sensitive data, minors or international transfers, have it reviewed.
  */
-const OPERADOR = operator(Astro.locals.env);
-const atualizado = "17 de setembro de 2026";
+const OPERATOR = operator(Astro.locals.env);
+const updated = "September 17, 2026";
 ---
 
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <title>Política de Privacidade — {APP_NAME}</title>
+    <title>Privacy Policy — {APP_NAME}</title>
   </head>
   <body>
     <main class="doc">
-      <h1>Política de Privacidade</h1>
-      <p class="muted">{APP_NAME} · atualizada em {atualizado}</p>
+      <h1>Privacy Policy</h1>
+      <p class="muted">{APP_NAME} · updated on {updated}</p>
 
       <p>
-        Esta página explica quais dados o {APP_NAME} guarda sobre você, por que guarda,
-        por quanto tempo, e o que você can exigir a respeito disso.
+        This page explains what data {APP_NAME} stores about you, why it stores it,
+        for how long, and what you can demand in that regard.
       </p>
 
-      <h2>Quem é responsável</h2>
+      <h2>Who is responsible</h2>
       <p>
-        {OPERADOR.nome} — contato: <a href={`mailto:${OPERADOR.contato}`}>{OPERADOR.contato}</a>.
+        {OPERATOR.name} — contact: <a href={`mailto:${OPERATOR.contact}`}>{OPERATOR.contact}</a>.
       </p>
 
-      <h2>O que guardamos</h2>
+      <h2>What we store</h2>
       <table>
-        <thead><tr><th>Dado</th><th>De onde vem</th><th>Para quê</th></tr></thead>
+        <thead><tr><th>Data</th><th>Where it comes from</th><th>What for</th></tr></thead>
         <tbody>
-          <tr><td>Nome</td><td>você informa, ou vem do provedor de login social</td><td>identificar você na interface</td></tr>
-          <tr><td>E-mail</td><td>você informa ao criar a conta, ou vem do provedor de login social</td><td>login, recuperação de senha, avisos da conta</td></tr>
-          <tr><td>Telefone</td><td>você informa, se quiser</td><td>opcional; contato</td></tr>
-          <tr><td>Senha</td><td>você define</td><td>autenticação — guardada apenas como hash, nunca em texto</td></tr>
-          <tr><td>Segredo de 2FA e códigos de recuperação</td><td>gerados ao ativar</td><td>segundo fator — guardados criptografados</td></tr>
-          <tr><td>Endereço de IP e navegador</td><td>das suas requisições</td><td>sessões ativas e trilha de auditoria</td></tr>
-          <tr><td>Registro de ações</td><td>o que você faz no sistema</td><td>segurança: saber quem mudou o quê e quando</td></tr>
-          <tr><td>Identificador da conta social</td><td>Google ou GitHub, se você usar</td><td>vincular o login social à sua conta</td></tr>
-          <tr><td>Workspaces de que você participa, e seu papel em cada um</td><td>de quem criou o workspace ou convidou você</td><td>decidir o que você can ver e fazer em cada workspace</td></tr>
+          <tr><td>Name</td><td>you provide it, or it comes from the social login provider</td><td>identifying you in the interface</td></tr>
+          <tr><td>Email</td><td>you provide it when creating the account, or it comes from the social login provider</td><td>login, password recovery, account notices</td></tr>
+          <tr><td>Phone</td><td>you provide it, if you want</td><td>optional; contact</td></tr>
+          <tr><td>Password</td><td>you set it</td><td>authentication — stored only as a hash, never in plain text</td></tr>
+          <tr><td>2FA secret and recovery codes</td><td>generated when you enable it</td><td>second factor — stored encrypted</td></tr>
+          <tr><td>IP address and browser</td><td>from your requests</td><td>active sessions and audit trail</td></tr>
+          <tr><td>Action log</td><td>what you do in the system</td><td>security: knowing who changed what and when</td></tr>
+          <tr><td>Social account identifier</td><td>Google or GitHub, if you use them</td><td>linking the social login to your account</td></tr>
+          <tr><td>Workspaces you belong to, and your role in each one</td><td>from whoever created the workspace or invited you</td><td>deciding what you can see and do in each workspace</td></tr>
         </tbody>
       </table>
 
       <p>
-        Quando você entra com Google ou GitHub, recebemos <strong>apenas</strong> nome, e-mail e
-        foto de perfil. Não temos acesso ao conteúdo da sua conta nesses serviços.
+        When you log in with Google or GitHub, we receive <strong>only</strong> your name, email
+        and profile picture. We have no access to the contents of your account on those services.
       </p>
 
-      <h2>Por quanto tempo</h2>
+      <h2>For how long</h2>
       <ul>
-        <li><strong>Sessões</strong> expiram em 7 dias, e você can encerrá-las antes disso em Segurança.</li>
-        <li><strong>Convites</strong> expiram em {INVITE_TTL_DAYS} dias.</li>
-        <li><strong>Registros de auditoria</strong> são preservados enquanto a conta existir. Eles são
-            justamente o que permite investigar um acesso indevido, então não são apagados a pedido.</li>
-        <li><strong>Seus dados de conta</strong> ficam enquanto a conta existir.</li>
+        <li><strong>Sessions</strong> expire in 7 days, and you can end them before that under Security.</li>
+        <li><strong>Invites</strong> expire in {INVITE_TTL_DAYS} days.</li>
+        <li><strong>Audit records</strong> are preserved for as long as the account exists. They are
+            precisely what makes it possible to investigate improper access, so they are not deleted on request.</li>
+        <li><strong>Your account data</strong> stays for as long as the account exists.</li>
       </ul>
 
-      <h2>Com quem compartilhamos</h2>
+      <h2>Who we share it with</h2>
       <p>
-        Com ninguém para fins comerciais. Não vendemos dados e não usamos publicidade.
-        Os dados ficam na infraestrutura da Cloudflare, e os e-mails do sistema saem por um
-        provedor de envio. Esses fornecedores processam os dados apenas para entregar o serviço.
+        With no one for commercial purposes. We do not sell data and we do not use advertising.
+        The data lives on Cloudflare's infrastructure, and the system's emails go out through an
+        email delivery provider. These vendors process the data only to deliver the service.
       </p>
 
-      <h2>Seus direitos</h2>
+      <h2>Your rights</h2>
       <p>
-        Pela LGPD (Lei 13.709/2018) você can pedir, a qualquer momento: confirmação de que
-        tratamos seus dados, acesso a eles, correção do que estiver errado, e a eliminação da
-        sua conta. Escreva para <a href={`mailto:${OPERADOR.contato}`}>{OPERADOR.contato}</a>.
+        Under Brazil's LGPD (Law 13,709/2018) you can request, at any time: confirmation that
+        we process your data, access to it, correction of anything that is wrong, and the deletion
+        of your account. Write to <a href={`mailto:${OPERATOR.contact}`}>{OPERATOR.contact}</a>.
       </p>
       <p>
-        Uma ressalva honesta sobre a eliminação: apagamos seus dados de conta, mas preservamos
-        a trilha de auditoria de forma desassociada. Ela existe para segurança de todas as
-        pessoas do sistema, e apagá-la abriria um buraco justamente onde ele mais importaria.
-      </p>
-
-      <h2>Segurança</h2>
-      <p>
-        Senhas são guardadas como hash. O segredo de 2FA e os códigos de recuperação são
-        criptografados. Todo o tráfego é por HTTPS. Criar conta exige confirmar o e-mail, e
-        cada workspace só é acessível a quem foi convidado para ele.
+        An honest caveat about deletion: we delete your account data, but we preserve the
+        audit trail in dissociated form. It exists for the security of everyone in the system,
+        and deleting it would open a hole precisely where it would matter most.
       </p>
 
-      <p class="muted"><small><a href="/login">Voltar ao login</a></small></p>
+      <h2>Security</h2>
+      <p>
+        Passwords are stored as hashes. The 2FA secret and the recovery codes are
+        encrypted. All traffic goes over HTTPS. Creating an account requires confirming the
+        email, and each workspace is accessible only to those who were invited to it.
+      </p>
+
+      <p class="muted"><small><a href="/login">Back to login</a></small></p>
     </main>
 
     <style>

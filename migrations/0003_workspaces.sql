@@ -1,11 +1,11 @@
--- Multi-tenant: cada cliente passa a ter o próprio workspace.
+-- Multi-tenant: each customer now has its own workspace.
 --
--- As três tabelas abaixo são do plugin `organization` do Better Auth. Os nomes
--- de coluna vêm do RUNTIME (dist/plugins/organization/organization.mjs), não dos
--- arquivos .d.mts — eles divergem em dois campos, e quem gera migration e valida
--- é o runtime.
+-- The three tables below belong to Better Auth's `organization` plugin. The
+-- column names come from the RUNTIME (dist/plugins/organization/organization.mjs),
+-- not from the .d.mts files: they differ in two fields, and the runtime is what
+-- generates migrations and validates.
 --
--- Nenhuma delas tem `updatedAt`: o plugin não escreve esse campo.
+-- None of them has `updatedAt`: the plugin does not write that field.
 
 CREATE TABLE "organization" (
   "id"        text    PRIMARY KEY NOT NULL,
@@ -13,7 +13,7 @@ CREATE TABLE "organization" (
   "slug"      text    NOT NULL UNIQUE,
   "logo"      text,
   "createdAt" integer NOT NULL,
-  -- JSON serializado pelo próprio plugin.
+  -- JSON serialized by the plugin itself.
   "metadata"  text
 );
 CREATE INDEX "organization_slug_idx" ON "organization" ("slug");
@@ -27,20 +27,20 @@ CREATE TABLE "member" (
 );
 CREATE INDEX "member_organizationId_idx" ON "member" ("organizationId");
 CREATE INDEX "member_userId_idx"         ON "member" ("userId");
--- Uma pessoa entra uma vez só em cada workspace.
+-- A person joins each workspace only once.
 CREATE UNIQUE INDEX "member_um_por_workspace" ON "member" ("organizationId", "userId");
 
--- O plugin chama esta tabela de "invitation", que colide com a tabela de
--- convites global deste projeto (`tokenHash` NOT NULL UNIQUE, CHECK em role).
--- Renomeada via `schema.invitation.modelName` em src/lib/auth.ts.
+-- The plugin calls this table "invitation", which collides with this
+-- project's global invitations table (`tokenHash` NOT NULL UNIQUE, CHECK on role).
+-- Renamed via `schema.invitation.modelName` in src/lib/auth.ts.
 CREATE TABLE "org_invitation" (
   "id"             text    PRIMARY KEY NOT NULL,
   "organizationId" text    NOT NULL REFERENCES "organization" ("id") ON DELETE CASCADE,
   "email"          text    NOT NULL,
-  -- Nullable de propósito: é o que o runtime declara.
+  -- Nullable on purpose: that is what the runtime declares.
   "role"           text,
-  -- O adapter grava `teamId` mesmo com teams desligado. A coluna existe para
-  -- isso não virar erro em produção no primeiro convite.
+  -- The adapter writes `teamId` even with teams turned off. The column exists
+  -- so that this does not become a production error on the first invitation.
   "teamId"         text,
   "status"         text    NOT NULL DEFAULT 'pending',
   "expiresAt"      integer NOT NULL,
@@ -50,14 +50,14 @@ CREATE TABLE "org_invitation" (
 CREATE INDEX "org_invitation_organizationId_idx" ON "org_invitation" ("organizationId");
 CREATE INDEX "org_invitation_email_idx"          ON "org_invitation" ("email");
 
--- Workspace ativo da sessão. Serve para LEMBRAR o último usado, nunca para
--- autorizar: a autorização vem do slug na URL, conferido contra a membership.
+-- The session's active workspace. It exists to REMEMBER the last one used, never
+-- to authorize: authorization comes from the slug in the URL, checked against membership.
 ALTER TABLE "session" ADD COLUMN "activeOrganizationId" text;
 
--- Todo dado de negócio passa a pertencer a um workspace.
+-- All business data now belongs to a workspace.
 ALTER TABLE "note" ADD COLUMN "workspaceId" text REFERENCES "organization" ("id") ON DELETE CASCADE;
--- Auditoria é SET NULL, não CASCADE: apagar um workspace não pode apagar o
--- registro de que ele existiu e de quem fez o quê nele.
+-- Audit is SET NULL, not CASCADE: deleting a workspace must not delete the
+-- record that it existed and of who did what in it.
 ALTER TABLE "audit_log" ADD COLUMN "workspaceId" text REFERENCES "organization" ("id") ON DELETE SET NULL;
 
 CREATE INDEX "note_workspaceId_idx"      ON "note" ("workspaceId");

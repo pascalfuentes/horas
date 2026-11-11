@@ -1,11 +1,11 @@
 import { HorasError, type Store } from "~/lib/horas";
 
 /**
- * Roteador JSON do controle de tempo.
+ * JSON router for time tracking.
  *
- * É o MESMO para a web (sessão por cookie, em `/api/w/<slug>/horas/…`) e para
- * a API pública (token, em `/api/v1/…`). Quem chama já resolveu a pessoa, o
- * workspace e se ela can escrever; aqui só se decide a rota.
+ * It is the SAME for the web (cookie session, at `/api/w/<slug>/horas/…`) and for
+ * the public API (token, at `/api/v1/…`). The caller has already resolved the
+ * person, the workspace and whether they can write; here only the route is decided.
  */
 
 const json = (data: unknown, status = 200) =>
@@ -14,23 +14,23 @@ const json = (data: unknown, status = 200) =>
     headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
   });
 
-export const jsonError = (mensagem: string, status: number) => json({ error: mensagem }, status);
+export const jsonError = (message: string, status: number) => json({ error: message }, status);
 
-async function corpo(request: Request): Promise<Record<string, unknown>> {
-  const texto = await request.text();
-  if (!texto) return {};
-  if (texto.length > 20_000) throw new HorasError("Corpo grande demais.", 413);
+async function readBody(request: Request): Promise<Record<string, unknown>> {
+  const text = await request.text();
+  if (!text) return {};
+  if (text.length > 20_000) throw new HorasError("Request body too large.", 413);
   try {
-    const dado = JSON.parse(texto);
-    return dado && typeof dado === "object" && !Array.isArray(dado) ? dado : {};
+    const data = JSON.parse(text);
+    return data && typeof data === "object" && !Array.isArray(data) ? data : {};
   } catch {
-    throw new HorasError("O corpo precisa ser JSON.");
+    throw new HorasError("The body must be JSON.");
   }
 }
 
-/** Célula de CSV. O apóstrofo na frente desarma fórmulas ao abrir no Excel/Sheets. */
-function csv(valor: unknown): string {
-  let s = String(valor ?? "");
+/** CSV cell. The leading apostrophe defuses formulas when opened in Excel/Sheets. */
+function csv(value: unknown): string {
+  let s = String(value ?? "");
   if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
@@ -38,14 +38,14 @@ function csv(valor: unknown): string {
 export async function handleHoras(
   request: Request,
   store: Store,
-  rota: string,
-  podeEscrever: boolean,
+  path: string,
+  canWrite: boolean,
 ): Promise<Response> {
-  const metodo = request.method.toUpperCase();
-  const partes = rota.split("/").filter(Boolean);
-  const [recurso, id] = partes;
+  const method = request.method.toUpperCase();
+  const parts = path.split("/").filter(Boolean);
+  const [resource, id] = parts;
   const q = new URL(request.url).searchParams;
-  const filtro = {
+  const filter = {
     from: q.get("from"),
     to: q.get("to"),
     project: q.get("project"),
@@ -57,34 +57,34 @@ export async function handleHoras(
   };
 
   try {
-    if (metodo !== "GET" && !podeEscrever) {
-      return jsonError("Seu papel neste workspace é somente leitura.", 403);
+    if (method !== "GET" && !canWrite) {
+      return jsonError("Your role in this workspace is read-only.", 403);
     }
-    if (partes.length > 2) return jsonError("Rota não encontrada.", 404);
+    if (parts.length > 2) return jsonError("Route not found.", 404);
 
-    if (recurso === "status" && !id && metodo === "GET") return json(await store.status());
+    if (resource === "status" && !id && method === "GET") return json(await store.status());
 
-    if (recurso === "summary" && !id && metodo === "GET") return json(await store.summary(filtro));
+    if (resource === "summary" && !id && method === "GET") return json(await store.summary(filter));
 
-    if (recurso === "tags" && !id && metodo === "GET") return json(await store.listTags());
+    if (resource === "tags" && !id && method === "GET") return json(await store.listTags());
 
-    if (recurso === "settings" && !id) {
-      if (metodo === "GET") return json(await store.getSettings());
-      if (metodo === "PATCH") return json(await store.updateSettings(await corpo(request)));
+    if (resource === "settings" && !id) {
+      if (method === "GET") return json(await store.getSettings());
+      if (method === "PATCH") return json(await store.updateSettings(await readBody(request)));
     }
 
-    if (recurso === "export.csv" && !id && metodo === "GET") {
-      const entradas = await store.listEntries({ ...filtro, limit: 5000 });
-      const linhas = [
-        ["id", "descricao", "projeto", "cliente", "tags", "faturavel", "inicio", "fim", "horas", "valor"].join(","),
-        ...entradas.map((e) =>
+    if (resource === "export.csv" && !id && method === "GET") {
+      const entries = await store.listEntries({ ...filter, limit: 5000 });
+      const lines = [
+        ["id", "description", "project", "client", "tags", "billable", "start", "end", "hours", "amount"].join(","),
+        ...entries.map((e) =>
           [
             e.id,
             csv(e.description),
             csv(e.project),
             csv(e.client),
             csv(e.tags.join(" ")),
-            e.billable ? "sim" : "nao",
+            e.billable ? "yes" : "no",
             e.start,
             e.end ?? "",
             (e.duration_seconds / 3600).toFixed(2),
@@ -92,7 +92,7 @@ export async function handleHoras(
           ].join(","),
         ),
       ];
-      return new Response(linhas.join("\n") + "\n", {
+      return new Response(lines.join("\n") + "\n", {
         headers: {
           "content-type": "text/csv; charset=utf-8",
           "content-disposition": 'attachment; filename="horas.csv"',
@@ -101,30 +101,30 @@ export async function handleHoras(
       });
     }
 
-    if (recurso === "projects") {
-      if (!id && metodo === "GET") return json(await store.listProjects({ includeArchived: q.get("archived") === "1" }));
-      if (!id && metodo === "POST") return json(await store.createProject(await corpo(request)), 201);
-      if (id && metodo === "PATCH") return json(await store.updateProject(id, await corpo(request)));
-      if (id && metodo === "DELETE") return json(await store.deleteProject(id));
+    if (resource === "projects") {
+      if (!id && method === "GET") return json(await store.listProjects({ includeArchived: q.get("archived") === "1" }));
+      if (!id && method === "POST") return json(await store.createProject(await readBody(request)), 201);
+      if (id && method === "PATCH") return json(await store.updateProject(id, await readBody(request)));
+      if (id && method === "DELETE") return json(await store.deleteProject(id));
     }
 
-    if (recurso === "entries") {
-      if (!id && metodo === "GET") return json(await store.listEntries({ ...filtro, limit: Number(q.get("limit")) || 500 }));
-      if (!id && metodo === "POST") return json(await store.createEntry(await corpo(request)), 201);
-      if (id && metodo === "GET") return json(await store.getEntry(id));
-      if (id && metodo === "PATCH") return json(await store.updateEntry(id, await corpo(request)));
-      if (id && metodo === "DELETE") return json(await store.deleteEntry(id));
+    if (resource === "entries") {
+      if (!id && method === "GET") return json(await store.listEntries({ ...filter, limit: Number(q.get("limit")) || 500 }));
+      if (!id && method === "POST") return json(await store.createEntry(await readBody(request)), 201);
+      if (id && method === "GET") return json(await store.getEntry(id));
+      if (id && method === "PATCH") return json(await store.updateEntry(id, await readBody(request)));
+      if (id && method === "DELETE") return json(await store.deleteEntry(id));
     }
 
-    if (recurso === "timer" && metodo === "POST") {
-      if (id === "start") return json(await store.startTimer(await corpo(request)), 201);
-      if (id === "stop") return json({ stopped: await store.stopTimer(await corpo(request)) });
+    if (resource === "timer" && method === "POST") {
+      if (id === "start") return json(await store.startTimer(await readBody(request)), 201);
+      if (id === "stop") return json({ stopped: await store.stopTimer(await readBody(request)) });
     }
 
-    return jsonError("Rota não encontrada.", 404);
-  } catch (erro) {
-    if (erro instanceof HorasError) return jsonError(erro.message, erro.status);
-    console.error("horas-api:", erro);
-    return jsonError("Erro interno.", 500);
+    return jsonError("Route not found.", 404);
+  } catch (err) {
+    if (err instanceof HorasError) return jsonError(err.message, err.status);
+    console.error("horas-api:", err);
+    return jsonError("Internal error.", 500);
   }
 }

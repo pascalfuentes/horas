@@ -8,20 +8,21 @@ import { PERMISSIONS, can } from "~/lib/permissions";
 export const prerender = false;
 
 /**
- * API do controle de tempo para a WEB (sessão por cookie).
+ * Time tracking API for the WEB (cookie session).
  *
- * O workspace vem do slug na rota — o middleware já conferiu a membership. A
- * pessoa vem da sessão. Nenhum dos dois é aceito do corpo da requisição.
+ * The workspace comes from the slug in the route — the middleware has already
+ * checked the membership. The person comes from the session. Neither is accepted
+ * from the request body.
  */
 export const ALL: APIRoute = async ({ request, locals, params, url }) => {
   const denied = deny(locals, PERMISSIONS.CONTENT_READ);
   if (denied) return denied;
 
-  // O `checkOrigin` do Astro só cobre formulários. Aqui o corpo é JSON, então a
-  // origem de toda escrita é conferida à mão.
+  // Astro's `checkOrigin` only covers forms. Here the body is JSON, so the
+  // origin of every write is checked by hand.
   if (request.method !== "GET") {
-    const origem = request.headers.get("origin");
-    if (origem !== url.origin) return jsonError("Origem não permitida.", 403);
+    const origin = request.headers.get("origin");
+    if (origin !== url.origin) return jsonError("Origin not allowed.", 403);
   }
 
   const ws = currentWorkspace(locals);

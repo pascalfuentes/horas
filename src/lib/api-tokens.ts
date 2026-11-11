@@ -5,18 +5,18 @@ import { isWorkspaceRole } from "~/lib/permissions";
 import { generateToken, hashToken } from "~/lib/tokens";
 
 /**
- * Tokens pessoais para a API e para o MCP.
+ * Personal tokens for the API and for MCP.
  *
- * Mesma regra dos convites: o token em claro existe só na resposta que o cria.
- * O banco guarda o SHA-256, então um vazamento do D1 não dá acesso a ninguém.
+ * Same rule as invites: the plaintext token exists only in the response that creates it.
+ * The database stores the SHA-256, so a D1 leak gives nobody access.
  *
- * O token aponta para (pessoa, workspace) e NÃO carrega papel: o papel é lido
- * da tabela `member` a cada requisição. Rebaixar ou remover alguém do workspace
- * vale na hora, sem precisar lembrar de revogar token.
+ * The token points to (person, workspace) and does NOT carry a role: the role is read
+ * from the `member` table on every request. Demoting or removing someone from the
+ * workspace takes effect immediately, with no need to remember to revoke a token.
  */
 
 export const TOKEN_PREFIX = "hrs_";
-const MAX_TOKENS_POR_PESSOA = 20;
+const MAX_TOKENS_PER_PERSON = 20;
 
 export type ListedToken = {
   id: string;
@@ -35,17 +35,17 @@ export type Bearer = {
   tz: string;
 };
 
-export async function listTokens(env: AppEnv, dono: { userId: string; workspaceId: string }): Promise<ListedToken[]> {
+export async function listTokens(env: AppEnv, owner: { userId: string; workspaceId: string }): Promise<ListedToken[]> {
   const r = await env.DB.prepare(
     `SELECT "id", "name", "prefix", "timezone", "createdAt", "lastUsedAt"
        FROM "api_token" WHERE "userId" = ?1 AND "workspaceId" = ?2 ORDER BY "createdAt" DESC`,
   )
-    .bind(dono.userId, dono.workspaceId)
+    .bind(owner.userId, owner.workspaceId)
     .all<ListedToken>();
   return r.results ?? [];
 }
 
-/** Cria o token e devolve o valor em claro — a única vez que ele existe fora do hash. */
+/** Creates the token and returns the plaintext value — the only time it exists outside the hash. */
 export async function createToken(
   env: AppEnv,
   input: { userId: string; workspaceId: string; name: string; timezone?: string },
@@ -53,8 +53,8 @@ export async function createToken(
   const total = await env.DB.prepare(`SELECT COUNT(*) AS n FROM "api_token" WHERE "userId" = ?1`)
     .bind(input.userId)
     .first<{ n: number }>();
-  if ((total?.n ?? 0) >= MAX_TOKENS_POR_PESSOA) {
-    return { error: `Limite de ${MAX_TOKENS_POR_PESSOA} tokens. Revogue algum que não usa mais.` };
+  if ((total?.n ?? 0) >= MAX_TOKENS_PER_PERSON) {
+    return { error: `Limit of ${MAX_TOKENS_PER_PERSON} tokens. Revoke one you no longer use.` };
   }
 
   const token = TOKEN_PREFIX + generateToken();
@@ -67,7 +67,7 @@ export async function createToken(
       id,
       input.userId,
       input.workspaceId,
-      input.name.trim().slice(0, 60) || "Sem nome",
+      input.name.trim().slice(0, 60) || "Unnamed",
       await hashToken(token),
       token.slice(0, 10),
       isValidTz(input.timezone) ? input.timezone : DEFAULT_TZ,
@@ -77,7 +77,7 @@ export async function createToken(
   return { id, token };
 }
 
-/** Só revoga token da própria pessoa naquele workspace. */
+/** Only revokes a token of the person themselves in that workspace. */
 export async function revokeToken(env: AppEnv, input: { id: string; userId: string; workspaceId: string }): Promise<boolean> {
   const r = await env.DB.prepare(`DELETE FROM "api_token" WHERE "id" = ?1 AND "userId" = ?2 AND "workspaceId" = ?3`)
     .bind(input.id, input.userId, input.workspaceId)
@@ -85,24 +85,24 @@ export async function revokeToken(env: AppEnv, input: { id: string; userId: stri
   return (r.meta.changes ?? 0) > 0;
 }
 
-/** Extrai o token de `Authorization: Bearer …`. */
+/** Extracts the token from `Authorization: Bearer …`. */
 export function tokenFromHeader(request: Request): string | null {
   const m = (request.headers.get("authorization") ?? "").match(/^Bearer\s+(\S+)$/i);
   return m ? m[1] : null;
 }
 
 /**
- * Resolve um token para quem ele representa, ou null.
+ * Resolves a token to whoever it represents, or null.
  *
- * O JOIN com `member` é a autorização: sem membership não há resultado. Conta
- * banida também não passa.
+ * The JOIN with `member` is the authorization: without membership there is no
+ * result. A banned account does not get through either.
  */
 export async function authenticateToken(env: AppEnv, token: string | null): Promise<Bearer | null> {
   if (!token || !token.startsWith(TOKEN_PREFIX) || token.length > 200) return null;
 
-  // A busca é pelo hash (índice único), então não há comparação de segredo
-  // byte a byte que vaze tempo.
-  const linha = await env.DB.prepare(
+  // The lookup is by hash (unique index), so there is no byte-by-byte secret
+  // comparison that leaks timing.
+  const row = await env.DB.prepare(
     `SELECT t."id" AS tokenId, t."userId", t."workspaceId", t."timezone", t."lastUsedAt", m."role"
        FROM "api_token" t
        JOIN "member" m ON m."userId" = t."userId" AND m."organizationId" = t."workspaceId"
@@ -112,22 +112,22 @@ export async function authenticateToken(env: AppEnv, token: string | null): Prom
     .bind(await hashToken(token))
     .first<{ tokenId: string; userId: string; workspaceId: string; timezone: string; lastUsedAt: string | null; role: string }>();
 
-  if (!linha || !isWorkspaceRole(linha.role)) return null;
+  if (!row || !isWorkspaceRole(row.role)) return null;
 
-  // "Último uso" com precisão de minuto: evita uma escrita no banco por chamada.
-  const agora = new Date();
-  if (!linha.lastUsedAt || agora.getTime() - Date.parse(linha.lastUsedAt) > 60_000) {
+  // "Last used" with minute precision: avoids one database write per call.
+  const now = new Date();
+  if (!row.lastUsedAt || now.getTime() - Date.parse(row.lastUsedAt) > 60_000) {
     await env.DB.prepare(`UPDATE "api_token" SET "lastUsedAt" = ?1 WHERE "id" = ?2`)
-      .bind(agora.toISOString(), linha.tokenId)
+      .bind(now.toISOString(), row.tokenId)
       .run()
-      .catch((erro) => console.error("api_token lastUsedAt:", erro));
+      .catch((err) => console.error("api_token lastUsedAt:", err));
   }
 
   return {
-    tokenId: linha.tokenId,
-    userId: linha.userId,
-    workspaceId: linha.workspaceId,
-    role: linha.role,
-    tz: linha.timezone,
+    tokenId: row.tokenId,
+    userId: row.userId,
+    workspaceId: row.workspaceId,
+    role: row.role,
+    tz: row.timezone,
   };
 }

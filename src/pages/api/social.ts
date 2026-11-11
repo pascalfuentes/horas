@@ -7,17 +7,17 @@ import { fail, redirectWithCookies, safeNext, str } from "~/lib/http";
 export const prerender = false;
 
 /**
- * Começa o fluxo OAuth. O Better Auth devolve a URL do provedor e os cookies
- * de `state`/PKCE — os dois precisam viajar juntos, senão o callback é
- * rejeitado por não reconhecer a requisição que o originou.
+ * Starts the OAuth flow. Better Auth returns the provider URL and the
+ * `state`/PKCE cookies — the two must travel together, otherwise the callback
+ * is rejected for not recognizing the request that originated it.
  */
 export const POST: APIRoute = async ({ request, locals }) => {
   const form = await request.formData();
   const provider = str(form, "provider");
   const next = safeNext(str(form, "next"));
 
-  // A lista vem das chaves configuradas: um provedor sem credenciais não é
-  // aceito nem que alguém forje o formulário.
+  // The list comes from the configured keys: a provider without credentials is
+  // not accepted even if someone forges the form.
   if (!socialProviders(locals.env).includes(provider as "google" | "github")) {
     return fail("/login", "social_unavailable");
   }
@@ -26,15 +26,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
     provider,
     callbackURL: next,
     newUserCallbackURL: next,
-    // Para onde o provedor devolve quando algo dá errado — conta desativada,
-    // e-mail já vinculado a outro método, autorização negada. O Better Auth
-    // acrescenta `?error=<código>` aqui; a mensagem é genérica de propósito,
-    // porque o código cru não diz nada a quem está na tela.
+    // Where the provider sends the person back when something goes wrong —
+    // disabled account, email already linked to another method, authorization
+    // denied. Better Auth appends `?error=<code>` here; the message is generic
+    // on purpose, because the raw code means nothing to whoever is on screen.
     errorCallbackURL: "/login?e=social_failed",
   });
 
-  const corpo = (await res.json().catch(() => null)) as { url?: string } | null;
-  if (!res.ok || !corpo?.url) return fail("/login", "error");
+  const body = (await res.json().catch(() => null)) as { url?: string } | null;
+  if (!res.ok || !body?.url) return fail("/login", "error");
 
-  return redirectWithCookies(res, corpo.url);
+  return redirectWithCookies(res, body.url);
 };

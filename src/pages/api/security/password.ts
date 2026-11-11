@@ -14,25 +14,25 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (denied) return denied;
 
   const form = await request.formData();
-  const atual = str(form, "current_password");
-  const nova = str(form, "new_password");
-  const confirma = str(form, "confirm");
+  const currentPassword = str(form, "current_password");
+  const newPassword = str(form, "new_password");
+  const confirm = str(form, "confirm");
 
-  if (!atual || !nova) return fail(PAGE, "fields");
-  if (nova.length < 10) return fail(PAGE, "password_short");
-  if (nova !== confirma) return fail(PAGE, "password_mismatch");
+  if (!currentPassword || !newPassword) return fail(PAGE, "fields");
+  if (newPassword.length < 10) return fail(PAGE, "password_short");
+  if (newPassword !== confirm) return fail(PAGE, "password_mismatch");
 
   const me = actor(locals);
 
   try {
     const res = await callAuth(locals.auth, request, "/change-password", {
-      currentPassword: atual,
-      newPassword: nova,
-      // Trocar a senha só vale a pena se derrubar quem já estava dentro.
+      currentPassword,
+      newPassword,
+      // Changing the password is only worth it if it kicks out whoever was already in.
       revokeOtherSessions: true,
     });
 
-    // Senha atual errada volta como Response 400/401, não como exceção.
+    // A wrong current password comes back as a 400/401 Response, not as an exception.
     if (!res.ok) {
       return handleAuthResponse(res, PAGE, PAGE, (code) =>
         code === "credentials" ? "current_password" : code,

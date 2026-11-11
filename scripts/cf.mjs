@@ -3,24 +3,25 @@ import { spawnSync } from "node:child_process";
 import { configPath } from "./config.mjs";
 
 /**
- * Roda `wrangler` apontando para a config certa — wrangler.local.jsonc neste
- * deploy, wrangler.jsonc num clone recém-saído do template.
+ * Runs `wrangler` pointing at the right config: wrangler.local.jsonc in this
+ * deploy, wrangler.jsonc in a clone fresh out of the template.
  *
- *   npm run cf -- secret put MINHA_CHAVE
+ *   npm run cf -- secret put MY_KEY
  *   npm run cf -- tail
  *
- * `deploy` e `dev` são exceção: eles consomem a config que o BUILD gerou em
- * dist/server/wrangler.json, e o wrangler chega lá por um redirect em
- * .wrangler/deploy/config.json. Passar `-c` sobrescreve esse redirect e o
- * wrangler perde o entry-point ("Missing entry-point"). Esses dois já usam a
- * config certa de qualquer jeito, porque o build a lê via astro.config.mjs.
+ * `deploy` and `dev` are the exception: they consume the config that the BUILD
+ * generated in dist/server/wrangler.json, and wrangler gets there through a
+ * redirect in .wrangler/deploy/config.json. Passing `-c` overrides that
+ * redirect and wrangler loses the entry-point ("Missing entry-point"). Those
+ * two already use the right config anyway, because the build reads it via
+ * astro.config.mjs.
  */
-const USA_CONFIG_DO_BUILD = new Set(["deploy", "dev"]);
+const USES_BUILD_CONFIG = new Set(["deploy", "dev"]);
 
 const args = process.argv.slice(2);
-const comando = args.find((a) => !a.startsWith("-"));
-const completos = USA_CONFIG_DO_BUILD.has(comando ?? "")
+const command = args.find((a) => !a.startsWith("-"));
+const fullArgs = USES_BUILD_CONFIG.has(command ?? "")
   ? ["wrangler", ...args]
   : ["wrangler", ...args, "-c", configPath()];
 
-process.exit(spawnSync("npx", completos, { stdio: "inherit" }).status ?? 1);
+process.exit(spawnSync("npx", fullArgs, { stdio: "inherit" }).status ?? 1);

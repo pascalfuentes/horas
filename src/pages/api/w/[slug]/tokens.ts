@@ -15,57 +15,57 @@ const json = (data: unknown, status = 200) =>
   });
 
 /**
- * Criar e revogar tokens pessoais de API/MCP.
+ * Create and revoke personal API/MCP tokens.
  *
- * Basta ser membro: o token não dá nada além do que a pessoa já can fazer
- * neste workspace, e o papel é conferido de novo a cada uso.
+ * Being a member is enough: the token grants nothing beyond what the person can
+ * already do in this workspace, and the role is checked again on every use.
  *
- * Responde JSON (e não redirect, como os outros endpoints) porque o token em
- * claro precisa aparecer UMA vez na tela — e não can viajar numa URL.
+ * Responds with JSON (not a redirect, like the other endpoints) because the
+ * plaintext token must appear ONCE on screen — and cannot travel in a URL.
  */
 export const POST: APIRoute = async ({ request, locals, url }) => {
   const denied = deny(locals, PERMISSIONS.CONTENT_READ);
   if (denied) return denied;
-  if (request.headers.get("origin") !== url.origin) return jsonError("Origem não permitida.", 403);
+  if (request.headers.get("origin") !== url.origin) return jsonError("Origin not allowed.", 403);
 
   const ws = currentWorkspace(locals);
-  const eu = actor(locals);
-  const corpo = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!corpo) return jsonError("O corpo precisa ser JSON.", 400);
+  const me = actor(locals);
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body) return jsonError("The body must be JSON.", 400);
 
-  if (corpo.action === "create") {
-    const nome = typeof corpo.name === "string" ? corpo.name : "";
-    const criado = await createToken(locals.env, {
-      userId: eu.id,
+  if (body.action === "create") {
+    const name = typeof body.name === "string" ? body.name : "";
+    const created = await createToken(locals.env, {
+      userId: me.id,
       workspaceId: ws.workspaceId,
-      name: nome,
-      timezone: typeof corpo.timezone === "string" ? corpo.timezone : undefined,
+      name,
+      timezone: typeof body.timezone === "string" ? body.timezone : undefined,
     });
-    if ("error" in criado) return jsonError(criado.error, 400);
+    if ("error" in created) return jsonError(created.error, 400);
     await audit(locals.env, {
       action: AUDIT.SELF_API_TOKEN_CREATED,
-      actorId: eu.id,
-      actorEmail: eu.email,
+      actorId: me.id,
+      actorEmail: me.email,
       workspaceId: ws.workspaceId,
-      details: { tokenId: criado.id, nome: nome.slice(0, 60) },
+      details: { tokenId: created.id, name: name.slice(0, 60) },
       request,
     });
-    return json(criado, 201);
+    return json(created, 201);
   }
 
-  if (corpo.action === "revoke" && typeof corpo.id === "string") {
-    const ok = await revokeToken(locals.env, { id: corpo.id, userId: eu.id, workspaceId: ws.workspaceId });
-    if (!ok) return jsonError("Token não encontrado.", 404);
+  if (body.action === "revoke" && typeof body.id === "string") {
+    const ok = await revokeToken(locals.env, { id: body.id, userId: me.id, workspaceId: ws.workspaceId });
+    if (!ok) return jsonError("Token not found.", 404);
     await audit(locals.env, {
       action: AUDIT.SELF_API_TOKEN_REVOKED,
-      actorId: eu.id,
-      actorEmail: eu.email,
+      actorId: me.id,
+      actorEmail: me.email,
       workspaceId: ws.workspaceId,
-      details: { tokenId: corpo.id },
+      details: { tokenId: body.id },
       request,
     });
     return json({ ok: true });
   }
 
-  return jsonError("Ação inválida.", 400);
+  return jsonError("Invalid action.", 400);
 };

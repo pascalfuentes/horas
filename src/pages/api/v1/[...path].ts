@@ -8,25 +8,25 @@ import { PERMISSIONS, can } from "~/lib/permissions";
 export const prerender = false;
 
 /**
- * API pública por token: `Authorization: Bearer hrs_…`.
+ * Public token API: `Authorization: Bearer hrs_…`.
  *
- * Não passa pelo portão de sessão do middleware (ver a exceção lá): aqui a
- * autenticação é o token, que resolve a pessoa E o workspace de uma vez.
- * Sem cookie envolvido, não há o que proteger de CSRF.
+ * It does not go through the middleware's session gate (see the exception there):
+ * here the authentication is the token, which resolves the person AND the
+ * workspace at once. With no cookie involved, there is nothing to protect from CSRF.
  */
 export const ALL: APIRoute = async ({ request, locals, params }) => {
-  const portador = await authenticateToken(locals.env, tokenFromHeader(request));
-  if (!portador) {
-    const resposta = jsonError("Token ausente ou inválido. Envie Authorization: Bearer <token>.", 401);
-    resposta.headers.set("www-authenticate", "Bearer");
-    return resposta;
+  const bearer = await authenticateToken(locals.env, tokenFromHeader(request));
+  if (!bearer) {
+    const response = jsonError("Missing or invalid token. Send Authorization: Bearer <token>.", 401);
+    response.headers.set("www-authenticate", "Bearer");
+    return response;
   }
 
   const store = createStore(locals.env.DB, {
-    workspaceId: portador.workspaceId,
-    userId: portador.userId,
-    tz: request.headers.get("x-timezone") ?? portador.tz,
+    workspaceId: bearer.workspaceId,
+    userId: bearer.userId,
+    tz: request.headers.get("x-timezone") ?? bearer.tz,
   });
 
-  return handleHoras(request, store, params.path ?? "", can(portador.role, PERMISSIONS.CONTENT_WRITE));
+  return handleHoras(request, store, params.path ?? "", can(bearer.role, PERMISSIONS.CONTENT_WRITE));
 };

@@ -1,4 +1,4 @@
-const dateTime = new Intl.DateTimeFormat("pt-BR", {
+const dateTime = new Intl.DateTimeFormat("en-US", {
   day: "2-digit",
   month: "2-digit",
   year: "numeric",
@@ -13,6 +13,6 @@ export function formatDateTime(value: Date | null | undefined): string {
 export function relativeDays(value: Date): string {
   const days = Math.ceil((value.getTime() - Date.now()) / 86_400_000);
   if (days < 0) return "expired";
-  if (days === 0) return "expira hoje";
-  return `expira em ${days} dia${days === 1 ? "" : "s"}`;
+  if (days === 0) return "expires today";
+  return `expires in ${days} day${days === 1 ? "" : "s"}`;
 }

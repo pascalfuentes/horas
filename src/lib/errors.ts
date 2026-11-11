@@ -1,8 +1,8 @@
 /**
- * Erros do D1 chegam embrulhados: `DrizzleQueryError` → `D1_ERROR` → `Error`.
- * A mensagem que interessa ("LAST_ADMIN", "UNIQUE constraint failed") está lá
- * no fundo, então `String(error).includes(...)` não encontra nada. Esta função
- * anda a cadeia de `cause`.
+ * D1 errors arrive wrapped: `DrizzleQueryError` → `D1_ERROR` → `Error`.
+ * The message that matters ("LAST_ADMIN", "UNIQUE constraint failed") is down
+ * at the bottom, so `String(error).includes(...)` finds nothing. This function
+ * walks the `cause` chain.
  */
 export function errorChainIncludes(error: unknown, needle: string): boolean {
   let current: unknown = error;
@@ -14,11 +14,11 @@ export function errorChainIncludes(error: unknown, needle: string): boolean {
   return false;
 }
 
-/** O trigger de `migrations/0001_invariants.sql` aborta com esta mensagem. */
+/** The trigger in `migrations/0001_invariants.sql` aborts with this message. */
 export const isLastAdminError = (error: unknown) => errorChainIncludes(error, "LAST_ADMIN");
 
-/** Todo workspace precisa de um dono — trigger de `0005_workspace_invariants.sql`. */
+/** Every workspace needs an owner — trigger in `0005_workspace_invariants.sql`. */
 export const isLastOwnerError = (error: unknown) => errorChainIncludes(error, "LAST_OWNER");
 
-/** Violação de índice único (ex.: convite pendente duplicado). */
+/** Unique index violation (e.g. duplicate pending invite). */
 export const isUniqueViolation = (error: unknown) => errorChainIncludes(error, "UNIQUE constraint failed");

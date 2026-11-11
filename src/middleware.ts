@@ -6,7 +6,7 @@ import { env } from "~/lib/env";
 import { canAdministerPlatform } from "~/lib/permissions";
 import { membershipBySlug } from "~/lib/workspaces";
 
-/** Rotas alcançáveis sem sessão. Tudo que não estiver aqui exige login. */
+/** Routes reachable without a session. Anything not listed here requires login. */
 const PUBLIC_PAGES = new Set([
   "/",
   "/login",
@@ -15,14 +15,14 @@ const PUBLIC_PAGES = new Set([
   "/forgot-password",
   "/reset-password",
   "/setup",
-  // Chega-se aqui com a senha aceita mas sem sessão ainda — só o cookie
-  // temporário do segundo fator. Não há sessão para exigir.
+  // You get here with the password accepted but no session yet — only the
+  // temporary second-factor cookie. There is no session to require.
   "/two-factor",
-  // Pública: o Google exige a URL da política para publicar o app OAuth.
+  // Public: Google requires the policy URL to publish the OAuth app.
   "/privacy",
 ]);
 
-/** Endpoints de API alcançáveis sem sessão — são justamente os que criam uma. */
+/** API endpoints reachable without a session — they are precisely the ones that create one. */
 const PUBLIC_API = new Set([
   "/api/login",
   "/api/logout",
@@ -35,7 +35,7 @@ const PUBLIC_API = new Set([
   "/api/social",
 ]);
 
-/** Páginas que um usuário JÁ logado não deveria ver. */
+/** Pages an ALREADY signed-in user should not see. */
 const ANONYMOUS_ONLY = new Set([
   "/login",
   "/signup",
@@ -47,14 +47,15 @@ const ANONYMOUS_ONLY = new Set([
 ]);
 
 /**
- * Algo como `/favicon.ico` ou `/robots.txt`: pedido de arquivo, não de rota.
- * Quando o arquivo não existe, o handler de assets não serve e a requisição
- * cai aqui — sem sessão, viraria um 302 para o login. Deve ser 404.
+ * Something like `/favicon.ico` or `/robots.txt`: a request for a file, not a
+ * route. When the file does not exist, the assets handler does not serve it and
+ * the request lands here — without a session, it would become a 302 to the
+ * login. It should be a 404.
  */
 const LOOKS_LIKE_FILE = /\.[a-z0-9]{1,8}$/i;
 
-/** `/w/<slug>/…` e `/api/w/<slug>/…` — o slug é o que autoriza. */
-const ROTA_DE_WORKSPACE = /^\/(?:api\/)?w\/([^/]+)/;
+/** `/w/<slug>/…` and `/api/w/<slug>/…` — the slug is what authorizes. */
+const WORKSPACE_ROUTE = /^\/(?:api\/)?w\/([^/]+)/;
 
 export const onRequest = defineMiddleware(async (context, next) => {
   context.locals.env = env;
@@ -63,12 +64,13 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   const path = context.url.pathname;
 
-  // As rotas do próprio Better Auth cuidam da própria autorização.
+  // Better Auth's own routes handle their own authorization.
   if (path.startsWith("/api/auth/")) return next();
 
-  // API por token e servidor MCP: a autenticação é o token pessoal, conferido
-  // dentro do próprio handler (`authenticateToken`). Não há cookie nem sessão
-  // aqui — passar pelo portão abaixo só renderia um redirect para o login.
+  // Token API and MCP server: authentication is the personal token, checked
+  // inside the handler itself (`authenticateToken`). There is no cookie or
+  // session here — going through the gate below would only yield a redirect to
+  // the login.
   if (path.startsWith("/api/v1/") || path === "/mcp" || path.startsWith("/mcp/")) return next();
 
   const isApi = path.startsWith("/api/");
@@ -78,83 +80,84 @@ export const onRequest = defineMiddleware(async (context, next) => {
     path.startsWith("/workspaces") ||
     isApi;
 
-  // Antes de resolver a sessão: pedido de arquivo não gasta consulta ao banco
-  // nem passa pelo portão de autenticação.
+  // Before resolving the session: a file request does not spend a database
+  // query or go through the authentication gate.
   if (!protectedArea && LOOKS_LIKE_FILE.test(path)) return next();
 
   const payload = await context.locals.auth.api.getSession({ headers: context.request.headers });
   context.locals.user = (payload?.user as App.Locals["user"]) ?? null;
   context.locals.session = payload?.session ?? null;
 
-  // A página de convite é pública: quem ainda não tem conta precisa chegar
-  // nela para entender o que é e criar a conta com o e-mail certo. O ACEITE,
-  // esse sim, exige sessão — e o plugin ainda confere se o e-mail bate.
-  const paginaDeConvite = !isApi && path.startsWith("/invite/");
-  const needsSession = paginaDeConvite
+  // The invite page is public: someone who has no account yet needs to reach
+  // it to understand what it is and create the account with the right email.
+  // ACCEPTING, on the other hand, does require a session — and the plugin
+  // still checks that the email matches.
+  const invitePage = !isApi && path.startsWith("/invite/");
+  const needsSession = invitePage
     ? false
     : isApi
       ? !PUBLIC_API.has(path)
       : !PUBLIC_PAGES.has(path);
 
   if (needsSession && !context.locals.user) {
-    if (isApi) return new Response("Não autenticado", { status: 401 });
+    if (isApi) return new Response("Not authenticated", { status: 401 });
     return context.redirect(`/login?next=${encodeURIComponent(path + context.url.search)}`);
   }
 
   // ------------------------------------------------------------------
-  // Workspace da URL
+  // Workspace in the URL
   //
-  // O slug é a fonte da verdade da autorização, e não o
-  // `session.activeOrganizationId`: aquele é um valor único por sessão, e com
-  // duas abas abertas em workspaces diferentes a segunda trocaria o ativo da
-  // primeira — que continuaria parecendo correta na tela enquanto agisse no
-  // workspace errado.
+  // The slug is the source of truth for authorization, not
+  // `session.activeOrganizationId`: that one is a single value per session,
+  // and with two tabs open on different workspaces the second would switch the
+  // first one's active workspace — which would still look correct on screen
+  // while acting on the wrong workspace.
   // ------------------------------------------------------------------
-  const noWorkspace = path.match(ROTA_DE_WORKSPACE);
-  if (noWorkspace && context.locals.user) {
-    const slug = decodeURIComponent(noWorkspace[1]);
+  const workspaceMatch = path.match(WORKSPACE_ROUTE);
+  if (workspaceMatch && context.locals.user) {
+    const slug = decodeURIComponent(workspaceMatch[1]);
     const membership = await membershipBySlug(env, { slug, userId: context.locals.user.id });
 
-    // 404 e não 403, de propósito: "sem permissão" confirmaria que o workspace
-    // existe, o que é informação de graça para quem estiver sondando slugs.
+    // 404 and not 403, on purpose: "permission denied" would confirm that the
+    // workspace exists, which is free information for anyone probing slugs.
     if (!membership) {
-      if (isApi) return new Response("Workspace não encontrado", { status: 404 });
+      if (isApi) return new Response("Workspace not found", { status: 404 });
       return context.rewrite("/404");
     }
 
     context.locals.membership = membership;
 
-    // Lembra o último workspace usado, para o /dashboard saber para onde
-    // mandar a pessoa depois. Só escreve quando mudou.
+    // Remembers the last workspace used, so /dashboard knows where to send
+    // the person later. Only writes when it changed.
     if (context.locals.session?.activeOrganizationId !== membership.workspaceId) {
       await env.DB.prepare(`UPDATE "session" SET "activeOrganizationId" = ?1 WHERE "id" = ?2`)
         .bind(membership.workspaceId, context.locals.session!.id)
         .run()
-        .catch((erro) => console.error("sincronizar workspace ativo:", erro));
+        .catch((err) => console.error("sync active workspace:", err));
     }
   }
 
-  // Área de administração da PLATAFORMA — não da aplicação de ninguém.
+  // PLATFORM administration area — not that of anyone's application.
   if (path.startsWith("/dashboard/admin") || path.startsWith("/api/admin")) {
     if (!canAdministerPlatform(context.locals.user?.role)) {
-      if (isApi) return new Response("Sem permissão", { status: 403 });
+      if (isApi) return new Response("Permission denied", { status: 403 });
       return context.redirect("/dashboard?e=no_permission");
     }
   }
 
-  // Administrador de plataforma sem 2FA: entra, mas só navega para a tela de
-  // configuração. É bloqueio de navegação, não de acesso.
+  // Platform administrator without 2FA: they get in, but can only navigate to
+  // the setup screen. It blocks navigation, not access.
   if (REQUIRE_2FA_FOR_ADMINS && canAdministerPlatform(context.locals.user?.role)) {
-    const liberado =
+    const allowed =
       path === "/dashboard/security/2fa" || path === "/api/security/2fa" || path === "/api/logout";
 
-    if (!context.locals.user?.twoFactorEnabled && !liberado) {
-      if (isApi) return new Response("Ative a verificação em duas etapas", { status: 403 });
-      return context.redirect("/dashboard/security/2fa?obrigatorio=1");
+    if (!context.locals.user?.twoFactorEnabled && !allowed) {
+      if (isApi) return new Response("Enable two-step verification", { status: 403 });
+      return context.redirect("/dashboard/security/2fa?required=1");
     }
   }
 
-  // Quem já está logado não tem o que fazer no login nem no cadastro.
+  // Someone already signed in has no business on the login or signup pages.
   if (context.locals.user && ANONYMOUS_ONLY.has(path)) {
     return context.redirect("/dashboard");
   }

@@ -6,15 +6,15 @@ import { configPath } from "./scripts/config.mjs";
 export default defineConfig({
   output: "server",
   adapter: cloudflare({
-    // wrangler.local.jsonc quando existe; wrangler.jsonc (template) caso contrário.
+    // wrangler.local.jsonc when it exists; wrangler.jsonc (template) otherwise.
     configPath: configPath(),
-    // Mantém o D1 local em .wrangler/state entre `astro dev` e
-    // `wrangler d1 migrations apply --local` — sem isso as migrations rodariam
-    // num banco e o dev server leria outro.
+    // Keeps the local D1 in .wrangler/state between `astro dev` and
+    // `wrangler d1 migrations apply --local`. Without this the migrations would
+    // run on one database and the dev server would read another.
     persistState: true,
   }),
   security: {
-    // Valida a origem em POST/PUT/PATCH/DELETE vindos de formulário.
+    // Validates the origin on POST/PUT/PATCH/DELETE coming from forms.
     checkOrigin: true,
   },
   devToolbar: { enabled: false },

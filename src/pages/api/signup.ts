@@ -10,77 +10,78 @@ export const prerender = false;
 const PAGE = "/signup";
 
 /**
- * Cadastro aberto.
+ * Open signup.
  *
- * Responde SEMPRE a mesma coisa, exista a conta ou não. O Better Auth devolve
- * `USER_ALREADY_EXISTS` no cadastro, e repassar isso transformaria este
- * formulário num verificador de contas — o mesmo motivo pelo qual o login e a
- * recuperação de senha já respondem igual para e-mail existente e inexistente.
+ * ALWAYS responds the same thing, whether the account exists or not. Better
+ * Auth returns `USER_ALREADY_EXISTS` on signup, and passing that along would
+ * turn this form into an account checker — the same reason login and password
+ * recovery already respond the same for existing and nonexistent emails.
  *
- * Quando o e-mail já tem conta, em vez de criar nada, avisamos o dono pelo
- * próprio e-mail. Quem tentou não descobre nada; quem é dono fica sabendo.
+ * When the email already has an account, instead of creating anything, we
+ * notify the owner through that same email. Whoever tried learns nothing; the
+ * owner finds out.
  */
 export const POST: APIRoute = async ({ request, locals }) => {
   const form = await request.formData();
-  const nome = str(form, "name");
+  const name = str(form, "name");
   const email = str(form, "email").toLowerCase();
-  const senha = str(form, "password");
+  const password = str(form, "password");
 
-  if (!nome || !isEmail(email)) return fail(PAGE, "fields");
-  if (senha.length < 10) return fail(PAGE, "password_short");
-  if (senha !== str(form, "confirm")) return fail(PAGE, "password_mismatch");
+  if (!name || !isEmail(email)) return fail(PAGE, "fields");
+  if (password.length < 10) return fail(PAGE, "password_short");
+  if (password !== str(form, "confirm")) return fail(PAGE, "password_mismatch");
 
-  // O token NÃO é validado aqui: quem valida é o hook em `auth.ts`, no caminho
-  // por onde toda criação de conta passa. Um token do Turnstile é de uso único,
-  // então validar nos dois lugares falharia no segundo.
+  // The token is NOT validated here: the hook in `auth.ts` validates it, on the
+  // path every account creation goes through. A Turnstile token is single-use,
+  // so validating in both places would fail on the second.
   const turnstileToken = str(form, "cf-turnstile-response");
 
-  const jaExiste = await userByEmail(locals.env, email);
+  const alreadyExists = await userByEmail(locals.env, email);
 
-  if (jaExiste) {
-    await avisarTentativaDeCadastro(locals.env, email);
+  if (alreadyExists) {
+    await notifySignupAttempt(locals.env, email);
     return ok("/verify-email", "ok_signup");
   }
 
   try {
     const res = await callAuth(locals.auth, request, "/sign-up/email", {
-      name: nome,
+      name,
       email,
-      password: senha,
+      password,
       turnstileToken,
     });
 
     if (!res.ok) {
-      const corpo = (await res.clone().json().catch(() => null)) as { code?: string } | null;
-      // Corrida: alguém criou a conta entre a checagem acima e agora. A
-      // resposta continua sendo a mesma de sempre.
-      if (String(corpo?.code ?? "").includes("ALREADY_EXISTS")) {
+      const body = (await res.clone().json().catch(() => null)) as { code?: string } | null;
+      // Race: someone created the account between the check above and now. The
+      // response stays the same as always.
+      if (String(body?.code ?? "").includes("ALREADY_EXISTS")) {
         return ok("/verify-email", "ok_signup");
       }
-      const texto = `${corpo?.code ?? ""} ${(corpo as { message?: string })?.message ?? ""}`;
-      if (texto.includes("TURNSTILE_FALHOU")) return fail(PAGE, "turnstile");
-      return fail(PAGE, codeFromAuthError({ message: texto }));
+      const text = `${body?.code ?? ""} ${(body as { message?: string })?.message ?? ""}`;
+      if (text.includes("TURNSTILE_FAILED")) return fail(PAGE, "turnstile");
+      return fail(PAGE, codeFromAuthError({ message: text }));
     }
   } catch (error) {
-    console.error("cadastro:", error);
+    console.error("signup:", error);
     return fail(PAGE, "error");
   }
 
-  // Sem sessão ainda, de propósito: `requireEmailVerification` só libera a
-  // entrada depois que a pessoa provar que o endereço é dela.
+  // No session yet, on purpose: `requireEmailVerification` only lets the
+  // person in after they prove the address is theirs.
   return ok("/verify-email", "ok_signup");
 };
 
-async function avisarTentativaDeCadastro(env: App.Locals["env"], email: string) {
+async function notifySignupAttempt(env: App.Locals["env"], email: string) {
   const { html, text } = emailLayout(
-    "Alguém tentou criar uma conta com o seu e-mail",
+    "Someone tried to create an account with your email",
     [
-      "Recebemos um cadastro usando este endereço, que já tem conta aqui. Nada foi alterado.",
-      "Se foi você, é só entrar normalmente — ou usar “Esqueci minha senha” se não lembrar dela.",
-      "Se não foi você, can ignorar este aviso.",
+      "We received a signup using this address, which already has an account here. Nothing was changed.",
+      "If it was you, just log in as usual — or use “Forgot my password” if you don't remember it.",
+      "If it wasn't you, you can ignore this notice.",
     ],
-    { label: "Ir para o login", url: `${env.BETTER_AUTH_URL}/login` },
+    { label: "Go to login", url: `${env.BETTER_AUTH_URL}/login` },
   );
-  await sendEmail(env, { to: email, subject: "Tentativa de cadastro com o seu e-mail", html, text })
-    .catch((error) => console.error("aviso de cadastro duplicado:", error));
+  await sendEmail(env, { to: email, subject: "Signup attempt with your email", html, text })
+    .catch((error) => console.error("duplicate signup notice:", error));
 }

@@ -1,39 +1,40 @@
 /**
- * Configuração da aplicação que fica NO CÓDIGO (não é segredo, não muda entre
- * ambientes). Ids de infraestrutura ficam em `wrangler.local.jsonc`; chaves
- * ficam em secrets do Worker.
+ * Application configuration that lives IN THE CODE (it is not secret and does
+ * not change between environments). Infrastructure ids live in
+ * `wrangler.local.jsonc`; keys live in the Worker's secrets.
  *
- * `npm run new-project` reescreve o APP_NAME daqui.
+ * `npm run new-project` rewrites the APP_NAME here.
  */
 
-/** Aparece na barra superior e no nome do app dentro do Better Auth. */
+/** Shown in the top bar and as the app name inside Better Auth. */
 export const APP_NAME = "Horas";
 
-/** Quanto tempo um convite vale antes de expirar. */
+/** How long an invite is valid before it expires. */
 export const INVITE_TTL_DAYS = 7;
 
 /**
- * Quem responde pelos dados na política de privacidade.
+ * Who answers for the data in the privacy policy.
  *
- * Vem de `vars` no wrangler (wrangler.local.jsonc neste deploy), e não daqui,
- * pelo mesmo motivo dos ids: o repositório do template não deve carregar o
- * e-mail pessoal de ninguém. Os valores abaixo são só o fallback.
+ * It comes from `vars` in wrangler (wrangler.local.jsonc in this deploy), and
+ * not from here, for the same reason as the ids: the template repository should
+ * not carry anyone's personal email. The values below are only the fallback.
  */
 export function operator(env: { OPERATOR_NAME?: string; OPERATOR_CONTACT?: string }) {
   return {
-    nome: env.OPERATOR_NAME || APP_NAME,
-    contato: env.OPERATOR_CONTACT || "contato@exemplo.com",
+    name: env.OPERATOR_NAME || APP_NAME,
+    contact: env.OPERATOR_CONTACT || "contact@example.com",
   };
 }
 
 /**
- * Exige 2FA de quem é administrador.
+ * Requires 2FA from administrators.
  *
- * Não tranca ninguém para fora: um admin sem 2FA entra normalmente e é levado
- * para a tela de configuração, onde fica até ativar. É bloqueio de navegação,
- * não de acesso.
+ * It locks no one out: an admin without 2FA signs in normally and is taken to
+ * the setup screen, where they stay until they enable it. It blocks navigation,
+ * not access.
  *
- * Ligado por padrão porque a conta de administrador convida gente e muda
- * papéis — quem entra nela se convida de volta quantas vezes quiser.
+ * On by default because the administrator account invites people and changes
+ * roles — whoever gets into it can invite themselves back as many times as they
+ * like.
  */
 export const REQUIRE_2FA_FOR_ADMINS = true;
