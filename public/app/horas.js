@@ -785,7 +785,8 @@
     defRate.addEventListener('change', saveSettings);
     currency.disabled = defRate.disabled = !CAN_WRITE;
 
-    root.replaceChildren(
+    // A viewer has no "New project" card; drop the missing part instead of printing "false".
+    root.replaceChildren.apply(root, [
       clientList,
       CAN_WRITE && el('div', { class: 'card' }, [
         el('h2', { text: 'New project' }),
@@ -817,7 +818,7 @@
           el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'st-rate', text: 'Default hourly rate' }), defRate]),
         ]),
       ])
-    );
+    ].filter(Boolean));
     await load();
   }
 
@@ -865,7 +866,127 @@
   /* ------------------------------------------------------------------ */
 
   /** @type {Object<string, function(): (Promise<void>|void)>} */
-  const views = { time: viewTime, reports: viewReports, projects: viewProjects, integrations: viewIntegrations };
+  /* ------------------------------------------------------------------ */
+  /* Screen: Import & export                                             */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * Downloads a file from the workspace API.
+   * @param {string} path Path after the base, e.g. "/backup.json".
+   * @param {string} filename Name suggested for the saved file.
+   * @returns {Promise<void>}
+   */
+  async function download(path, filename) {
+    const res = await fetch(BASE + path, { headers: { 'x-timezone': TZ }, credentials: 'same-origin' });
+    if (!res.ok) throw new Error('Could not export.');
+    const a = el('a', { href: URL.createObjectURL(await res.blob()), download: filename });
+    a.click();
+    URL.revokeObjectURL(a.getAttribute('href'));
+  }
+
+  /** @returns {void} */
+  function viewData() {
+    /** Human names for what the server recognized in the file. */
+    const sources = { 'horas-backup': 'Horas backup', 'horas-csv': 'Horas CSV export', 'clockify-csv': 'Clockify detailed report', 'generic-csv': 'CSV file' };
+    const file = /** @type {HTMLInputElement} */ (el('input', { type: 'file', id: 'imp-file', accept: '.csv,.json,text/csv,application/json' }));
+    const order = /** @type {HTMLSelectElement} */ (el('select', { id: 'imp-order' }, [
+      el('option', { value: 'auto', text: 'Detect automatically' }),
+      el('option', { value: 'mdy', text: 'Month first (11/30/2026)' }),
+      el('option', { value: 'dmy', text: 'Day first (30/11/2026)' }),
+    ]));
+    const out = el('div', { 'aria-live': 'polite' });
+    /** @type {string} */
+    let content = '';
+
+    /**
+     * Sends the file to the server.
+     * @param {boolean} dryRun True to preview without writing.
+     * @returns {Promise<object>}
+     */
+    async function send(dryRun) {
+      const res = await fetch(BASE + '/import?date_format=' + order.value + (dryRun ? '&dry_run=1' : ''), {
+        method: 'POST',
+        headers: { 'x-timezone': TZ, 'content-type': 'text/plain' },
+        body: content,
+        credentials: 'same-origin',
+      });
+      const data = await res.json().catch(function () { return null; });
+      if (!res.ok) throw new Error((data && data.error) || 'Could not read the file (' + res.status + ').');
+      return data;
+    }
+
+    /**
+     * Shows what the file contains, before or after importing.
+     * @param {object} r Result from the server.
+     * @returns {void}
+     */
+    function show(r) {
+      const done = !r.dry_run;
+      const count = done ? r.imported : r.to_import;
+      const line = function (label, value) { return el('li', {}, [el('strong', { text: String(value) }), ' ' + label]); };
+      // `replaceChildren` would print the word "null" for a missing part, so drop those first.
+      out.replaceChildren.apply(out, [
+        el('div', { class: 'alert ' + (done ? 'alert-success' : 'alert-info') }, [el('div', {}, [
+          el('strong', { text: done ? 'Import finished.' : 'Preview: nothing has been imported yet.' }),
+          el('p', { class: 'hr-imp-source', text: 'Recognized as: ' + (sources[r.source] || r.source) + ' · ' + r.rows + ' rows'
+            + (r.date_order ? ' · dates read as ' + (r.date_order === 'mdy' ? 'month/day/year' : 'day/month/year') : '') }),
+          !done && r.sample ? el('p', { class: 'hr-imp-source', text: 'Earliest entry: ' + new Date(r.sample.start).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' })
+            + ', ' + hhmm(r.sample.start) + ' – ' + hhmm(r.sample.end) + (r.sample.description ? ' (' + r.sample.description + ')' : '') + '. If that date is wrong, change the date order above.' }) : null,
+          el('ul', { class: 'hr-imp-list' }, [
+            line(done ? 'entries imported' : 'entries to import', count),
+            r.duplicates ? line('already here, skipped', r.duplicates) : null,
+            r.invalid ? line('rows with problems, skipped', r.invalid) : null,
+            r.new_projects.length ? line((done ? 'projects created: ' : 'new projects: ') + r.new_projects.slice(0, 12).join(', ') + (r.new_projects.length > 12 ? '…' : ''), r.new_projects.length) : null,
+            r.settings_restored ? el('li', { text: 'Currency and default rate restored from the backup.' }) : null,
+          ]),
+        ])]),
+        r.errors.length ? el('div', { class: 'card' }, [
+          el('h2', { text: 'Rows with problems' }),
+          el('span', { class: 'muted', text: r.invalid > r.errors.length ? 'Showing the first ' + r.errors.length + ' of ' + r.invalid + '.' : 'These rows are skipped; the rest is imported.' }),
+          el('ul', { class: 'hr-imp-list' }, r.errors.map(function (e) { return el('li', { text: 'Row ' + e.row + ': ' + e.message }); })),
+        ]) : null,
+        !done && count > 0 ? el('button', { type: 'button', text: 'Import ' + count + (count === 1 ? ' entry' : ' entries'), onclick: safe(async function () {
+          show(await send(false));
+          file.value = '';
+          content = '';
+        }) }) : null,
+        !done && count === 0 ? el('p', { class: 'muted', text: 'There is nothing new to import from this file.' }) : null,
+      ].filter(Boolean));
+    }
+
+    const preview = safe(async function () {
+      const f = file.files && file.files[0];
+      out.replaceChildren();
+      if (!f) return;
+      if (f.size > 3000000) throw new Error('File too large. The limit is 3 MB; split it by period.');
+      content = await f.text();
+      show(await send(true));
+    });
+    file.addEventListener('change', preview);
+    order.addEventListener('change', preview);
+
+    root.replaceChildren(
+      el('div', { class: 'card' }, [
+        el('h2', { text: 'Export' }),
+        el('span', { class: 'muted', text: 'Your own entries in this workspace. The backup can be imported back here or into another account; the CSV opens in any spreadsheet.' }),
+        el('div', { class: 'row' }, [
+          el('button', { type: 'button', text: 'Download backup (JSON)', onclick: safe(function () { return download('/backup.json', 'horas-backup-' + dayKey(new Date()) + '.json'); }) }),
+          el('button', { type: 'button', class: 'btn-ghost', text: 'Download entries (CSV)', onclick: safe(function () { return download('/export.csv', 'horas-' + dayKey(new Date()) + '.csv'); }) }),
+        ]),
+      ]),
+      CAN_WRITE ? el('div', { class: 'card' }, [
+        el('h2', { text: 'Import' }),
+        el('span', { class: 'muted', text: 'Accepts a Horas backup, a Horas CSV export, or Clockify\'s Detailed report exported as CSV. You see a preview before anything is saved, and entries already here are skipped.' }),
+        el('div', { class: 'row' }, [
+          el('div', { class: 'field' }, [el('label', { for: 'imp-file', text: 'File (.csv or .json, up to 3 MB)' }), file]),
+          el('div', { class: 'field hr-field-md' }, [el('label', { for: 'imp-order', text: 'Dates like 03/04/2026' }), order]),
+        ]),
+      ]) : el('p', { class: 'alert alert-info', text: 'Your role in this workspace is read-only, so you can export but not import.' }),
+      out
+    );
+  }
+
+  const views = { time: viewTime, reports: viewReports, projects: viewProjects, integrations: viewIntegrations, data: viewData };
   const start = views[root.dataset.view || ''];
   if (start) {
     Promise.resolve().then(start).catch(function (e) {

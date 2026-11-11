@@ -1,4 +1,5 @@
 import { HorasError, type Store } from "~/lib/horas";
+import { ImportFormatError, parseImport, type DateOrder } from "~/lib/horas-import";
 
 /**
  * JSON router for time tracking.
@@ -73,6 +74,27 @@ export async function handleHoras(
       if (method === "PATCH") return json(await store.updateSettings(await readBody(request)));
     }
 
+    if (resource === "backup.json" && !id && method === "GET") {
+      return new Response(JSON.stringify(await store.exportBackup(), null, 2), {
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "content-disposition": 'attachment; filename="horas-backup.json"',
+          "cache-control": "no-store",
+        },
+      });
+    }
+
+    // The body is the file itself (CSV or a backup JSON), not a JSON envelope.
+    // `?dry_run=1` previews without writing.
+    if (resource === "import" && !id && method === "POST") {
+      const file = await request.text();
+      if (file.length > 3_000_000) return jsonError("File too large. The limit is 3 MB; split it by period.", 413);
+      const order = q.get("date_format");
+      const dateOrder: DateOrder = order === "mdy" || order === "dmy" ? order : "auto";
+      const dryRun = q.get("dry_run") === "1" || q.get("dry_run") === "true";
+      return json(await store.importData(parseImport(file, dateOrder), { dryRun }));
+    }
+
     if (resource === "export.csv" && !id && method === "GET") {
       const entries = await store.listEntries({ ...filter, limit: 5000 });
       const lines = [
@@ -124,6 +146,7 @@ export async function handleHoras(
     return jsonError("Route not found.", 404);
   } catch (err) {
     if (err instanceof HorasError) return jsonError(err.message, err.status);
+    if (err instanceof ImportFormatError) return jsonError(err.message, 400);
     console.error("horas-api:", err);
     return jsonError("Internal error.", 500);
   }

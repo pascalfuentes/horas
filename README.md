@@ -17,6 +17,7 @@ Astro 7 (SSR)  ·  Cloudflare Workers  ·  D1  ·  Better Auth  ·  MCP (Streama
 | **Projects** | per workspace, with client, color, hourly rate and archiving |
 | **Billing** | workspace currency and default hourly rate; amount computed on every billable entry |
 | **Reports** | summary (by project, client, tag or description) and detailed; filters by project, client, tag and billable; CSV |
+| **Import & export** | full backup as JSON, entries as CSV; import a Horas backup, a Horas CSV or Clockify's Detailed report CSV, with a preview and duplicate detection |
 | **MCP** | 13 tools at `/mcp`, authenticated by personal token |
 | **REST API** | the same operations at `/api/v1/…` |
 | **Accounts** | e-mail and password, Google, GitHub, 2FA, per-device sessions |
@@ -83,6 +84,8 @@ curl https://YOUR-DOMAIN/api/v1/status -H "Authorization: Bearer hrs_…"
 | GET | `/tags` | tags already used |
 | GET · PATCH | `/settings` | the workspace's `currency` and `default_rate` |
 | GET | `/export.csv` | same filters as `/entries` |
+| GET | `/backup.json` | everything of yours in the workspace: settings, projects and entries |
+| POST | `/import` | the body is the file itself (send `Content-Type: text/csv` or `application/json`); `?dry_run=1` previews, `?date_format=mdy\|dmy` settles ambiguous dates |
 
 Dates: ISO-8601. Without an offset (`2026-11-11T09:00`), they are interpreted
 in the token's time zone, the one of the browser that created it. `from`/`to`
@@ -130,6 +133,7 @@ migrations/0006_horas.sql         tables time_project, time_entry, api_token
 migrations/0007_faturamento.sql   project hourly rate and workspace settings
 src/lib/horas.ts                  core: every time rule, tied to (workspace, person)
 src/lib/horas-api.ts              JSON router, the same for web and token
+src/lib/horas-import.ts           reads backup JSON and CSV files (Horas and Clockify) for import
 src/lib/horas-mcp.ts              MCP tools
 src/lib/api-tokens.ts             create, revoke and authenticate tokens (only the SHA-256 is stored)
 src/pages/api/w/[slug]/horas/     web API (cookie session)

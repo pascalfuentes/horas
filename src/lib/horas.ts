@@ -7,10 +7,15 @@
  * parameter.
  */
 
+import type { ImportError, Parsed } from "~/lib/horas-import";
+
 // Project colors from the design system (project/sky, coral, sun, mint, violet, rose).
 const COLORS = ["#5dcdf1", "#fd976d", "#fdd46b", "#4cc98c", "#9b8afb", "#f0705f"];
 
 export const DEFAULT_TZ = "America/Sao_Paulo";
+
+/** Projects a workspace may have; shared by manual creation and import. */
+const MAX_PROJECTS = 500;
 
 /** Error with an HTTP status, used for 400/404/409 responses. */
 export class HorasError extends Error {
@@ -308,7 +313,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
       throw new HorasError(`A project named "${name}" already exists.`, 409);
     }
     const total = await first<{ n: number }>('SELECT COUNT(*) AS n FROM "time_project" WHERE "workspaceId" = ?1', ws);
-    if ((total?.n ?? 0) >= 500) throw new HorasError("Limit of 500 projects per workspace.");
+    if ((total?.n ?? 0) >= MAX_PROJECTS) throw new HorasError(`Limit of ${MAX_PROJECTS} projects per workspace.`);
     const meta = await run(
       'INSERT INTO "time_project" ("workspaceId", "name", "client", "color", "createdAt", "hourlyRate") VALUES (?1, ?2, ?3, ?4, ?5, ?6)',
       ws,
@@ -606,8 +611,191 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     };
   }
 
+  /* ----- Backup and import ----- */
+
+  /**
+   * Everything this person has in this workspace, in a format `importData`
+   * reads back. Projects go by name, not id, so the file can be restored into
+   * another workspace or another account.
+   */
+  async function exportBackup() {
+    const [settings, projects, rows] = await Promise.all([
+      getSettings(),
+      listProjects({ includeArchived: true }),
+      all<{ description: string; project: string | null; tags: string; billable: number; start: string; end: string }>(
+        `SELECT e."description", p."name" AS project, e."tags", e."billable", e."start", e."end"
+           FROM "time_entry" e LEFT JOIN "time_project" p ON p."id" = e."projectId"
+          WHERE e."workspaceId" = ?1 AND e."userId" = ?2 AND e."end" IS NOT NULL
+          ORDER BY e."start"`,
+        ws,
+        uid,
+      ),
+    ]);
+    return {
+      format: "horas-backup",
+      version: 1,
+      exported_at: nowIso(),
+      timezone: tz,
+      settings,
+      projects: projects.map((p) => ({ name: p.name, client: p.client, color: p.color, archived: p.archived, hourly_rate: p.hourly_rate })),
+      entries: rows.map((r) => ({
+        description: r.description,
+        project: r.project ?? "",
+        tags: JSON.parse(r.tags) as string[],
+        billable: !!r.billable,
+        start: r.start,
+        end: r.end,
+      })),
+    };
+  }
+
+  /**
+   * Imports a parsed file. With `dryRun`, nothing is written and the result
+   * says what WOULD happen — that is what the preview on screen shows.
+   *
+   * An entry with the same start, end and description as one already here is
+   * skipped, so importing the same file twice does not duplicate anything.
+   */
+  async function importData(parsed: Parsed, { dryRun = false }: { dryRun?: boolean } = {}) {
+    const errors: ImportError[] = [...parsed.errors];
+    const ready: Array<{ description: string; project: string; client: string; tags: string; billable: number; start: string; end: string }> = [];
+
+    for (const item of parsed.items) {
+      try {
+        const start = toIso(item.start, "start", tz);
+        // "+N" is the parser's way of saying "N seconds after the start".
+        const end = item.end.startsWith("+")
+          ? new Date(Date.parse(start) + Number(item.end.slice(1)) * 1000).toISOString()
+          : toIso(item.end, "end", tz);
+        if (end <= start) throw new HorasError("The end must be after the start.");
+        ready.push({
+          description: text(item.description, 500),
+          project: text(item.project, 80),
+          client: text(item.client, 80),
+          tags: tagsJson(item.tags),
+          billable: item.billable ? 1 : 0,
+          start,
+          end,
+        });
+      } catch (err) {
+        errors.push({ row: item.row, message: err instanceof HorasError ? err.message : "Invalid entry." });
+      }
+    }
+
+    // Duplicates: against what is already stored, and within the file itself.
+    const seen = new Set<string>();
+    if (ready.length) {
+      const starts = ready.map((r) => r.start).sort();
+      const existing = await all<{ start: string; end: string | null; description: string }>(
+        `SELECT "start", "end", "description" FROM "time_entry"
+          WHERE "workspaceId" = ?1 AND "userId" = ?2 AND "start" >= ?3 AND "start" <= ?4`,
+        ws,
+        uid,
+        starts[0],
+        starts[starts.length - 1],
+      );
+      for (const e of existing) seen.add(`${e.start}|${e.end}|${e.description}`);
+    }
+    const fresh = ready.filter((r) => {
+      const key = `${r.start}|${r.end}|${r.description}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    const duplicates = ready.length - fresh.length;
+
+    // Projects: matched by name (case-insensitive); missing ones are created.
+    const projectRows = () => all<{ id: number; name: string }>('SELECT "id", "name" FROM "time_project" WHERE "workspaceId" = ?1', ws);
+    let existingProjects = await projectRows();
+    const known = new Set(existingProjects.map((p) => p.name.toLowerCase()));
+    const wanted = new Map<string, { name: string; client: string; color: string | null; archived: number; rate: number | null }>();
+    for (const p of parsed.projects) {
+      const name = text(p.name, 80);
+      if (!name || known.has(name.toLowerCase())) continue;
+      const rate = typeof p.hourly_rate === "number" && p.hourly_rate >= 0 ? cents(p.hourly_rate) : null;
+      wanted.set(name.toLowerCase(), { name, client: text(p.client, 80), color: isValidColor(p.color) ? p.color : null, archived: p.archived ? 1 : 0, rate });
+    }
+    for (const r of fresh) {
+      const k = r.project.toLowerCase();
+      if (!r.project || known.has(k) || wanted.has(k)) continue;
+      wanted.set(k, { name: r.project, client: r.client, color: null, archived: 0, rate: null });
+    }
+    if (existingProjects.length + wanted.size > MAX_PROJECTS) {
+      throw new HorasError(`This import would exceed the limit of ${MAX_PROJECTS} projects per workspace.`);
+    }
+
+    const result = {
+      source: parsed.source,
+      dry_run: dryRun,
+      rows: parsed.items.length + parsed.errors.length,
+      to_import: fresh.length,
+      imported: 0,
+      duplicates,
+      invalid: errors.length,
+      new_projects: [...wanted.values()].map((p) => p.name),
+      settings_restored: false,
+      date_order: parsed.dateOrder,
+      // The earliest entry, so the preview can show how the dates were read.
+      sample: fresh.length ? [...fresh].sort((a, b) => (a.start < b.start ? -1 : 1)).map((r) => ({ description: r.description, start: r.start, end: r.end }))[0] : null,
+      // The first few are enough to show what is wrong with the file.
+      errors: errors.sort((a, b) => a.row - b.row).slice(0, 20),
+    };
+    if (dryRun) return result;
+
+    const now = nowIso();
+    if (wanted.size) {
+      // One statement for all projects: the rows travel as a single JSON
+      // parameter, which stays clear of D1's cap on bound parameters.
+      const payload = [...wanted.values()].map((p, i) => ({ ...p, color: p.color ?? COLORS[(existingProjects.length + i) % COLORS.length] }));
+      await run(
+        `INSERT INTO "time_project" ("workspaceId", "name", "client", "color", "archived", "createdAt", "hourlyRate")
+         SELECT ?1, json_extract(value, '$.name'), json_extract(value, '$.client'), json_extract(value, '$.color'),
+                json_extract(value, '$.archived'), ?2, json_extract(value, '$.rate')
+           FROM json_each(?3)`,
+        ws,
+        now,
+        JSON.stringify(payload),
+      );
+      existingProjects = await projectRows();
+    }
+    const projectId = new Map(existingProjects.map((p) => [p.name.toLowerCase(), p.id]));
+
+    // Entries go in chunks, same JSON-parameter technique.
+    for (let i = 0; i < fresh.length; i += 400) {
+      const chunk = fresh.slice(i, i + 400).map((r) => ({
+        d: r.description,
+        p: r.project ? (projectId.get(r.project.toLowerCase()) ?? null) : null,
+        t: r.tags,
+        b: r.billable,
+        s: r.start,
+        e: r.end,
+      }));
+      await run(
+        `INSERT INTO "time_entry" ("workspaceId", "userId", "description", "projectId", "tags", "billable", "start", "end", "createdAt")
+         SELECT ?1, ?2, json_extract(value, '$.d'), json_extract(value, '$.p'), json_extract(value, '$.t'),
+                json_extract(value, '$.b'), json_extract(value, '$.s'), json_extract(value, '$.e'), ?3
+           FROM json_each(?4)`,
+        ws,
+        uid,
+        now,
+        JSON.stringify(chunk),
+      );
+    }
+    result.imported = fresh.length;
+
+    // A backup restores currency and default rate only into a workspace that
+    // has never set them; it never overwrites a choice already made here.
+    if (parsed.settings && !(await first('SELECT 1 AS x FROM "time_settings" WHERE "workspaceId" = ?1', ws))) {
+      await updateSettings(parsed.settings);
+      result.settings_restored = true;
+    }
+    return result;
+  }
+
   return {
     tz,
+    exportBackup,
+    importData,
     getSettings,
     updateSettings,
     listTags,
