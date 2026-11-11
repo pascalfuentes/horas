@@ -320,9 +320,9 @@
     const projSlot = el('div', { class: 'hr-proj' });
     const bill = /** @type {HTMLInputElement} */ (el('input', { type: 'checkbox', id: 'hr-bill' }));
     const clockEl = el('button', { type: 'button', class: 'hr-clock', text: '0:00:00', title: 'Corrigir a hora de início', onclick: function () { editStart(); } });
-    const more = el('button', { type: 'button', class: 'btn-ghost btn-sm hr-more', text: 'Carregar mais 30 dias', onclick: safe(async function () { windowDays += 30; await load(); }) });
+    const more = el('button', { type: 'button', class: 'btn-sm hr-link', text: 'Carregar mais 30 dias', onclick: safe(async function () { windowDays += 30; await load(); }) });
     const btn = el('button', { type: 'button', class: 'hr-go', text: 'Iniciar' });
-    const totals = el('p', { class: 'muted hr-totals' });
+    const totals = el('div', { class: 'hr-totals' });
     const list = el('div', { class: 'hr-days' });
 
     /** @returns {HTMLSelectElement} */
@@ -363,7 +363,10 @@
     /** @returns {void} */
     function paintList() {
       const st = state.status;
-      totals.textContent = st ? 'Hoje: ' + human(st.today_seconds) + '  ·  Esta semana: ' + human(st.week_seconds) : '';
+      totals.replaceChildren.apply(totals, st ? [
+        el('span', { class: 'badge badge-sun', text: 'Hoje · ' + human(st.today_seconds) }),
+        el('span', { class: 'badge badge-sky', text: 'Esta semana · ' + human(st.week_seconds) }),
+      ] : []);
       const done = state.entries.filter(function (e) { return !e.running; });
       if (!done.length) {
         list.replaceChildren(el('p', { class: 'empty', text: 'Nenhum lançamento nos últimos ' + windowDays + ' dias. Inicie o timer acima ou peça para a sua IA lançar por você.' }));
@@ -375,7 +378,7 @@
       list.replaceChildren.apply(list, Object.keys(groups).sort().reverse().map(function (key) {
         const total = groups[key].reduce(function (a, e) { return a + e.duration_seconds; }, 0);
         return el('section', { class: 'card hr-day' }, [
-          el('header', {}, [el('h2', { text: dayLabel(key) }), el('strong', { text: human(total) })]),
+          el('header', {}, [el('h2', { text: dayLabel(key) }), el('span', { class: 'badge badge-sun', text: human(total) })]),
           el('ul', {}, groups[key].map(row)),
         ]);
       }));
@@ -399,11 +402,11 @@
         el('span', { class: 'hr-when muted', text: hhmm(e.start) + ' – ' + hhmm(e.end) }),
         el('strong', { class: 'hr-dur', text: clock(e.duration_seconds) }),
         CAN_WRITE && el('span', { class: 'row-actions' }, [
-          el('button', { type: 'button', class: 'btn-ghost btn-sm', title: 'Continuar este lançamento', 'aria-label': 'Continuar', text: '▶', onclick: safe(async function () {
+          el('button', { type: 'button', class: 'hr-play', title: 'Continuar este lançamento', 'aria-label': 'Continuar', onclick: safe(async function () {
             await api('/timer/start', 'POST', { description: e.description, project_id: e.project_id || 0, tags: e.tags, billable: e.billable });
             await load();
             window.scrollTo({ top: 0, behavior: 'smooth' });
-          }) }),
+          }) }, [el('span', { class: 'hr-tri' })]),
           el('button', { type: 'button', class: 'btn-ghost btn-sm', text: 'Editar', onclick: function () { openDialog(e); } }),
         ]),
       ]);
@@ -593,11 +596,13 @@
       for (let d = new Date(a[0], a[1] - 1, a[2]); d <= end && days.length < 400; d.setDate(d.getDate() + 1)) days.push(dayKey(d));
       const max = Math.max.apply(null, days.map(function (k) { return map[k] || 0; }).concat([3600]));
       const dense = days.length > 14;
+      const top = Math.max.apply(null, days.map(function (k) { return map[k] || 0; }));
       return el('div', { class: 'hr-chart' + (dense ? ' hr-chart-dense' : ''), role: 'img', 'aria-label': 'Horas por dia no período' }, days.map(function (k) {
         const s = map[k] || 0;
         const p = k.split('-').map(Number);
         const label = days.length > 62 ? '' : new Date(p[0], p[1] - 1, p[2]).toLocaleDateString('pt-BR', dense ? { day: 'numeric' } : { weekday: 'short', day: 'numeric' });
-        return el('div', { class: 'hr-col', title: dayLabel(k) + ': ' + human(s) }, [
+        const kind = !s ? ' hr-col-zero' : (s === top && days.length > 1 ? ' hr-col-max' : '');
+        return el('div', { class: 'hr-col' + kind, title: dayLabel(k) + ': ' + human(s) }, [
           el('small', { text: s && !dense ? human(s) : '' }),
           el('div', { class: 'hr-colbar', style: 'height:' + Math.max(s ? 3 : 0, (s / max) * 100) + '%' }),
           el('small', { class: 'muted', text: label }),
@@ -649,8 +654,8 @@
           const color = r.color || 'var(--accent)';
           return [
             el('span', {}, [r.color ? el('span', { class: 'hr-dot', style: 'background:' + r.color }) : null, (r.color ? ' ' : '') + g.name(r)]),
-            human(r.seconds),
-            r.amount ? money(r.amount, s.currency) : '—',
+            el('span', { class: 'hr-num', text: human(r.seconds) }),
+            el('span', { class: 'hr-num', text: r.amount ? money(r.amount, s.currency) : '—' }),
             el('span', { class: 'hr-pct' }, [el('span', { style: 'width:' + pct + '%;background:' + color }), el('small', { text: pct + '%' })]),
           ];
         }), groupBy.value === 'tag' ? 'Um lançamento com várias tags conta em cada uma.' : '')
@@ -670,8 +675,8 @@
             el('span', {}, [e.description || '(sem descrição)', e.tags.length ? el('small', { class: 'muted', text: ' ' + e.tags.map(function (t) { return '#' + t; }).join(' ') }) : null]),
             el('span', {}, [el('span', { class: 'hr-dot', style: 'background:' + (e.project_color || 'var(--border)') }), ' ' + (e.project || 'Sem projeto')]),
             e.running ? hhmm(e.start) + ' – agora' : hhmm(e.start) + ' – ' + hhmm(e.end),
-            clock(e.duration_seconds),
-            e.billable ? money(e.amount, s.currency) : '—',
+            el('span', { class: 'hr-num', text: clock(e.duration_seconds) }),
+            el('span', { class: 'hr-num', text: e.billable ? money(e.amount, s.currency) : '—' }),
             CAN_WRITE && !e.running ? el('button', { type: 'button', class: 'btn-ghost btn-sm', text: 'Editar', onclick: function () { entryDialog({ entry: e, projects: projects, tags: tags, onDone: load }); } }) : '',
           ];
         }), entries.length >= 1000 ? 'Mostrando os 1000 mais recentes do período. O total acima considera todos.' : '')

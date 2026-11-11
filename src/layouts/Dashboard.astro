@@ -88,55 +88,54 @@ const grupos = [
   </head>
   <body>
     <div class="app">
-      <header class="topbar">
-        <span class="brand">{APP_NAME}</span>
-        <span class="spacer"></span>
-        <span class="who">
-          {user.name}<br />
-          {atual
-            ? <span class="badge">{ROLE_LABELS[atual.role]} · {atual.workspaceNome}</span>
-            : superadmin
-              ? <span class="badge badge-admin">Superadmin da plataforma</span>
-              : <span class="badge">Conta</span>}
-        </span>
-        <form method="post" action="/api/sair" class="inline-form">
-          <button class="btn-ghost btn-sm" type="submit">Sair</button>
-        </form>
-      </header>
-
-      <div class="app-body">
-        <nav class="sidenav" aria-label="Navegação principal">
-          <details class="seletor-ws" open={!atual}>
-            <summary>{atual ? atual.workspaceNome : "Escolher workspace"}</summary>
-            {meusWorkspaces.map((w) => (
-              <a href={`/w/${w.workspaceSlug}/tempo`} aria-current={w.workspaceSlug === atual?.workspaceSlug ? "true" : undefined}>
-                {w.workspaceNome}
-                <small class="muted"> · {ROLE_LABELS[w.role]}</small>
-              </a>
-            ))}
-            <a href="/workspaces">+ Novo workspace</a>
-          </details>
-
-          {grupos.map((g) => (
-            <>
-              <div class="group">{g.grupo}</div>
-              {g.itens.map((item) => (
-                <a href={item.href} aria-current={path === item.href ? "page" : undefined}>{item.label}</a>
-              ))}
-            </>
+      <nav class="sidenav" aria-label="Navegação principal">
+        <a class="brand" href="/dashboard"><span class="logo" aria-hidden="true"></span>{APP_NAME}</a>
+        <details class="seletor-ws" open={!atual}>
+          <summary>{atual ? atual.workspaceNome : "Escolher workspace"}</summary>
+          {meusWorkspaces.map((w) => (
+            <a href={`/w/${w.workspaceSlug}/tempo`} aria-current={w.workspaceSlug === atual?.workspaceSlug ? "true" : undefined}>
+              {w.workspaceNome}
+              <small class="muted"> · {ROLE_LABELS[w.role]}</small>
+            </a>
           ))}
-        </nav>
+          <a href="/workspaces">+ Novo workspace</a>
+        </details>
 
-        <main class="content">
-          <div class="page-head">
+        {grupos.map((g) => (
+          <>
+            <div class="group">{g.grupo}</div>
+            {g.itens.map((item) => (
+              <a href={item.href} aria-current={path === item.href ? "page" : undefined}>{item.label}</a>
+            ))}
+          </>
+        ))}
+      </nav>
+
+      <main class="content">
+        <div class="page-head">
+          <div>
             <h1>{heading}</h1>
             {description && <p class="muted">{description}</p>}
           </div>
-          <Alert error={params.get("e")} success={params.get("ok")} />
-          <ConvitesPendentes convites={convitesPendentes} verificado={user.emailVerified} limite={3} />
-          <slot />
-        </main>
-      </div>
+          <div class="who">
+            <span>
+              {user.name}<br />
+              {atual
+                ? <span class="badge">{ROLE_LABELS[atual.role]} · {atual.workspaceNome}</span>
+                : superadmin
+                  ? <span class="badge badge-admin">Superadmin da plataforma</span>
+                  : <span class="badge">Conta</span>}
+            </span>
+            <span class="avatar" aria-hidden="true">{user.name.trim().charAt(0).toUpperCase()}</span>
+            <form method="post" action="/api/sair" class="inline-form">
+              <button class="btn-ghost btn-sm" type="submit">Sair</button>
+            </form>
+          </div>
+        </div>
+        <Alert error={params.get("e")} success={params.get("ok")} />
+        <ConvitesPendentes convites={convitesPendentes} verificado={user.emailVerified} limite={3} />
+        <slot />
+      </main>
     </div>
   </body>
 </html>

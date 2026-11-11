@@ -7,7 +7,8 @@
  * parâmetro.
  */
 
-const COLORS = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316", "#6366f1", "#84cc16"];
+// Cores de projeto do design system (project/sky, coral, sun, mint, violet, rose).
+const COLORS = ["#5dcdf1", "#fd976d", "#fdd46b", "#4cc98c", "#9b8afb", "#f0705f"];
 
 export const DEFAULT_TZ = "America/Sao_Paulo";
 

@@ -18,14 +18,14 @@ const descricao =
 
 const recursos = [
   ["Timer de um clique", "Comece, pare e continue de onde parou. O relógio segue na aba do navegador e sincroniza entre dispositivos."],
-  ["Projetos e clientes", "Organize por projeto, marque o que é faturável e use tags para o resto."],
-  ["Relatórios e CSV", "Veja para onde a semana foi, por dia, projeto ou tarefa — e exporte quando precisar."],
+  ["Projetos e faturamento", "Organize por projeto e cliente, defina o valor por hora e veja quanto faturar no fim do mês."],
+  ["Relatórios e CSV", "Veja para onde a semana foi, por dia, projeto, cliente ou tag — e exporte quando precisar."],
   ["Workspaces e convites", "Um espaço só seu ou compartilhado com o time, com papéis por pessoa."],
   ["Conta protegida", "Login com e-mail e senha, Google ou GitHub, verificação em duas etapas e sessões por dispositivo."],
   ["Seus dados são seus", "Baixe tudo ou apague a conta quando quiser. Sem anúncios, sem rastreadores."],
 ];
 
-const ferramentas = ["get_status", "start_timer", "stop_timer", "add_entry", "list_entries", "summary_report", "list_projects", "update_entry"];
+const ferramentas = ["get_status", "start_timer", "stop_timer", "add_entry", "summary_report", "list_entries", "list_projects", "list_tags"];
 ---
 
 <!doctype html>
@@ -40,92 +40,81 @@ const ferramentas = ["get_status", "start_timer", "stop_timer", "add_entry", "li
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>{APP_NAME} — controle de tempo que conversa com a sua IA</title>
   </head>
-  <body>
-    <header class="lp-nav">
-      <a class="lp-brand" href="/"><span class="lp-logo" aria-hidden="true"></span>{APP_NAME}</a>
-      <nav>
-        <a href="#mcp">MCP</a>
-        <a href="#recursos">Recursos</a>
-        <a href="/login">Entrar</a>
-        <a class="btn btn-sm" href="/cadastro">Criar conta</a>
-      </nav>
-    </header>
+  <body class="lp">
+    <div class="lp-top">
+      <header class="lp-nav">
+        <a class="brand" href="/"><span class="logo" aria-hidden="true"></span>{APP_NAME}</a>
+        <nav>
+          <a href="#mcp">MCP</a>
+          <a href="#recursos">Recursos</a>
+          <a href="/login">Entrar</a>
+          <a class="btn btn-coral" href="/cadastro">Criar conta</a>
+        </nav>
+      </header>
 
-    <main>
       <section class="lp-hero">
-        <p class="lp-kicker">Gratuito · Feito para trabalhar com IA</p>
-        <h1>O controle de tempo que você não precisa abrir.</h1>
-        <p class="lp-lead">
-          {APP_NAME} é um time tracker simples com um servidor MCP embutido. Diga ao Claude
-          “comecei a revisão do site” e o timer já está rodando.
-        </p>
-        <div class="lp-cta">
-          <a class="btn lp-btn" href="/cadastro">Começar de graça</a>
-          <a class="btn btn-ghost lp-btn" href="/login">Já tenho conta</a>
+        <div class="lp-copy">
+          <span class="badge badge-sun">Gratuito · feito para trabalhar com IA</span>
+          <h1>O controle de tempo que você não precisa abrir.</h1>
+          <svg class="lp-rabisco" viewBox="0 0 342 16" aria-hidden="true"><path d="M2 10C60 2 130 14 200 6C250 1 300 9 340 5" /></svg>
+          <p class="lp-lead">
+            {APP_NAME} é um time tracker simples com um servidor MCP embutido. Diga ao Claude
+            “comecei a revisão do site” e o timer já está rodando.
+          </p>
+          <div class="lp-cta">
+            <a class="btn" href="/cadastro">Começar de graça</a>
+            <a class="btn btn-ghost" href="/login">Já tenho conta</a>
+          </div>
         </div>
 
         <div class="lp-demo" aria-hidden="true">
           <div class="lp-chat">
             <div class="lp-msg lp-eu">Comece um timer para a revisão do site, projeto Acme.</div>
-            <div class="lp-msg lp-ia">
-              <small>start_timer</small>
-              Pronto — timer rodando em <strong>Acme</strong> desde 09:12.
-            </div>
+            <div class="lp-msg lp-ia"><small>start_timer</small>Pronto — timer rodando em Acme desde 09:12.</div>
             <div class="lp-msg lp-eu">Quanto trabalhei essa semana?</div>
-            <div class="lp-msg lp-ia">
-              <small>summary_report</small>
-              18h 40min: Acme 11h 05min, Portfólio 5h 20min, Estudos 2h 15min.
-            </div>
+            <div class="lp-msg lp-ia"><small>summary_report</small>18h 40min: Acme 11h 05min, Portfólio 5h 20min, Estudos 2h 15min.</div>
           </div>
-          <div class="lp-app">
-            <div class="lp-bar">
-              <span class="lp-input">Revisão do site</span>
-              <span class="lp-chip"><i style="background:#3b82f6"></i>Acme</span>
-              <span class="lp-clock">0:42:17</span>
-              <span class="lp-stop">Parar</span>
-            </div>
-            <div class="lp-row"><i style="background:#3b82f6"></i><span>Reunião de kickoff</span><b>1:30:00</b></div>
-            <div class="lp-row"><i style="background:#10b981"></i><span>Layout da home</span><b>2:15:40</b></div>
-            <div class="lp-row"><i style="background:#f59e0b"></i><span>Aula de francês</span><b>0:45:00</b></div>
+          <div class="lp-timer">
+            <i></i><span>Revisão do site</span><b>0:42:17</b><em>Parar</em>
           </div>
         </div>
       </section>
+    </div>
 
-      <section class="lp-section" id="mcp">
-        <div class="lp-two">
-          <div>
-            <h2>Conecte em um minuto</h2>
-            <p class="muted">
-              Gere um token pessoal no painel e cole a URL no seu cliente. Funciona com Claude,
-              Claude Code, Cursor, VS Code e qualquer aplicativo compatível com o Model Context
-              Protocol. Para scripts, a mesma coisa está disponível como API REST.
-            </p>
-            <ul class="lp-tools">
-              {ferramentas.map((f) => <li><code>{f}</code></li>)}
-            </ul>
-          </div>
-          <pre class="lp-code">{`claude mcp add --transport http horas \\
-  ${Astro.url.origin}/mcp \\
-  --header "Authorization: Bearer hrs_…"`}</pre>
-        </div>
-      </section>
-
+    <main>
       <section class="lp-section" id="recursos">
         <h2>Tudo o que um time tracker precisa. Nada além.</h2>
         <div class="lp-grid">
-          {recursos.map(([titulo, texto]) => (
-            <div class="card">
+          {recursos.map(([titulo, texto], i) => (
+            <div class={`lp-feat lp-feat-${i % 3}`}>
               <h3>{titulo}</h3>
-              <p class="muted">{texto}</p>
+              <p>{texto}</p>
             </div>
           ))}
         </div>
       </section>
 
-      <section class="lp-section lp-final">
+      <section class="lp-mcp" id="mcp">
+        <div>
+          <h2>Conecte em um minuto</h2>
+          <p>
+            Gere um token pessoal no painel e cole a URL no seu cliente. Funciona com Claude,
+            Claude Code, Cursor, VS Code e qualquer aplicativo compatível com o Model Context
+            Protocol. Para scripts, a mesma coisa está disponível como API REST.
+          </p>
+          <ul class="lp-tools">
+            {ferramentas.map((f, i) => <li class={`lp-tool-${i % 5}`}>{f}</li>)}
+          </ul>
+        </div>
+        <pre class="lp-code">{`claude mcp add --transport http horas \\
+  ${Astro.url.origin}/mcp \\
+  --header "Authorization: Bearer hrs_…"`}</pre>
+      </section>
+
+      <section class="lp-final">
         <h2>Comece a marcar seu tempo hoje.</h2>
-        <p class="muted">Gratuito. Leva menos de um minuto.</p>
-        <a class="btn lp-btn" href="/cadastro">Criar conta</a>
+        <p>Gratuito. Sem anúncios, sem rastreadores.</p>
+        <a class="btn btn-dark" href="/cadastro">Criar conta</a>
       </section>
     </main>
 
@@ -137,57 +126,65 @@ const ferramentas = ["get_status", "start_timer", "stop_timer", "add_entry", "li
 </html>
 
 <style>
-  .lp-nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; max-width: 1080px; margin: 0 auto; padding: 18px 20px; }
-  .lp-nav nav { display: flex; align-items: center; gap: 20px; font-size: 0.9375rem; }
-  .lp-nav nav a:not(.btn) { text-decoration: none; color: var(--text-muted); }
-  .lp-nav nav a:not(.btn):hover { color: var(--text); }
-  .lp-brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.1rem; text-decoration: none; letter-spacing: -0.02em; }
-  .lp-logo { width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--text); position: relative; }
-  .lp-logo::after { content: ""; position: absolute; left: 50%; top: 50%; width: 3px; height: 8px; background: var(--text); transform: translate(-50%, -100%); border-radius: 2px; }
+  /* Landing: página branca com painéis coloridos bem arredondados. */
+  .lp { background: var(--surface); padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+  .lp main { display: flex; flex-direction: column; gap: 20px; }
+  .lp-top, .lp-section, .lp-mcp, .lp-final, .lp-foot { width: 100%; max-width: 1400px; margin: 0 auto; }
+  .lp-top { background: var(--bg); border-radius: var(--radius-xl); padding: 28px clamp(20px, 5vw, 72px) clamp(48px, 6vw, 80px); }
 
-  .lp-hero { max-width: 1080px; margin: 0 auto; padding: 56px 20px 24px; text-align: center; }
-  .lp-kicker { display: inline-block; font-size: 0.8125rem; color: var(--text-muted); border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; background: var(--surface); }
-  .lp-hero h1 { font-size: clamp(2rem, 5.2vw, 3.5rem); letter-spacing: -0.035em; line-height: 1.08; max-width: 16ch; margin: 18px auto 16px; text-wrap: balance; }
-  .lp-lead { font-size: 1.125rem; color: var(--text-muted); max-width: 58ch; margin: 0 auto 26px; text-wrap: pretty; }
-  .lp-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-  .lp-btn { padding: 12px 22px; font-size: 1rem; text-decoration: none; }
+  .lp-nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .lp-nav nav { display: flex; align-items: center; gap: clamp(16px, 2.5vw, 32px); font-weight: 500; }
+  .lp-nav nav a:not(.btn) { text-decoration: none; }
+  .lp-nav nav a:not(.btn):hover { text-decoration: underline; text-underline-offset: 4px; }
 
-  .lp-demo { display: grid; grid-template-columns: 1fr 1.25fr; gap: 16px; margin: 56px auto 0; text-align: left; max-width: 920px; }
-  .lp-chat, .lp-app { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 16px; }
-  .lp-chat { display: flex; flex-direction: column; gap: 10px; }
-  .lp-msg { padding: 10px 12px; border-radius: 12px; font-size: 0.875rem; max-width: 92%; }
-  .lp-eu { background: var(--accent); color: var(--accent-text); align-self: flex-end; border-bottom-right-radius: 4px; }
-  .lp-ia { background: var(--surface-2); align-self: flex-start; border-bottom-left-radius: 4px; }
-  .lp-ia small { display: block; font-family: var(--mono); font-size: 0.6875rem; color: var(--text-muted); margin-bottom: 2px; }
-  .lp-bar { display: flex; align-items: center; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
-  .lp-input { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .lp-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8125rem; color: var(--text-muted); }
-  .lp-demo i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
-  .lp-clock { font-family: var(--mono); font-weight: 600; font-variant-numeric: tabular-nums; }
-  .lp-stop { background: #dc2626; color: #fff; border-radius: 8px; padding: 5px 12px; font-size: 0.8125rem; font-weight: 600; }
-  .lp-row { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--border); font-size: 0.9375rem; }
-  .lp-row:last-child { border-bottom: 0; }
-  .lp-row span { flex: 1; }
-  .lp-row b { font-family: var(--mono); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .lp-hero { display: grid; grid-template-columns: 1.2fr 1fr; gap: clamp(32px, 5vw, 64px); align-items: center; margin-top: clamp(40px, 6vw, 72px); }
+  .lp-copy h1 { font-size: clamp(2.5rem, 5.2vw, 4rem); line-height: 1.06; margin: 24px 0 0; text-wrap: balance; }
+  .lp-rabisco { display: block; width: min(342px, 70%); margin: 14px 0 20px; }
+  .lp-rabisco path { fill: none; stroke: var(--accent); stroke-width: 5; stroke-linecap: round; }
+  .lp-lead { font-size: 1.125rem; line-height: 1.55; color: var(--text-muted); max-width: 52ch; margin: 0 0 28px; }
+  .lp-cta { display: flex; gap: 12px; flex-wrap: wrap; }
 
-  .lp-section { max-width: 1080px; margin: 0 auto; padding: 72px 20px 0; }
-  .lp-section > h2, .lp-two h2 { font-size: clamp(1.5rem, 3vw, 2rem); letter-spacing: -0.025em; margin-bottom: 14px; text-wrap: balance; }
-  .lp-two { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: center; }
-  .lp-tools { list-style: none; padding: 0; margin: 16px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
-  .lp-code { margin: 0; padding: 20px; background: #0b0b0d; color: #e4e4e7; border: 1px solid #27272a; border-radius: var(--radius-lg); font-family: var(--mono); font-size: 0.8125rem; line-height: 1.7; overflow-x: auto; }
-  .lp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 20px; }
-  .lp-grid .card { margin: 0; }
-  .lp-grid h3 { font-size: 1rem; margin-bottom: 6px; }
-  .lp-grid p { margin: 0; font-size: 0.9375rem; }
-  .lp-final { text-align: center; padding-bottom: 72px; }
-  .lp-final .btn { margin-top: 8px; display: inline-block; }
-  .lp-foot { max-width: 1080px; margin: 0 auto; padding: 24px 20px 40px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 0.875rem; color: var(--text-muted); }
+  .lp-demo { display: flex; flex-direction: column; gap: 12px; }
+  .lp-chat, .lp-timer { background: var(--surface); border-radius: var(--radius-xl); box-shadow: var(--shadow); }
+  .lp-chat { display: flex; flex-direction: column; gap: 12px; padding: 20px 24px; }
+  .lp-msg { padding: 12px 16px; border-radius: var(--radius-lg); max-width: 88%; }
+  .lp-eu { background: var(--ink); color: var(--ink-text); align-self: flex-end; border-bottom-right-radius: 6px; }
+  .lp-ia { background: var(--surface-2); align-self: flex-start; border-bottom-left-radius: 6px; }
+  .lp-ia small { display: block; font-family: var(--mono); font-size: 0.875rem; color: var(--text-muted); margin-bottom: 2px; }
+  .lp-timer { display: flex; align-items: center; gap: 12px; padding: 16px 20px; font-weight: 500; }
+  .lp-timer i { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); flex: none; }
+  .lp-timer span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lp-timer b { font-family: var(--mono); font-weight: 500; font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+  .lp-timer em { font-style: normal; background: var(--stop); color: var(--accent-text); border: 1.5px solid var(--ink); box-shadow: var(--shadow-button); border-radius: 999px; padding: 10px 28px; }
 
-  @media (max-width: 760px) {
+  .lp-section { padding: clamp(40px, 5vw, 64px) clamp(20px, 5vw, 72px); }
+  .lp-section > h2, .lp-mcp h2, .lp-final h2 { font-size: clamp(2rem, 4vw, 3rem); line-height: 1.12; letter-spacing: -0.025em; text-wrap: balance; }
+  .lp-section > h2 { max-width: 18ch; margin-bottom: 32px; }
+  .lp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .lp-feat { border-radius: var(--radius-xl); padding: 32px; }
+  .lp-feat-0 { background: var(--accent-subtle); }
+  .lp-feat-1 { background: var(--coral-subtle); }
+  .lp-feat-2 { background: var(--sun-subtle); }
+  .lp-feat h3 { font-size: 1.625rem; margin-bottom: 12px; }
+  .lp-feat p { margin: 0; }
+
+  .lp-mcp { background: var(--ink); color: var(--ink-text); border-radius: var(--radius-xl); padding: clamp(40px, 5vw, 72px); display: grid; grid-template-columns: 1fr 1fr; gap: clamp(32px, 5vw, 64px); align-items: center; }
+  .lp-mcp p { font-size: 1.125rem; line-height: 1.55; opacity: 0.75; margin: 20px 0; }
+  .lp-tools { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+  .lp-tools li { font-size: 0.875rem; font-weight: 500; padding: 4px 12px; border-radius: 999px; color: #1b1624; }
+  .lp-tool-0 { background: #dff5fc; } .lp-tool-1 { background: #ddf6e9; } .lp-tool-2 { background: #fde4e1; } .lp-tool-3 { background: #fff5d9; } .lp-tool-4 { background: #ffe7dc; }
+  .lp-code { margin: 0; padding: 24px; background: var(--surface); color: var(--text); border-radius: var(--radius-lg); font-family: var(--mono); font-size: 0.9375rem; line-height: 1.7; overflow-x: auto; }
+
+  .lp-final { background: var(--sun); color: #1b1624; border-radius: var(--radius-xl); padding: clamp(48px, 6vw, 72px) 24px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+  .lp-final p { font-size: 1.125rem; margin: 0 0 4px; }
+  .lp-final .btn-dark { background: #1b1624; color: #fdfbf8; }
+  .lp-foot { padding: 8px clamp(20px, 5vw, 72px) 20px; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 0.875rem; color: var(--text-muted); }
+
+  @media (max-width: 900px) {
+    .lp { padding: 12px; gap: 12px; }
+    .lp main { gap: 12px; }
     .lp-nav nav a:not(.btn):not([href="/login"]) { display: none; }
-    .lp-hero { padding-top: 32px; }
-    .lp-demo, .lp-two { grid-template-columns: 1fr; }
+    .lp-hero, .lp-mcp { grid-template-columns: 1fr; }
     .lp-grid { grid-template-columns: 1fr; }
-    .lp-section { padding-top: 56px; }
   }
 </style>
