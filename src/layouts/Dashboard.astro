@@ -5,6 +5,7 @@ import Theme from "~/components/Theme.astro";
 import NavCollapse from "~/components/NavCollapse.astro";
 import Alert from "~/components/Alert.astro";
 import PendingInvites from "~/components/PendingInvites.astro";
+import Logo from "~/components/Logo.astro";
 import { APP_NAME } from "~/config";
 import { pendingInvitesFor } from "~/lib/members";
 import { ROLE_LABELS, canAdministerPlatform, can, PERMISSIONS } from "~/lib/permissions";
@@ -116,7 +117,7 @@ const groups = [
     <div class="app">
       <nav class="sidenav" aria-label="Main navigation">
         <div class="nav-top">
-          <a class="brand" href="/dashboard" title={APP_NAME}><span class="logo" aria-hidden="true"></span><span class="nav-label">{APP_NAME}</span></a>
+          <a class="brand" href="/dashboard" title={APP_NAME}><Logo /><span class="nav-label">{APP_NAME}</span></a>
           <button type="button" class="nav-toggle" data-nav-toggle aria-expanded="true" aria-label="Collapse menu" title="Collapse menu">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM9.5 4v16" /><path class="nav-toggle-arrow" d="M16 9.5 13.5 12l2.5 2.5" /></svg>
           </button>

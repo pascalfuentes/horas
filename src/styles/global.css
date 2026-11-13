@@ -120,7 +120,9 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 /* ---------- Dashboard layout ---------- */
 .app { min-height: 100dvh; display: flex; align-items: stretch; }
 .brand { display: inline-flex; align-items: center; gap: 8px; font-family: var(--display); font-weight: 600; font-size: 1.625rem; letter-spacing: -0.02em; text-decoration: none; color: var(--text); }
-.brand .logo { width: 24px; height: 24px; border-radius: 50%; background: var(--sun); border: 2px solid var(--ink); flex: none; }
+.brand .logo { width: 30px; height: 30px; flex: none; overflow: visible; }
+.logo-line { stroke: var(--ink); }
+.logo-shadow { fill: var(--ink); }
 .sidenav {
   width: 268px; flex: none;
   padding: 20px;

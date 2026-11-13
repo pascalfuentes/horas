@@ -1,5 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- The brand mark: a sun-yellow clock with an ink outline. -->
-  <circle cx="16" cy="16" r="12.5" fill="#fdd46b" stroke="#1b1624" stroke-width="3" />
-  <path d="M16 9.5V16l4.2 2.6" fill="none" stroke="#1b1624" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
+  <!--
+    The brand mark: a sun-yellow stopwatch. The sky slice between the hands is
+    the time already tracked, and the hard shadow is the one the buttons have.
+    The same drawing lives in src/components/Logo.astro and scripts/make-icons.py.
+  -->
+  <style>
+    .line { stroke: #1b1624; }
+    .shadow { fill: #1b1624; }
+    @media (prefers-color-scheme: dark) {
+      .line { stroke: #f9f6f3; }
+      .shadow { fill: #f9f6f3; }
+    }
+  </style>
+  <circle class="shadow" cx="16" cy="19" r="11.75" />
+  <rect class="line" x="12.75" y="1.5" width="6.5" height="5" rx="1.5" fill="#fd976d" stroke-width="2" />
+  <circle class="line" cx="16" cy="17" r="10.5" fill="#fdd46b" stroke-width="2.5" />
+  <path d="M16 17V7.75A9.25 9.25 0 0 1 24.01 21.63Z" fill="#5dcdf1" />
+  <path d="M16 10.25V17l5.63 3.25" fill="none" stroke="#1b1624" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
 </svg>

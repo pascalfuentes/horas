@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draws the app icons (the sun-yellow clock) as PNG, with no dependencies.
+"""Draws the app icons (the sun-yellow stopwatch) as PNG, with no dependencies.
 
     python3 scripts/make-icons.py
 
@@ -13,8 +13,11 @@ from pathlib import Path
 
 CREAM = (249, 246, 243)
 SUN = (253, 212, 107)
+SKY = (93, 205, 241)
+CORAL = (253, 151, 109)
 INK = (27, 22, 36)
 SAMPLES = 4  # 4x4 supersampling per pixel
+MARK = 0.66  # share of the icon the 32-unit drawing takes
 
 
 def segment_distance(px, py, ax, ay, bx, by):
@@ -24,15 +27,34 @@ def segment_distance(px, py, ax, ay, bx, by):
     return math.hypot(px - (ax + t * dx), py - (ay + t * dy))
 
 
+def knob_distance(u, v):
+    """Signed distance to the rounded rectangle of the stopwatch button."""
+    qx, qy = abs(u - 16) - 3.25 + 1.5, abs(v - 4) - 2.5 + 1.5
+    return math.hypot(max(qx, 0), max(qy, 0)) + min(max(qx, qy), 0) - 1.5
+
+
 def colour_at(x, y):
-    """Colour of the icon at a point of the unit square (0..1)."""
-    d = math.hypot(x - 0.5, y - 0.5)
-    hands = min(segment_distance(x, y, 0.5, 0.5, 0.5, 0.315), segment_distance(x, y, 0.5, 0.5, 0.625, 0.575))
-    if hands <= 0.034:
+    """Colour of the icon at a point of the unit square (0..1).
+
+    The point is taken to the 32-unit grid of public/favicon.svg, and the
+    shapes are tested from the top one to the bottom one.
+    """
+    u, v = (x - 0.5) / MARK * 32 + 16, (y - 0.5) / MARK * 32 + 15.5
+    face = math.hypot(u - 16, v - 17)
+    hands = min(segment_distance(u, v, 16, 17, 16, 10.25), segment_distance(u, v, 16, 17, 21.63, 20.25))
+    if hands <= 1.2:
         return INK
-    if d <= 0.265:
-        return SUN
-    if d <= 0.335:
+    if face <= 9.25:
+        angle = math.degrees(math.atan2(u - 16, 17 - v))  # clockwise from 12 o'clock
+        return SKY if 0 <= angle <= 120 else SUN
+    if face <= 11.75:
+        return INK
+    knob = knob_distance(u, v)
+    if knob <= -1:
+        return CORAL
+    if knob <= 1:
+        return INK
+    if math.hypot(u - 16, v - 19) <= 11.75:
         return INK
     return CREAM
 

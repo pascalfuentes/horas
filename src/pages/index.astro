@@ -2,6 +2,7 @@
 import HeadIcons from "~/components/HeadIcons.astro";
 import BusyForms from "~/components/BusyForms.astro";
 import Theme from "~/components/Theme.astro";
+import Logo from "~/components/Logo.astro";
 import { APP_NAME, operator } from "~/config";
 import { countPlatformAdmins } from "~/lib/platform";
 import "~/styles/global.css";
@@ -48,7 +49,7 @@ const tools = ["get_status", "start_timer", "stop_timer", "add_entry", "summary_
   <body class="lp">
     <div class="lp-top">
       <header class="lp-nav">
-        <a class="brand" href="/"><span class="logo" aria-hidden="true"></span>{APP_NAME}</a>
+        <a class="brand" href="/"><Logo />{APP_NAME}</a>
         <nav>
           <a href="#mcp">MCP</a>
           <a href="#features">Features</a>
