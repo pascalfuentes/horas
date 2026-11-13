@@ -110,7 +110,7 @@ const tools = ["get_status", "start_timer", "stop_timer", "add_entry", "summary_
             {tools.map((f, i) => <li class={`lp-tool-${i % 5}`}>{f}</li>)}
           </ul>
         </div>
-        <pre class="lp-code">{`claude mcp add --transport http horas \\
+        <pre class="lp-code">{`claude mcp add --transport http clockfolio \\
   ${Astro.url.origin}/mcp \\
   --header "Authorization: Bearer hrs_…"`}</pre>
       </section>

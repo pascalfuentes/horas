@@ -305,3 +305,8 @@ td.wrap { white-space: normal; }
 .sel-opt[aria-selected="true"] { font-weight: 600; }
 .sel-opt[aria-selected="true"]::after { content: ""; margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 .sel-opt[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
+
+/* Sidebar icons. */
+.sidenav a:not(.brand) > .nav-ico { flex: none; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; opacity: 0.8; }
+.sidenav a[aria-current="page"] > .nav-ico { opacity: 1; }
+.sidenav a:not(.brand):has(> .nav-ico) { display: flex; align-items: center; gap: 10px; }

@@ -78,7 +78,7 @@ export async function handleHoras(
       return new Response(JSON.stringify(await store.exportBackup(), null, 2), {
         headers: {
           "content-type": "application/json; charset=utf-8",
-          "content-disposition": 'attachment; filename="horas-backup.json"',
+          "content-disposition": 'attachment; filename="clockfolio-backup.json"',
           "cache-control": "no-store",
         },
       });
@@ -118,7 +118,7 @@ export async function handleHoras(
       return new Response(lines.join("\n") + "\n", {
         headers: {
           "content-type": "text/csv; charset=utf-8",
-          "content-disposition": 'attachment; filename="horas.csv"',
+          "content-disposition": 'attachment; filename="clockfolio.csv"',
           "cache-control": "no-store",
         },
       });

@@ -198,6 +198,23 @@ a.hr-proj-link:hover span:nth-child(2) { text-decoration: underline; text-underl
 .hr-label { display: block; font-size: 0.875rem; font-weight: 500; margin-bottom: 6px; }
 .card > p.muted { max-width: 68ch; margin: 0 0 4px; }
 
+/* Project list edited in place. Selectors carry `.hr-projects` so they beat the
+   generic field rules whatever order the stylesheets load in. */
+.hr-projects td { padding-top: 8px; padding-bottom: 8px; }
+.hr-proj-edit { display: flex; align-items: center; gap: 8px; }
+.hr-projects input.hr-inline { width: 100%; min-width: 90px; padding: 6px 8px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; font: inherit; color: var(--text); }
+.hr-projects input.hr-inline:hover { background: var(--surface-2); }
+.hr-projects input.hr-inline:focus { background: var(--surface); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.hr-projects input.hr-inline-name { font-weight: 500; }
+.hr-pick button.hr-dot-btn { flex: none; width: 16px; height: 16px; min-width: 0; padding: 0; border: 0; border-radius: 50%; box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--border); transform: none; }
+.hr-pick button.hr-dot-btn:hover, .hr-pick button.hr-dot-btn[aria-expanded="true"] { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--ink); }
+.hr-menu.hr-swatch-menu { flex-direction: row; min-width: 0; width: max-content; padding: 12px; gap: 10px; }
+.hr-projects .hr-money { width: 150px; }
+.hr-projects .hr-money-cur { padding: 0 10px; font-size: 0.875rem; }
+.hr-projects .hr-money input.hr-money-in { padding: 7px 10px; font-size: 0.875rem; }
+.hr-projects .sel button.sel-btn { padding: 7px 10px; font-size: 0.875rem; gap: 8px; }
+.hr-projects .hr-check { display: inline-flex; padding: 6px; }
+
 /* Money input: the currency is a fixed block inside the field. */
 .hr-money { display: flex; align-items: stretch; width: 100%; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); overflow: hidden; }
 .hr-money:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }

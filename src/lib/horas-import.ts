@@ -2,8 +2,8 @@
  * Reading files for import. Pure parsing: nothing here touches the database.
  *
  * Three sources are understood:
- *   - a Horas backup (the JSON produced by `exportBackup`),
- *   - a Horas CSV export,
+ *   - a Clockfolio backup (the JSON produced by `exportBackup`),
+ *   - a Clockfolio CSV export,
  *   - Clockify's "Detailed report" CSV,
  * plus any CSV that has at least `start` and `end` (or `duration`) columns.
  *
@@ -209,7 +209,7 @@ function fromCsv(text: string, dateOrder: DateOrder): Parsed {
   const source: ImportSource = clockify ? "clockify-csv" : header.includes("amount") || header.includes("valor") ? "horas-csv" : "generic-csv";
   if (!clockify && c.start < 0) {
     throw new ImportFormatError(
-      'Could not find the date columns. Expected "Start Date" and "Start Time" (Clockify) or "start" and "end" (Horas).',
+      'Could not find the date columns. Expected "Start Date" and "Start Time" (Clockify) or "start" and "end" (Clockfolio).',
     );
   }
 
@@ -267,7 +267,7 @@ function fromCsv(text: string, dateOrder: DateOrder): Parsed {
 
 function fromBackup(data: Record<string, unknown>): Parsed {
   if (data.format !== "horas-backup") {
-    throw new ImportFormatError('This JSON is not a Horas backup (missing "format": "horas-backup").');
+    throw new ImportFormatError('This JSON is not a Clockfolio backup (missing "format": "horas-backup").');
   }
   const entries = Array.isArray(data.entries) ? data.entries : [];
   if (entries.length > MAX_ROWS) {

@@ -7,7 +7,7 @@
  */
 
 /** Shown in the top bar and as the app name inside Better Auth. */
-export const APP_NAME = "Horas";
+export const APP_NAME = "Clockfolio";
 
 /** How long an invite is valid before it expires. */
 export const INVITE_TTL_DAYS = 7;

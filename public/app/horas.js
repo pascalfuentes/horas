@@ -178,6 +178,8 @@
    * @returns {void}
    */
   function toast(msg, isError) {
+    // One message at a time: a newer one replaces the one still on screen.
+    Array.prototype.forEach.call(document.querySelectorAll('.hr-toast'), function (old) { old.remove(); });
     const t = el('div', { class: 'hr-toast' + (isError ? ' hr-toast-error' : ''), role: 'status', text: msg });
     document.body.appendChild(t);
     setTimeout(function () { t.remove(); }, 3500);
@@ -1149,7 +1151,7 @@
         el('button', { type: 'button', class: 'btn-ghost btn-sm', text: 'Export CSV', onclick: safe(async function () {
           const res = await fetch(BASE + '/export.csv' + query(), { headers: { 'x-timezone': TZ }, credentials: 'same-origin' });
           if (!res.ok) throw new Error('Could not export.');
-          const a = el('a', { href: URL.createObjectURL(await res.blob()), download: 'horas-' + period.from() + '_' + period.to() + '.csv' });
+          const a = el('a', { href: URL.createObjectURL(await res.blob()), download: 'clockfolio-' + period.from() + '_' + period.to() + '.csv' });
           a.click();
           URL.revokeObjectURL(a.getAttribute('href'));
         }) }),
@@ -1266,22 +1268,119 @@
       if (document.activeElement !== defRate.input) defRate.input.value = settings.default_rate ? settings.default_rate.toFixed(2) : '';
       clientList.replaceChildren.apply(clientList, projects.map(function (p) { return p.client; }).filter(function (c, i, a) { return c && a.indexOf(c) === i; }).map(function (c) { return el('option', { value: c }); }));
       if (!projects.length) {
-        body.replaceChildren(el('tr', {}, [el('td', { colspan: '6', class: 'empty', text: 'No projects yet.' })]));
+        body.replaceChildren(el('tr', {}, [el('td', { colspan: '7', class: 'empty', text: 'No projects yet.' })]));
         return;
       }
-      body.replaceChildren.apply(body, projects.map(function (p) {
-        return el('tr', { class: p.archived ? 'hr-archived' : '' }, [
-          el('td', { class: 'wrap' }, [el('a', { class: 'hr-proj-link', href: here + '/' + p.id }, [
-            el('span', { class: 'hr-dot', style: 'background:' + p.color }), el('span', { text: p.name }),
-            p.archived ? el('span', { class: 'badge', text: 'Archived' }) : null,
-          ])]),
-          el('td', { class: 'wrap', text: p.client || '—' }),
-          el('td', {}, [p.billable ? el('span', { class: 'badge badge-sky', text: 'Billable' }) : el('span', { class: 'muted', text: '—' })]),
-          el('td', {}, [el('span', { class: p.hourly_rate === null ? 'hr-num muted' : 'hr-num', text: p.hourly_rate === null ? 'default' : money(p.hourly_rate, p.currency || settings.currency) })]),
-          el('td', {}, [el('span', { class: 'hr-num', text: human(p.total_seconds) })]),
-          el('td', {}, [el('a', { class: 'btn btn-ghost btn-sm', href: here + '/' + p.id, text: CAN_WRITE ? 'Edit' : 'View' })]),
-        ]);
-      }));
+      body.replaceChildren.apply(body, projects.map(CAN_WRITE ? editableRow : readOnlyRow));
+    }
+
+    /**
+     * Row for someone who can only read.
+     * @param {object} p Project.
+     * @returns {HTMLElement}
+     */
+    function readOnlyRow(p) {
+      return el('tr', { class: p.archived ? 'hr-archived' : '' }, [
+        el('td', { class: 'wrap' }, [el('a', { class: 'hr-proj-link', href: here + '/' + p.id }, [
+          el('span', { class: 'hr-dot', style: 'background:' + p.color }), el('span', { text: p.name }),
+          p.archived ? el('span', { class: 'badge', text: 'Archived' }) : null,
+        ])]),
+        el('td', { class: 'wrap', text: p.client || '—' }),
+        el('td', {}, [p.billable ? el('span', { class: 'badge badge-sky', text: 'Billable' }) : el('span', { class: 'muted', text: '—' })]),
+        el('td', { text: p.currency || settings.currency }),
+        el('td', {}, [el('span', { class: p.hourly_rate === null ? 'hr-num muted' : 'hr-num', text: p.hourly_rate === null ? 'default' : money(p.hourly_rate, p.currency || settings.currency) })]),
+        el('td', {}, [el('span', { class: 'hr-num', text: human(p.total_seconds) })]),
+        el('td', {}, [el('a', { class: 'btn btn-ghost btn-sm', href: here + '/' + p.id, text: 'View' })]),
+      ]);
+    }
+
+    /**
+     * Row where every field is changed in place and saved as soon as it changes.
+     * The Edit button still opens the project page, which also archives and deletes.
+     * @param {object} p Project.
+     * @returns {HTMLElement}
+     */
+    function editableRow(p) {
+      const dot = el('button', { type: 'button', class: 'hr-dot-btn', 'aria-haspopup': 'true', 'aria-expanded': 'false', 'aria-label': 'Color of ' + p.name, title: 'Change color', style: 'background:' + p.color });
+      const nameIn = /** @type {HTMLInputElement} */ (el('input', { type: 'text', class: 'hr-inline hr-inline-name', value: p.name, maxlength: '80', 'aria-label': 'Name' }));
+      const clientIn = /** @type {HTMLInputElement} */ (el('input', { type: 'text', class: 'hr-inline', value: p.client, maxlength: '80', list: 'np-clients', placeholder: 'Add client', 'aria-label': 'Client of ' + p.name }));
+      const billIn = /** @type {HTMLInputElement} */ (el('input', { type: 'checkbox', checked: p.billable, 'aria-label': p.name + ' is billable by default' }));
+      const curIn = /** @type {HTMLSelectElement} */ (el('select', { 'aria-label': 'Currency of ' + p.name }, [el('option', { value: '', text: settings.currency })].concat(CURRENCIES.filter(function (c) { return c[0] !== settings.currency; }).map(function (c) { return el('option', { value: c[0], text: c[0] }); }))));
+      if (p.currency && !curIn.querySelector('option[value="' + p.currency + '"]')) curIn.appendChild(el('option', { value: p.currency, text: p.currency }));
+      curIn.value = p.currency || '';
+      const rateIn = moneyField({ id: 'pr-rate-' + p.id, currency: p.currency || settings.currency, value: p.hourly_rate, placeholder: p.currency ? '0.00' : 'default' });
+      rateIn.input.setAttribute('aria-label', 'Hourly rate of ' + p.name);
+
+      /**
+       * Sends one change; on failure the list is reloaded so the row shows what is really saved.
+       * @param {object} patch
+       * @param {string} [done] Message for the toast.
+       * @returns {Promise<void>}
+       */
+      async function save(patch, done) {
+        try {
+          const saved = await api('/projects/' + p.id, 'PATCH', patch);
+          Object.assign(p, saved);
+          toast(done || 'Saved.');
+        } catch (err) {
+          toast(err.message || 'Could not save.', true);
+          await load();
+        }
+      }
+
+      /**
+       * Saves currency and rate together: a project in its own currency needs its own rate.
+       * @returns {void}
+       */
+      function saveMoney() {
+        let amount;
+        try { amount = rateIn.read(); } catch (err) { toast(err.message, true); return; }
+        rateIn.setCurrency(curIn.value || settings.currency);
+        rateIn.input.placeholder = curIn.value ? '0.00' : 'default';
+        if (curIn.value && amount === null) {
+          toast('Type the hourly rate in ' + curIn.value + ' to finish.');
+          rateIn.input.focus();
+          return;
+        }
+        rateIn.input.value = amount === null ? '' : amount.toFixed(2);
+        save({ currency: curIn.value, hourly_rate: amount });
+      }
+
+      dot.addEventListener('click', function () {
+        popover(dot, function (close) {
+          return el('div', { class: 'hr-swatches hr-swatch-menu' }, PROJECT_COLORS.map(function (c) {
+            return el('button', { type: 'button', class: 'hr-swatch', 'aria-label': 'Color ' + c, 'aria-checked': String(c === p.color.toLowerCase()), style: 'background:' + c, onclick: function () {
+              close();
+              dot.style.background = c;
+              save({ color: c });
+            } });
+          }));
+        });
+      });
+      nameIn.addEventListener('change', function () {
+        if (!nameIn.value.trim()) { nameIn.value = p.name; return; }
+        save({ name: nameIn.value });
+      });
+      clientIn.addEventListener('change', function () { save({ client: clientIn.value }); });
+      [nameIn, clientIn, rateIn.input].forEach(function (i) { i.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') i.blur(); }); });
+      billIn.addEventListener('change', function () {
+        // The default only reaches new entries; offer to bring the existing ones along.
+        const differ = billIn.checked ? p.entries - p.billable_entries : p.billable_entries;
+        const apply = differ > 0 && confirm('Also mark your ' + differ + ' existing ' + (differ === 1 ? 'entry' : 'entries') + ' on "' + p.name + '" as ' + (billIn.checked ? 'billable' : 'non-billable') + '?\n\nCancel changes only the entries you log from now on.');
+        save({ billable: billIn.checked, apply_to_entries: apply }, apply ? 'Saved. ' + differ + (differ === 1 ? ' entry' : ' entries') + ' updated.' : 'Saved.');
+      });
+      curIn.addEventListener('change', saveMoney);
+      rateIn.input.addEventListener('change', saveMoney);
+
+      return el('tr', { class: p.archived ? 'hr-archived' : '' }, [
+        el('td', {}, [el('span', { class: 'hr-proj-edit' }, [el('span', { class: 'hr-pick' }, [dot]), nameIn, p.archived ? el('span', { class: 'badge', text: 'Archived' }) : null])]),
+        el('td', {}, [clientIn]),
+        el('td', {}, [el('label', { class: 'hr-check' }, [billIn])]),
+        el('td', {}, [curIn]),
+        el('td', {}, [rateIn.wrap]),
+        el('td', {}, [el('span', { class: 'hr-num', text: human(p.total_seconds) })]),
+        el('td', {}, [el('a', { class: 'btn btn-ghost btn-sm', href: here + '/' + p.id, text: 'Edit' })]),
+      ]);
     }
 
     const saveSettings = safe(async function () {
@@ -1316,9 +1415,9 @@
       ]),
       el('div', { class: 'card' }, [
         el('h2', { text: 'Workspace projects' }),
-        el('span', { class: 'muted', text: 'Shared among members. The time shown is yours only. Open a project to change its client, color, rate or whether it is billable.' }),
+        el('span', { class: 'muted', text: 'Shared among members. The time shown is yours only. Change any field right here and it saves by itself; Edit opens the project page, which also archives and deletes.' }),
         el('div', { class: 'table-wrap' }, [el('table', { class: 'hr-projects' }, [
-          el('thead', {}, [el('tr', {}, ['Project', 'Client', 'Billable', 'Hourly rate', 'Your time', ''].map(function (h) { return el('th', { text: h }); }))]),
+          el('thead', {}, [el('tr', {}, ['Project', 'Client', 'Billable', 'Currency', 'Hourly rate', 'Your time', ''].map(function (h) { return el('th', { text: h }); }))]),
           body,
         ])]),
       ]),
@@ -1528,7 +1627,7 @@
   /** @returns {void} */
   function viewData() {
     /** Human names for what the server recognized in the file. */
-    const sources = { 'horas-backup': 'Horas backup', 'horas-csv': 'Horas CSV export', 'clockify-csv': 'Clockify detailed report', 'generic-csv': 'CSV file' };
+    const sources = { 'horas-backup': 'Clockfolio backup', 'horas-csv': 'Clockfolio CSV export', 'clockify-csv': 'Clockify detailed report', 'generic-csv': 'CSV file' };
     const file = /** @type {HTMLInputElement} */ (el('input', { type: 'file', id: 'imp-file', accept: '.csv,.json,text/csv,application/json' }));
     const order = /** @type {HTMLSelectElement} */ (el('select', { id: 'imp-order' }, [
       el('option', { value: 'auto', text: 'Detect automatically' }),
@@ -1621,13 +1720,13 @@
         el('h2', { text: 'Export' }),
         el('span', { class: 'muted', text: 'Your own entries in this workspace. The backup can be imported back here or into another account; the CSV opens in any spreadsheet.' }),
         el('div', { class: 'row' }, [
-          el('button', { type: 'button', text: 'Download backup (JSON)', onclick: safe(function () { return download('/backup.json', 'horas-backup-' + dayKey(new Date()) + '.json'); }) }),
-          el('button', { type: 'button', class: 'btn-ghost', text: 'Download entries (CSV)', onclick: safe(function () { return download('/export.csv', 'horas-' + dayKey(new Date()) + '.csv'); }) }),
+          el('button', { type: 'button', text: 'Download backup (JSON)', onclick: safe(function () { return download('/backup.json', 'clockfolio-backup-' + dayKey(new Date()) + '.json'); }) }),
+          el('button', { type: 'button', class: 'btn-ghost', text: 'Download entries (CSV)', onclick: safe(function () { return download('/export.csv', 'clockfolio-' + dayKey(new Date()) + '.csv'); }) }),
         ]),
       ]),
       CAN_WRITE ? el('div', { class: 'card' }, [
         el('h2', { text: 'Import' }),
-        el('span', { class: 'muted', text: 'Accepts a Horas backup, a Horas CSV export, or Clockify\'s Detailed report exported as CSV. You see a preview before anything is saved, and entries already here are skipped.' }),
+        el('span', { class: 'muted', text: 'Accepts a Clockfolio backup, a Clockfolio CSV export, or Clockify\'s Detailed report exported as CSV. You see a preview before anything is saved, and entries already here are skipped.' }),
         el('div', { class: 'row' }, [
           el('div', { class: 'field' }, [el('label', { for: 'imp-file', text: 'File (.csv or .json, up to 3 MB)' }), file]),
           el('div', { class: 'field hr-field-md' }, [el('label', { for: 'imp-order', text: 'Dates like 03/04/2026' }), order]),

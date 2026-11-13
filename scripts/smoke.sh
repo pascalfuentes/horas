@@ -153,8 +153,8 @@ check "and ten recovery codes"                         "10"                     
 # The QR generator emits the SVG with only a viewBox. In a `width: max-content`
 # container that collapses to 0×0: the QR existed in the HTML and did not show
 # on screen. Checking that an <svg> exists was not enough; what matters is that
-# it has a size.
-check "the QR has an explicit size (not 0x0)"          'width="220"'               "$(printf '%s' "$HTML_2FA" | grep -oE '<svg[^>]*' | head -1)"
+# it has a size. (The sidebar icons are SVGs too, so they are skipped.)
+check "the QR has an explicit size (not 0x0)"          'width="220"'               "$(printf '%s' "$HTML_2FA" | grep -oE '<svg[^>]*' | grep -v 'nav-ico' | head -1)"
 check "confirming turns 2FA on"                        '"twoFactorEnabled": 1'     "$(sql "SELECT twoFactorEnabled FROM user WHERE email='admin@exemplo.com'")"
 check "admin can browse freely again"                  "200"                       "$(get /dashboard/admin/users "$ADMIN")"
 
