@@ -314,3 +314,10 @@ input[type="file"]::file-selector-button { font: inherit; font-weight: 500; marg
   .hr-grid4 { grid-template-columns: 1fr 1fr; }
   .hr-chart { gap: 6px; }
 }
+
+/* ----- Sorting the project list by a column ----- */
+.hr-projects th button.hr-sort { display: inline-flex; align-items: center; gap: 6px; margin: -4px -8px; padding: 4px 8px; border: 0; border-radius: var(--radius-sm); background: transparent; box-shadow: none; transform: none; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+.hr-projects th button.hr-sort:hover { background: var(--surface-2); color: var(--text); }
+.hr-projects th button.hr-sort-on { color: var(--text); }
+.hr-sort-arrow { font-size: 0.875rem; line-height: 1; opacity: 0.45; }
+.hr-sort-on .hr-sort-arrow { opacity: 1; }

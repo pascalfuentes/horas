@@ -1323,11 +1323,85 @@
     let newCurrency = null;
     const defRate = moneyField({ id: 'st-rate', currency: 'BRL', value: null, placeholder: '0.00', disabled: !CAN_WRITE });
     let settings = { currency: 'BRL', default_rate: 0 };
+    /** @type {object[]} */
+    let projects = [];
+    const headRow = el('tr', {});
+    const SORT_KEY = 'horas-project-sort';
+    /** Column the list is sorted by; no key means the order the server sends. @type {{key: string, dir: number}} */
+    let sort = { key: '', dir: 1 };
+    try {
+      const saved = JSON.parse(localStorage.getItem(SORT_KEY) || 'null');
+      if (saved && typeof saved.key === 'string' && (saved.dir === 1 || saved.dir === -1)) sort = saved;
+    } catch (e) { /* no saved choice */ }
+
+    /**
+     * The columns of the list. `value` is what a column sorts by; null or an
+     * empty text means "nothing here" and always goes to the end.
+     * @type {Array<{key: string, label: string, value?: function(object): (number|string|null)}>}
+     */
+    const COLUMNS = [
+      { key: 'name', label: 'Project', value: function (p) { return p.name.toLowerCase(); } },
+      { key: 'client', label: 'Client', value: function (p) { return (p.client || '').toLowerCase(); } },
+      { key: 'billable', label: 'Billable', value: function (p) { return p.billable ? 1 : 0; } },
+      { key: 'currency', label: 'Currency', value: function (p) { return p.currency || settings.currency; } },
+      { key: 'rate', label: 'Hourly rate', value: function (p) { return p.hourly_rate === null ? (settings.default_rate || null) : p.hourly_rate; } },
+      { key: 'budget', label: 'Budget', value: function (p) {
+        // Share of the budget already used; with both budgets, the one closer to its limit.
+        const parts = [];
+        if (p.budget_amount) parts.push(p.spent_amount / p.budget_amount);
+        if (p.budget_hours) parts.push(p.spent_hours / p.budget_hours);
+        return parts.length ? Math.max.apply(null, parts) : null;
+      } },
+      { key: 'time', label: 'Your time', value: function (p) { return p.total_seconds; } },
+      { key: '', label: '' },
+    ];
+
+    /**
+     * The projects in the chosen order. Archived projects stay at the end, and
+     * so do the ones with nothing in the sorted column.
+     * @returns {object[]}
+     */
+    function sorted() {
+      const col = COLUMNS.filter(function (c) { return c.key === sort.key && c.value; })[0];
+      if (!col) return projects;
+      return projects.map(function (p, i) { return { p: p, i: i, v: col.value(p) }; }).sort(function (a, b) {
+        if (a.p.archived !== b.p.archived) return a.p.archived ? 1 : -1;
+        const ea = a.v === null || a.v === '';
+        const eb = b.v === null || b.v === '';
+        if (ea !== eb) return ea ? 1 : -1;
+        if (!ea && a.v !== b.v) return (typeof a.v === 'string' ? a.v.localeCompare(String(b.v)) : a.v - b.v) * sort.dir;
+        return a.i - b.i;
+      }).map(function (x) { return x.p; });
+    }
+
+    /**
+     * Draws the header (each title sorts its column: smallest first, then
+     * largest first, then back to the usual order) and the rows.
+     * @returns {void}
+     */
+    function paintRows() {
+      headRow.replaceChildren.apply(headRow, COLUMNS.map(function (c) {
+        if (!c.value) return el('th', { text: c.label });
+        const on = sort.key === c.key;
+        return el('th', { 'aria-sort': on ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none' }, [
+          el('button', { type: 'button', class: 'hr-sort' + (on ? ' hr-sort-on' : ''), title: on ? (sort.dir === 1 ? 'Smallest first. Click for largest first' : 'Largest first. Click for the usual order') : 'Sort, smallest first', onclick: function () {
+            sort = !on ? { key: c.key, dir: 1 } : sort.dir === 1 ? { key: c.key, dir: -1 } : { key: '', dir: 1 };
+            try { localStorage.setItem(SORT_KEY, JSON.stringify(sort)); } catch (e) { /* private mode */ }
+            paintRows();
+          } }, [el('span', { text: c.label }), el('span', { class: 'hr-sort-arrow', 'aria-hidden': 'true', text: on ? (sort.dir === 1 ? '↑' : '↓') : '↕' })]),
+        ]);
+      }));
+      if (!projects.length) {
+        body.replaceChildren(el('tr', {}, [el('td', { colspan: '8', class: 'empty', text: 'No projects yet.' })]));
+        return;
+      }
+      body.replaceChildren.apply(body, sorted().map(CAN_WRITE ? editableRow : readOnlyRow));
+    }
 
     /** @returns {Promise<void>} */
     async function load() {
       const got = await Promise.all([api('/projects?archived=1'), api('/settings')]);
-      const projects = got[0];
+      projects = got[0];
       settings = got[1];
       if (!currency.querySelector('option[value="' + settings.currency + '"]')) currency.appendChild(el('option', { value: settings.currency, text: settings.currency }));
       currency.value = settings.currency;
@@ -1340,11 +1414,7 @@
       rate.setCurrency(newCurrency.value || settings.currency);
       if (document.activeElement !== defRate.input) defRate.input.value = settings.default_rate ? settings.default_rate.toFixed(2) : '';
       clientList.replaceChildren.apply(clientList, projects.map(function (p) { return p.client; }).filter(function (c, i, a) { return c && a.indexOf(c) === i; }).map(function (c) { return el('option', { value: c }); }));
-      if (!projects.length) {
-        body.replaceChildren(el('tr', {}, [el('td', { colspan: '8', class: 'empty', text: 'No projects yet.' })]));
-        return;
-      }
-      body.replaceChildren.apply(body, projects.map(CAN_WRITE ? editableRow : readOnlyRow));
+      paintRows();
     }
 
     /**
@@ -1492,7 +1562,7 @@
         el('h2', { text: 'Workspace projects' }),
         el('span', { class: 'muted', text: 'Shared among members. The time shown is yours only. Change any field right here and it saves by itself; Edit opens the project page, which also archives and deletes.' }),
         el('div', { class: 'table-wrap' }, [el('table', { class: 'hr-projects' }, [
-          el('thead', {}, [el('tr', {}, ['Project', 'Client', 'Billable', 'Currency', 'Hourly rate', 'Budget', 'Your time', ''].map(function (h) { return el('th', { text: h }); }))]),
+          el('thead', {}, [headRow]),
           body,
         ])]),
       ]),
