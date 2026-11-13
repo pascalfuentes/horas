@@ -46,17 +46,21 @@ button.hr-play:hover { background: var(--border-strong); }
 .hr-tri { width: 9px; height: 11px; margin-left: 2px; background: var(--text); clip-path: polygon(0 0, 100% 50%, 0 100%); }
 
 /* ----- Editing in place: chips, inline fields, menus ----- */
+/* These selectors carry the `.hr-row` prefix on purpose. The general field
+   rules in global.css (`input[type="text"]`: full width, border, padding) have
+   the same weight as a bare `input.hr-inline`, so which one won depended on
+   the order the build happened to bundle the two stylesheets in. */
 .hr-row-edit { gap: 10px; }
 .hr-row[aria-busy="true"] { opacity: 0.55; pointer-events: none; }
-input.hr-inline { width: auto; min-width: 0; padding: 4px 8px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; font: inherit; color: var(--text); }
-input.hr-inline:hover { background: var(--surface-2); }
-input.hr-inline:focus { background: var(--surface); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-input.hr-inline-desc { width: 100%; font-weight: 500; margin-left: -8px; text-overflow: ellipsis; }
-input.hr-inline-tags { flex: 1; min-width: 60px; font-size: 0.875rem; color: var(--text-muted); padding: 2px 6px; }
-input.hr-inline-time, input.hr-inline-dur { background: var(--surface-2); font-family: var(--mono); font-size: 0.9375rem; font-variant-numeric: tabular-nums; text-align: center; }
-input.hr-inline-time { font-family: var(--font); font-size: 0.875rem; padding: 4px 4px; }
-input.hr-inline-time::-webkit-calendar-picker-indicator { display: none; }
-input.hr-inline-dur { width: 9ch; font-weight: 500; }
+.hr-row input.hr-inline { width: auto; min-width: 0; padding: 4px 8px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; font: inherit; color: var(--text); }
+.hr-row input.hr-inline:hover { background: var(--surface-2); }
+.hr-row input.hr-inline:focus { background: var(--surface); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.hr-row input.hr-inline-desc { width: 100%; font-weight: 500; margin-left: -8px; text-overflow: ellipsis; }
+.hr-row input.hr-inline-tags { flex: 1; min-width: 60px; font-size: 0.875rem; color: var(--text-muted); padding: 2px 6px; }
+.hr-row input.hr-inline-time, .hr-row input.hr-inline-dur { background: var(--surface-2); font-family: var(--mono); font-size: 0.9375rem; font-variant-numeric: tabular-nums; text-align: center; }
+.hr-row input.hr-inline-time { font-family: var(--font); font-size: 0.875rem; padding: 4px 4px; }
+.hr-row input.hr-inline-time::-webkit-calendar-picker-indicator { display: none; }
+.hr-row input.hr-inline-dur { width: 9ch; font-weight: 500; }
 .hr-times { display: inline-flex; align-items: center; gap: 4px; background: var(--surface-2); border-radius: var(--radius-sm); padding: 0 4px; white-space: nowrap; }
 .hr-times input.hr-inline-time { background: transparent; }
 .hr-meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -93,7 +97,7 @@ button.hr-bill[aria-busy="true"] span { display: none; }
 button.hr-icon { width: 32px; height: 32px; padding: 0; flex: none; border: 0; background: transparent; color: var(--text-muted); }
 button.hr-icon:hover { background: var(--surface-2); }
 .hr-date { position: relative; display: inline-flex; }
-.hr-date-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; padding: 0; border: 0; }
+.hr-row .hr-date input.hr-date-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; padding: 0; border: 0; }
 .hr-cal { width: 14px; height: 13px; border: 1.5px solid currentColor; border-radius: 3px; position: relative; }
 .hr-cal::before { content: ""; position: absolute; left: -1.5px; right: -1.5px; top: 2.5px; border-top: 1.5px solid currentColor; }
 .hr-kebab, .hr-kebab::before, .hr-kebab::after { width: 3.5px; height: 3.5px; border-radius: 50%; background: currentColor; }
@@ -111,13 +115,13 @@ button.hr-icon:hover { background: var(--surface-2); }
 .hr-grid4 { display: grid; grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr)); gap: 12px; }
 .hr-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .hr-grid4 > .field, .hr-grid2 > .field { min-width: 0; }
-.hr-grid4 input, .hr-grid2 input { width: 100%; padding-left: 12px; padding-right: 8px; }
+.hr-dialog .hr-grid4 input, .hr-dialog .hr-grid2 input { width: 100%; padding-left: 12px; padding-right: 8px; }
 .hr-dialog-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .hr-dialog-foot .btn-ghost:not(.btn-sm) { border-color: transparent; }
 
 /* ----- Reports ----- */
 .hr-filters { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.hr-filters select, .hr-filters input { width: auto; }
+.card.hr-filters select, .card.hr-filters input { width: auto; }
 .hr-tabs { display: flex; gap: 8px; margin: 0 0 24px; }
 .hr-tabs button { background: var(--surface); border: 1px solid var(--border-strong); color: var(--text); padding: 7px 18px; font-size: 0.875rem; }
 .hr-tabs button:hover { background: var(--surface-2); }
