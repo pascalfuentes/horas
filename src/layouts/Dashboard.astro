@@ -91,6 +91,7 @@ const groups = [
     <title>{title}</title>
     <Theme />
     <BusyForms />
+    <script is:inline src="/app/select.js" defer></script>
   </head>
   <body>
     <div class="app">
@@ -111,7 +112,7 @@ const groups = [
           <>
             <div class="group">{g.group}</div>
             {g.items.map((item) => (
-              <a href={item.href} aria-current={path === item.href ? "page" : undefined}>{item.label}</a>
+              <a href={item.href} aria-current={path === item.href || path.startsWith(item.href + "/") ? "page" : undefined}>{item.label}</a>
             ))}
           </>
         ))}

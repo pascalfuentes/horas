@@ -315,6 +315,157 @@
   }
 
   /**
+   * "Nov 1 – Nov 13, 2026": a period written the short way.
+   * @param {string} from Day key (YYYY-MM-DD).
+   * @param {string} to Day key.
+   * @returns {string}
+   */
+  function rangeLabel(from, to) {
+    const a = from.split('-').map(Number);
+    const b = to.split('-').map(Number);
+    const first = new Date(a[0], a[1] - 1, a[2]);
+    const last = new Date(b[0], b[1] - 1, b[2]);
+    const end = last.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    if (from === to) return end;
+    return first.toLocaleDateString('en-US', a[0] === b[0] ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' }) + ' – ' + end;
+  }
+
+  /**
+   * One control for a period: it shows the dates, and opens a calendar where
+   * the first click is the start day and the second is the end day. Ready-made
+   * periods ("This week", "Last month"…) sit beside the calendar.
+   * @param {{presets: Object<string, {label: string, range: function(): Date[]}>, preset: string, onChange: function(): void}} opts
+   *   `preset` is the period chosen at first.
+   * @returns {{wrap: HTMLElement, from: function(): string, to: function(): string}} `from()`/`to()` give day keys.
+   */
+  function rangePicker(opts) {
+    const first = opts.presets[opts.preset].range();
+    let from = dayKey(first[0]);
+    let to = dayKey(first[1]);
+    let presetKey = opts.preset;
+    const name = el('small', { class: 'hr-range-name' });
+    const dates = el('span', { class: 'hr-range-dates' });
+    const button = el('button', { type: 'button', class: 'hr-range', 'aria-haspopup': 'dialog', 'aria-expanded': 'false' }, [name, dates]);
+    const wrap = el('span', { class: 'hr-pick' }, [button]);
+
+    /** @returns {void} */
+    function paint() {
+      name.textContent = opts.presets[presetKey] ? opts.presets[presetKey].label : 'Custom';
+      dates.textContent = rangeLabel(from, to);
+      button.setAttribute('aria-label', 'Period: ' + name.textContent + ', ' + dates.textContent);
+    }
+
+    button.addEventListener('click', function () {
+      if (button.getAttribute('aria-expanded') === 'true') { wrap.querySelector('.hr-menu').dispatchEvent(new Event('hr-close')); return; }
+      popover(button, function (close) {
+        let a = from;
+        let b = to;
+        let picking = false;
+        const last = to.split('-').map(Number);
+        // Two months side by side, ending on the month of the last day.
+        let view = new Date(last[0], last[1] - 2, 1);
+        const months = el('div', { class: 'hr-cal-months' });
+        const hint = el('small', { class: 'muted hr-cal-hint' });
+
+        /**
+         * Applies a period and closes.
+         * @param {string} start @param {string} end @param {string} key Preset key, or "custom".
+         * @returns {void}
+         */
+        function commit(start, end, key) {
+          from = start;
+          to = end;
+          presetKey = key;
+          paint();
+          close();
+          opts.onChange();
+        }
+
+        /**
+         * Colours the days between the two ends. While the end is still being
+         * chosen, `hover` is the day under the pointer.
+         * @param {string} [hover]
+         * @returns {void}
+         */
+        function mark(hover) {
+          const end = picking ? (hover || a) : b;
+          const lo = a < end ? a : end;
+          const hi = a < end ? end : a;
+          Array.prototype.forEach.call(months.querySelectorAll('button[data-day]'), function (d) {
+            const k = d.dataset.day;
+            d.classList.toggle('hr-cal-in', k > lo && k < hi);
+            d.classList.toggle('hr-cal-end', k === lo || k === hi);
+            d.setAttribute('aria-pressed', String(k === lo || k === hi));
+          });
+          hint.textContent = picking ? 'Now pick the last day.' : 'Pick the first day, then the last day.';
+        }
+
+        /**
+         * @param {string} k Day that was clicked.
+         * @returns {void}
+         */
+        function choose(k) {
+          if (!picking) { a = b = k; picking = true; mark(); return; }
+          if (k < a) commit(k, a, 'custom');
+          else commit(a, k, 'custom');
+        }
+
+        /**
+         * @param {Date} month First day of the month to draw.
+         * @returns {HTMLElement}
+         */
+        function grid(month) {
+          const todayKey = dayKey(day(0));
+          const cells = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(function (w) { return el('small', { class: 'muted', text: w }); });
+          for (let i = (month.getDay() + 6) % 7; i > 0; i--) cells.push(el('span', {}));
+          const count = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+          for (let n = 1; n <= count; n++) {
+            const k = dayKey(new Date(month.getFullYear(), month.getMonth(), n));
+            cells.push(el('button', { type: 'button', class: 'hr-cal-day' + (k === todayKey ? ' hr-cal-today' : ''), 'data-day': k, text: String(n), 'aria-label': dayLabel(k), onclick: function () { choose(k); }, onmouseenter: function () { if (picking) mark(k); } }));
+          }
+          return el('div', { class: 'hr-cal-month' }, [
+            el('strong', { text: month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }),
+            el('div', { class: 'hr-cal-grid' }, cells),
+          ]);
+        }
+
+        /** @returns {void} */
+        function draw() {
+          months.replaceChildren(grid(view), grid(new Date(view.getFullYear(), view.getMonth() + 1, 1)));
+          mark();
+        }
+
+        /**
+         * @param {number} step Months to move, negative for the past.
+         * @returns {function(): void}
+         */
+        function go(step) { return function () { view = new Date(view.getFullYear(), view.getMonth() + step, 1); draw(); }; }
+
+        draw();
+        return el('div', { class: 'hr-range-panel', role: 'dialog', 'aria-label': 'Choose a period' }, [
+          el('div', { class: 'hr-range-presets' }, Object.keys(opts.presets).map(function (key) {
+            return el('button', { type: 'button', class: 'hr-menu-item' + (key === presetKey ? ' hr-menu-on' : ''), text: opts.presets[key].label, onclick: function () {
+              const r = opts.presets[key].range();
+              commit(dayKey(r[0]), dayKey(r[1]), key);
+            } });
+          })),
+          el('div', { class: 'hr-range-cal' }, [
+            el('div', { class: 'hr-cal-nav' }, [
+              el('button', { type: 'button', class: 'btn-ghost btn-sm', text: '‹', 'aria-label': 'Previous month', onclick: go(-1) }),
+              hint,
+              el('button', { type: 'button', class: 'btn-ghost btn-sm', text: '›', 'aria-label': 'Next month', onclick: go(1) }),
+            ]),
+            months,
+          ]),
+        ]);
+      });
+    });
+
+    paint();
+    return { wrap: wrap, from: function () { return from; }, to: function () { return to; } };
+  }
+
+  /**
    * Project chip that opens a menu to pick a project, clear it, or create a
    * new one by typing its name. Used in the timer bar and on every entry row.
    * @param {{projects: object[], value: number|null, onPick: function(number): (Promise<any>|void)}} opts
@@ -513,7 +664,15 @@
     /** @returns {void} */
     function paintBar() {
       const r = state.running;
-      projSlot.replaceChildren(projectPicker({ projects: state.projects, value: r ? r.project_id : barProject() || null, onPick: patchRunning }));
+      projSlot.replaceChildren(projectPicker({ projects: state.projects, value: r ? r.project_id : barProject() || null, onPick: function (id) {
+        // Before the timer starts, choosing a project brings its billable default along.
+        if (!state.running) {
+          const chosen = state.projects.filter(function (x) { return x.id === id; })[0];
+          bill.checked = !!(chosen && chosen.billable);
+          return undefined;
+        }
+        return patchRunning();
+      } }));
       if (r) {
         if (document.activeElement !== desc) desc.value = r.description;
         bill.checked = r.billable;
@@ -839,9 +998,7 @@
       return /** @type {HTMLSelectElement} */ (el('select', { 'aria-label': label }, [el('option', { value: '', text: all })].concat(options.map(function (o) { return el('option', { value: o[0], text: o[1] }); }))));
     }
 
-    const preset = /** @type {HTMLSelectElement} */ (el('select', { 'aria-label': 'Period' }, Object.keys(presets).map(function (k) { return el('option', { value: k, text: presets[k].label }); }).concat([el('option', { value: 'custom', text: 'Custom' })])));
-    const from = /** @type {HTMLInputElement} */ (el('input', { type: 'date', 'aria-label': 'From' }));
-    const to = /** @type {HTMLInputElement} */ (el('input', { type: 'date', 'aria-label': 'To' }));
+    const period = rangePicker({ presets: presets, preset: 'week', onChange: function () { reload(); } });
     const proj = filter('Project', 'All projects', [['0', 'No project']].concat(projects.map(function (p) { return [String(p.id), p.name]; })));
     const client = filter('Client', 'All clients', clients.map(function (c) { return [c, c]; }));
     const tag = filter('Tag', 'All tags', tags.map(function (t) { return [t, '#' + t]; }));
@@ -853,20 +1010,12 @@
 
     /** @returns {string} */
     function query() {
-      const p = new URLSearchParams({ from: from.value, to: to.value });
+      const p = new URLSearchParams({ from: period.from(), to: period.to() });
       if (proj.value) p.set('project_id', proj.value);
       if (client.value) p.set('client', client.value);
       if (tag.value) p.set('tag', tag.value);
       if (bill.value) p.set('billable', bill.value);
       return '?' + p.toString();
-    }
-
-    /** @returns {void} */
-    function applyPreset() {
-      if (preset.value === 'custom') return;
-      const r = presets[preset.value].range();
-      from.value = dayKey(r[0]);
-      to.value = dayKey(r[1]);
     }
 
     /**
@@ -879,8 +1028,8 @@
       const map = {};
       byDay.forEach(function (d) { map[d.day] = d.seconds; });
       const days = [];
-      const a = from.value.split('-').map(Number);
-      const end = new Date(to.value + 'T00:00');
+      const a = period.from().split('-').map(Number);
+      const end = new Date(period.to() + 'T00:00');
       for (let d = new Date(a[0], a[1] - 1, a[2]); d <= end && days.length < 400; d.setDate(d.getDate() + 1)) days.push(dayKey(d));
       const max = Math.max.apply(null, days.map(function (k) { return map[k] || 0; }).concat([3600]));
       const dense = days.length > 14;
@@ -973,7 +1122,6 @@
 
     /** @returns {Promise<void>} */
     async function load() {
-      if (!from.value || !to.value) return;
       tabs.replaceChildren.apply(tabs, [['summary', 'Summary'], ['detailed', 'Detailed']].map(function (t) {
         return el('button', { type: 'button', role: 'tab', class: 'btn-ghost btn-sm', 'aria-selected': String(mode === t[0]), text: t[1], onclick: function () { mode = t[0]; reload(); } });
       }));
@@ -989,13 +1137,11 @@
     }
 
     const reload = safe(load);
-    preset.addEventListener('change', function () { applyPreset(); reload(); });
-    [from, to].forEach(function (i) { i.addEventListener('change', function () { preset.value = 'custom'; reload(); }); });
     [proj, client, tag, bill, groupBy].forEach(function (i) { i.addEventListener('change', reload); });
 
     root.replaceChildren(
       el('div', { class: 'card hr-filters' }, [
-        preset, from, to, proj,
+        period.wrap, proj,
         clients.length ? client : null,
         tags.length ? tag : null,
         bill,
@@ -1003,7 +1149,7 @@
         el('button', { type: 'button', class: 'btn-ghost btn-sm', text: 'Export CSV', onclick: safe(async function () {
           const res = await fetch(BASE + '/export.csv' + query(), { headers: { 'x-timezone': TZ }, credentials: 'same-origin' });
           if (!res.ok) throw new Error('Could not export.');
-          const a = el('a', { href: URL.createObjectURL(await res.blob()), download: 'horas-' + from.value + '_' + to.value + '.csv' });
+          const a = el('a', { href: URL.createObjectURL(await res.blob()), download: 'horas-' + period.from() + '_' + period.to() + '.csv' });
           a.click();
           URL.revokeObjectURL(a.getAttribute('href'));
         }) }),
@@ -1011,7 +1157,6 @@
       tabs,
       out
     );
-    applyPreset();
     await load();
   }
 
@@ -1019,15 +1164,58 @@
   /* Screen: Projects                                                   */
   /* ------------------------------------------------------------------ */
 
+  /**
+   * The symbol of a currency ("R$", "US$", "€"), as the user's locale writes it.
+   * @param {string} currency ISO 4217 code.
+   * @returns {string}
+   */
+  function currencySymbol(currency) {
+    try {
+      const parts = new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'BRL', currencyDisplay: 'narrowSymbol' }).formatToParts(0);
+      for (let i = 0; i < parts.length; i++) if (parts[i].type === 'currency') return parts[i].value;
+    } catch (e) { /* unknown code: fall through */ }
+    return currency || '';
+  }
+
+  /**
+   * Field for an amount of money: the currency sits in a fixed block on the
+   * left, so it is always visible and never typed.
+   * @param {{id: string, currency: string, value: number|null, placeholder?: string, disabled?: boolean}} opts
+   * @returns {{wrap: HTMLElement, input: HTMLInputElement, read: function(): (number|null), setCurrency: function(string): void}}
+   *   `read()` gives the amount, null when empty, and throws on something that is not a number.
+   */
+  function moneyField(opts) {
+    const cur = el('span', { class: 'hr-money-cur', text: currencySymbol(opts.currency) });
+    const input = /** @type {HTMLInputElement} */ (el('input', { type: 'text', inputmode: 'decimal', id: opts.id, class: 'hr-money-in', autocomplete: 'off', placeholder: opts.placeholder || '0.00', value: opts.value === null || opts.value === undefined ? '' : opts.value.toFixed(2), disabled: !!opts.disabled }));
+    return {
+      wrap: el('span', { class: 'hr-money' }, [cur, input]),
+      input: input,
+      read: function () {
+        const raw = input.value.trim().replace(/\s/g, '');
+        if (!raw) return null;
+        // "1.234,56" and "1,234.56" both mean the same; the last separator is the decimal one.
+        const lastComma = raw.lastIndexOf(',');
+        const lastDot = raw.lastIndexOf('.');
+        const normal = lastComma > lastDot ? raw.replace(/\./g, '').replace(',', '.') : raw.replace(/,/g, '');
+        const n = Number(normal);
+        if (!isFinite(n) || n < 0) throw new Error('Enter an amount like 150 or 150.50.');
+        return Math.round(n * 100) / 100;
+      },
+      setCurrency: function (code) { cur.textContent = currencySymbol(code); },
+    };
+  }
+
   /** @returns {Promise<void>} */
   async function viewProjects() {
     const body = el('tbody', {});
+    const here = location.pathname.replace(/\/$/, '');
     const name = /** @type {HTMLInputElement} */ (el('input', { type: 'text', id: 'np-name', required: true, maxlength: '80' }));
     const client = /** @type {HTMLInputElement} */ (el('input', { type: 'text', id: 'np-client', maxlength: '80', list: 'np-clients', autocomplete: 'off' }));
-    const rate = /** @type {HTMLInputElement} */ (el('input', { type: 'number', id: 'np-rate', min: '0', step: '0.01', placeholder: 'default' }));
+    const billable = /** @type {HTMLInputElement} */ (el('input', { type: 'checkbox', id: 'np-bill' }));
+    const rate = moneyField({ id: 'np-rate', currency: 'BRL', value: null, placeholder: 'default' });
     const clientList = el('datalist', { id: 'np-clients' });
     const currency = /** @type {HTMLSelectElement} */ (el('select', { id: 'st-currency' }, [['BRL', 'Real (R$)'], ['USD', 'Dollar (US$)'], ['EUR', 'Euro (€)'], ['GBP', 'Pound (£)']].map(function (c) { return el('option', { value: c[0], text: c[1] }); })));
-    const defRate = /** @type {HTMLInputElement} */ (el('input', { type: 'number', id: 'st-rate', min: '0', step: '0.01' }));
+    const defRate = moneyField({ id: 'st-rate', currency: 'BRL', value: null, placeholder: '0.00', disabled: !CAN_WRITE });
     let settings = { currency: 'BRL', default_rate: 0 };
 
     /** @returns {Promise<void>} */
@@ -1037,48 +1225,37 @@
       settings = got[1];
       if (!currency.querySelector('option[value="' + settings.currency + '"]')) currency.appendChild(el('option', { value: settings.currency, text: settings.currency }));
       currency.value = settings.currency;
-      if (document.activeElement !== defRate) defRate.value = settings.default_rate ? String(settings.default_rate) : '';
+      rate.setCurrency(settings.currency);
+      defRate.setCurrency(settings.currency);
+      if (document.activeElement !== defRate.input) defRate.input.value = settings.default_rate ? settings.default_rate.toFixed(2) : '';
       clientList.replaceChildren.apply(clientList, projects.map(function (p) { return p.client; }).filter(function (c, i, a) { return c && a.indexOf(c) === i; }).map(function (c) { return el('option', { value: c }); }));
       if (!projects.length) {
         body.replaceChildren(el('tr', {}, [el('td', { colspan: '6', class: 'empty', text: 'No projects yet.' })]));
         return;
       }
       body.replaceChildren.apply(body, projects.map(function (p) {
-        const patch = function (data) { return safe(async function () { await api('/projects/' + p.id, 'PATCH', data()); await load(); }); };
-        const color = /** @type {HTMLInputElement} */ (el('input', { type: 'color', value: p.color, disabled: !CAN_WRITE, 'aria-label': 'Color of ' + p.name }));
-        const nm = /** @type {HTMLInputElement} */ (el('input', { type: 'text', value: p.name, maxlength: '80', disabled: !CAN_WRITE, 'aria-label': 'Name' }));
-        const cl = /** @type {HTMLInputElement} */ (el('input', { type: 'text', value: p.client, maxlength: '80', placeholder: '—', list: 'np-clients', disabled: !CAN_WRITE, 'aria-label': 'Client' }));
-        const rt = /** @type {HTMLInputElement} */ (el('input', { type: 'number', min: '0', step: '0.01', value: p.hourly_rate === null ? '' : String(p.hourly_rate), placeholder: settings.default_rate ? String(settings.default_rate) : 'default', disabled: !CAN_WRITE, 'aria-label': 'Hourly rate of ' + p.name, title: 'Empty = uses the workspace default rate' }));
-        color.addEventListener('change', patch(function () { return { color: color.value }; }));
-        nm.addEventListener('change', patch(function () { return { name: nm.value }; }));
-        cl.addEventListener('change', patch(function () { return { client: cl.value }; }));
-        rt.addEventListener('change', patch(function () { return { hourly_rate: rt.value === '' ? null : Number(rt.value) }; }));
         return el('tr', { class: p.archived ? 'hr-archived' : '' }, [
-          el('td', {}, [color]),
-          el('td', {}, [nm, p.archived ? el('span', { class: 'badge', text: 'Archived' }) : null]),
-          el('td', {}, [cl]),
-          el('td', {}, [rt]),
-          el('td', { text: human(p.total_seconds) }),
-          el('td', {}, [CAN_WRITE && el('span', { class: 'row-actions' }, [
-            el('button', { type: 'button', class: 'btn-ghost btn-sm', text: p.archived ? 'Unarchive' : 'Archive', onclick: patch(function () { return { archived: !p.archived }; }) }),
-            el('button', { type: 'button', class: 'btn-danger btn-sm', text: 'Delete', onclick: safe(async function () {
-              if (!confirm('Delete the project "' + p.name + '"? Its entries remain, without a project. This applies to every member.')) return;
-              await api('/projects/' + p.id, 'DELETE');
-              await load();
-            }) }),
+          el('td', { class: 'wrap' }, [el('a', { class: 'hr-proj-link', href: here + '/' + p.id }, [
+            el('span', { class: 'hr-dot', style: 'background:' + p.color }), el('span', { text: p.name }),
+            p.archived ? el('span', { class: 'badge', text: 'Archived' }) : null,
           ])]),
+          el('td', { class: 'wrap', text: p.client || '—' }),
+          el('td', {}, [p.billable ? el('span', { class: 'badge badge-sky', text: 'Billable' }) : el('span', { class: 'muted', text: '—' })]),
+          el('td', {}, [el('span', { class: p.hourly_rate === null ? 'hr-num muted' : 'hr-num', text: p.hourly_rate === null ? 'default' : money(p.hourly_rate, settings.currency) })]),
+          el('td', {}, [el('span', { class: 'hr-num', text: human(p.total_seconds) })]),
+          el('td', {}, [el('a', { class: 'btn btn-ghost btn-sm', href: here + '/' + p.id, text: CAN_WRITE ? 'Edit' : 'View' })]),
         ]);
       }));
     }
 
     const saveSettings = safe(async function () {
-      await api('/settings', 'PATCH', { currency: currency.value, default_rate: defRate.value === '' ? 0 : Number(defRate.value) });
+      await api('/settings', 'PATCH', { currency: currency.value, default_rate: defRate.read() || 0 });
       toast('Billing updated.');
       await load();
     });
     currency.addEventListener('change', saveSettings);
-    defRate.addEventListener('change', saveSettings);
-    currency.disabled = defRate.disabled = !CAN_WRITE;
+    defRate.input.addEventListener('change', saveSettings);
+    currency.disabled = !CAN_WRITE;
 
     // A viewer has no "New project" card; drop the missing part instead of printing "false".
     root.replaceChildren.apply(root, [
@@ -1087,21 +1264,23 @@
         el('h2', { text: 'New project' }),
         el('form', { class: 'row', onsubmit: safe(async function (ev) {
           ev.preventDefault();
-          await api('/projects', 'POST', { name: name.value, client: client.value, hourly_rate: rate.value === '' ? null : Number(rate.value) });
-          name.value = client.value = rate.value = '';
+          await api('/projects', 'POST', { name: name.value, client: client.value, hourly_rate: rate.read(), billable: billable.checked });
+          name.value = client.value = rate.input.value = '';
+          billable.checked = false;
           await load();
         }) }, [
           el('div', { class: 'field' }, [el('label', { for: 'np-name', text: 'Name' }), name]),
           el('div', { class: 'field' }, [el('label', { for: 'np-client', text: 'Client (optional)' }), client]),
-          el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'np-rate', text: 'Hourly rate' }), rate]),
+          el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'np-rate', text: 'Hourly rate' }), rate.wrap]),
+          el('label', { class: 'hr-check hr-check-row', for: 'np-bill' }, [billable, ' Billable by default']),
           el('div', { class: 'field hr-field-btn' }, [el('button', { type: 'submit', text: 'Create' })]),
         ]),
       ]),
       el('div', { class: 'card' }, [
         el('h2', { text: 'Workspace projects' }),
-        el('span', { class: 'muted', text: 'Shared among members. The time shown is yours only.' }),
+        el('span', { class: 'muted', text: 'Shared among members. The time shown is yours only. Open a project to change its client, color, rate or whether it is billable.' }),
         el('div', { class: 'table-wrap' }, [el('table', { class: 'hr-projects' }, [
-          el('thead', {}, [el('tr', {}, ['Color', 'Name', 'Client', 'Hourly rate', 'Your time', ''].map(function (h) { return el('th', { text: h }); }))]),
+          el('thead', {}, [el('tr', {}, ['Project', 'Client', 'Billable', 'Hourly rate', 'Your time', ''].map(function (h) { return el('th', { text: h }); }))]),
           body,
         ])]),
       ]),
@@ -1110,11 +1289,108 @@
         el('span', { class: 'muted', text: 'The amount of a billable entry is hours × the project hourly rate. Projects without their own rate use the default below. Changing a rate recalculates everything already logged.' }),
         el('div', { class: 'row' }, [
           el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'st-currency', text: 'Currency' }), currency]),
-          el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'st-rate', text: 'Default hourly rate' }), defRate]),
+          el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'st-rate', text: 'Default hourly rate' }), defRate.wrap]),
         ]),
       ])
     ].filter(Boolean));
     await load();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Screen: one project                                                 */
+  /* ------------------------------------------------------------------ */
+
+  /** Project colours offered as swatches; they are the design system's project tokens. */
+  const PROJECT_COLORS = ['#5dcdf1', '#fd976d', '#fdd46b', '#4cc98c', '#9b8afb', '#f0705f'];
+
+  /** @returns {Promise<void>} */
+  async function viewProject() {
+    const id = Number(root.dataset.project);
+    const back = root.dataset.back || '';
+    const got = await Promise.all([api('/projects?archived=1'), api('/settings')]);
+    const settings = got[1];
+    let p = got[0].filter(function (x) { return x.id === id; })[0];
+    if (!p) {
+      root.replaceChildren(el('p', { class: 'alert alert-error', text: 'This project does not exist, or was deleted.' }), el('a', { class: 'btn btn-ghost', href: back, text: 'All projects' }));
+      return;
+    }
+    const heading = document.querySelector('.page-head h1');
+    const off = !CAN_WRITE;
+
+    const name = /** @type {HTMLInputElement} */ (el('input', { type: 'text', id: 'pj-name', required: true, maxlength: '80', value: p.name, disabled: off }));
+    const client = /** @type {HTMLInputElement} */ (el('input', { type: 'text', id: 'pj-client', maxlength: '80', list: 'pj-clients', autocomplete: 'off', value: p.client, disabled: off }));
+    const custom = /** @type {HTMLInputElement} */ (el('input', { type: 'color', class: 'hr-swatch-custom', value: p.color, disabled: off, 'aria-label': 'Custom color', title: 'Another color' }));
+    const billable = /** @type {HTMLInputElement} */ (el('input', { type: 'checkbox', id: 'pj-bill', checked: p.billable, disabled: off }));
+    const rate = moneyField({ id: 'pj-rate', currency: settings.currency, value: p.hourly_rate, placeholder: 'default', disabled: off });
+    const swatches = el('div', { class: 'hr-swatches', role: 'radiogroup', 'aria-label': 'Color' });
+    let color = p.color;
+
+    /** @returns {void} */
+    function paintColors() {
+      swatches.replaceChildren.apply(swatches, PROJECT_COLORS.map(function (c) {
+        return el('button', { type: 'button', class: 'hr-swatch', role: 'radio', 'aria-checked': String(c === color.toLowerCase()), 'aria-label': 'Color ' + c, disabled: off, style: 'background:' + c, onclick: function () { color = c; custom.value = c; paintColors(); } });
+      }).concat([custom]));
+      custom.classList.toggle('hr-swatch-on', PROJECT_COLORS.indexOf(color.toLowerCase()) === -1);
+    }
+    custom.addEventListener('input', function () { color = custom.value; paintColors(); });
+    paintColors();
+
+    const archiveBtn = el('button', { type: 'button', class: 'btn-ghost' });
+    /** @returns {void} */
+    function paintState() {
+      archiveBtn.textContent = p.archived ? 'Restore project' : 'Archive project';
+      if (heading) heading.textContent = p.name;
+      document.title = p.name + ' · Projects';
+    }
+    archiveBtn.addEventListener('click', safe(async function () {
+      p = await api('/projects/' + id, 'PATCH', { archived: !p.archived });
+      paintState();
+      toast(p.archived ? 'Project archived.' : 'Project restored.');
+    }));
+    paintState();
+
+    root.replaceChildren.apply(root, [
+      el('datalist', { id: 'pj-clients' }, got[0].map(function (x) { return x.client; }).filter(function (c, i, a) { return c && a.indexOf(c) === i; }).map(function (c) { return el('option', { value: c }); })),
+      off ? el('p', { class: 'alert alert-info', text: 'Your role in this workspace is read-only.' }) : null,
+      el('form', { onsubmit: safe(async function (ev) {
+        ev.preventDefault();
+        p = await api('/projects/' + id, 'PATCH', { name: name.value, client: client.value, color: color, billable: billable.checked, hourly_rate: rate.read() });
+        paintState();
+        toast('Project saved.');
+      }) }, [
+        el('div', { class: 'card' }, [
+          el('h2', { text: 'Details' }),
+          el('div', { class: 'row' }, [
+            el('div', { class: 'field' }, [el('label', { for: 'pj-name', text: 'Name' }), name]),
+            el('div', { class: 'field' }, [el('label', { for: 'pj-client', text: 'Client' }), client]),
+          ]),
+          el('div', { class: 'field hr-field-top' }, [el('span', { class: 'hr-label', text: 'Color' }), swatches]),
+        ]),
+        el('div', { class: 'card' }, [
+          el('h2', { text: 'Billing' }),
+          el('label', { class: 'hr-check hr-check-lg', for: 'pj-bill' }, [billable, ' Billable by default']),
+          el('p', { class: 'muted', text: 'New entries on this project start as billable. You can still switch the “$” on any single entry. Entries that already exist are not changed.' }),
+          el('div', { class: 'field hr-field-sm hr-field-top' }, [el('label', { for: 'pj-rate', text: 'Hourly rate' }), rate.wrap]),
+          el('p', { class: 'muted', text: 'Leave it empty to use the workspace default (' + money(settings.default_rate, settings.currency) + '). Changing it reprices every billable entry already logged on this project.' }),
+        ]),
+        el('div', { class: 'hr-save' }, [
+          off ? null : el('button', { type: 'submit', text: 'Save changes' }),
+          el('span', { class: 'muted', text: 'Your time on this project: ' + human(p.total_seconds) }),
+        ]),
+      ]),
+      off ? null : el('div', { class: 'card' }, [
+        el('h2', { text: 'Archive or delete' }),
+        el('p', { class: 'muted', text: 'Archiving hides the project from the pickers and keeps its entries and reports. Deleting removes the project for every member; its entries stay, without a project.' }),
+        el('div', { class: 'row' }, [
+          archiveBtn,
+          el('button', { type: 'button', class: 'btn-danger', text: 'Delete project', 'data-busy': 'Deleting…', onclick: safe(async function () {
+            if (!confirm('Delete the project "' + p.name + '"? Its entries remain, without a project. This applies to every member.')) return;
+            await api('/projects/' + id, 'DELETE');
+            location.href = back;
+          }) }),
+        ]),
+      ]),
+    ].filter(Boolean));
   }
 
   /* ------------------------------------------------------------------ */
@@ -1291,7 +1567,7 @@
     );
   }
 
-  const views = { time: viewTime, reports: viewReports, projects: viewProjects, integrations: viewIntegrations, data: viewData };
+  const views = { time: viewTime, reports: viewReports, projects: viewProjects, project: viewProject, integrations: viewIntegrations, data: viewData };
   const start = views[root.dataset.view || ''];
   if (start) {
     Promise.resolve().then(start).catch(function (e) {

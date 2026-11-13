@@ -36,7 +36,7 @@ const entryFields = {
   description: z.string().max(500).optional().describe("What was worked on."),
   project: z.string().max(80).optional().describe("Project name. Created automatically if it does not exist. Empty string clears it."),
   tags: z.array(z.string().max(40)).max(20).optional().describe("Free-form tags."),
-  billable: z.boolean().optional().describe("Whether the time is billable."),
+  billable: z.boolean().optional().describe("Whether the time is billable. When omitted, the project's own default applies."),
 };
 
 const periodFilter = {
@@ -201,6 +201,7 @@ export function createMcpServer(store: Store, canWrite: boolean): McpServer {
         client: z.string().max(80).optional(),
         color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional().describe("Hex color like #3b82f6."),
         hourly_rate: z.number().min(0).max(1_000_000).nullable().optional().describe("Hourly rate in the workspace currency. null falls back to the workspace default rate."),
+        billable: z.boolean().optional().describe("Whether new entries on this project start as billable."),
       },
     },
     (a) => respond(() => store.createProject(a)),
@@ -218,6 +219,7 @@ export function createMcpServer(store: Store, canWrite: boolean): McpServer {
         color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
         archived: z.boolean().optional(),
         hourly_rate: z.number().min(0).max(1_000_000).nullable().optional().describe("Hourly rate in the workspace currency. null falls back to the workspace default rate."),
+        billable: z.boolean().optional().describe("Whether new entries on this project start as billable."),
       },
     },
     ({ id, ...patch }) => respond(() => store.updateProject(id, patch)),

@@ -287,3 +287,21 @@ td.wrap { white-space: normal; }
 }
 .invites li > .wrap { color: var(--text); }
 .invites > a { display: inline-block; margin-top: 8px; font-size: 0.8125rem; }
+
+/* Custom dropdown (public/app/select.js). The native select stays, hidden. */
+.sel { position: relative; display: inline-flex; min-width: 0; vertical-align: middle; }
+.field .sel { display: flex; width: 100%; }
+.sel select.sel-native { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
+.sel button.sel-btn { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 11px 16px; font: inherit; font-size: 1rem; font-weight: 400; text-align: left; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: none; transform: none; cursor: pointer; }
+.sel button.sel-btn:hover { background: var(--surface); border-color: var(--ink); }
+.sel button.sel-btn:focus-visible, .sel button.sel-btn[aria-expanded="true"] { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.sel button.sel-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.sel-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sel-chevron { flex: none; width: 12px; height: 12px; color: var(--text-muted); transition: transform 0.15s; }
+.sel-btn[aria-expanded="true"] .sel-chevron { transform: rotate(180deg); }
+.sel-menu { position: fixed; z-index: 60; box-sizing: border-box; max-width: calc(100vw - 16px); padding: 6px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); }
+.sel-opt { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: var(--radius); font-size: 0.9375rem; white-space: nowrap; cursor: pointer; }
+.sel-opt-active { background: var(--surface-2); }
+.sel-opt[aria-selected="true"] { font-weight: 600; }
+.sel-opt[aria-selected="true"]::after { content: ""; margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.sel-opt[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }

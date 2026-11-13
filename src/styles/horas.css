@@ -122,6 +122,38 @@ button.hr-icon:hover { background: var(--surface-2); }
 /* ----- Reports ----- */
 .hr-filters { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .card.hr-filters select, .card.hr-filters input { width: auto; }
+.card.hr-filters .sel button.sel-btn { padding: 9px 14px; font-size: 0.9375rem; }
+.hr-card-head .sel button.sel-btn { padding: 7px 12px; font-size: 0.875rem; }
+
+/* Period: one button with the dates, one panel with ready-made periods and a calendar. */
+.hr-pick button.hr-range { display: inline-flex; align-items: center; gap: 10px; padding: 9px 14px; font-size: 0.9375rem; font-weight: 400; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: none; transform: none; }
+.hr-pick button.hr-range:hover { background: var(--surface); border-color: var(--ink); }
+.hr-pick button.hr-range[aria-expanded="true"], .hr-pick button.hr-range:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.hr-range-name { padding: 2px 8px; border-radius: 999px; background: var(--accent-subtle); color: var(--text); font-size: 0.75rem; font-weight: 600; }
+.hr-range-dates { font-family: var(--mono); font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+.hr-menu.hr-range-panel { display: flex; flex-direction: row; gap: 14px; width: max-content; min-width: 0; max-width: calc(100vw - 32px); padding: 14px; }
+.hr-range-presets { display: flex; flex-direction: column; gap: 2px; min-width: 140px; padding-right: 14px; border-right: 1px solid var(--border); }
+button.hr-menu-item.hr-menu-on { background: var(--accent-subtle); }
+.hr-cal-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.hr-cal-nav button.btn-sm { padding: 4px 12px; font-size: 1rem; line-height: 1.2; }
+.hr-cal-months { display: flex; gap: 22px; }
+.hr-cal-month > strong { display: block; margin-bottom: 8px; font-size: 0.9375rem; text-align: center; }
+.hr-cal-grid { display: grid; grid-template-columns: repeat(7, 34px); row-gap: 2px; justify-items: stretch; text-align: center; }
+.hr-cal-grid small { padding-bottom: 4px; font-size: 0.75rem; }
+.hr-cal-grid button.hr-cal-day { width: 34px; height: 32px; padding: 0; font-size: 0.875rem; font-weight: 400; font-variant-numeric: tabular-nums; color: var(--text); background: transparent; border: 0; border-radius: 0; box-shadow: none; transform: none; }
+.hr-cal-grid button.hr-cal-day:hover { background: var(--surface-2); border-radius: 8px; }
+.hr-cal-grid button.hr-cal-day.hr-cal-today { font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.hr-cal-grid button.hr-cal-day.hr-cal-in { background: var(--accent-subtle); border-radius: 0; }
+.hr-cal-grid button.hr-cal-day.hr-cal-end { background: var(--accent); color: var(--accent-text); font-weight: 600; border-radius: 8px; }
+@media (max-width: 860px) {
+  .hr-menu.hr-range-panel { flex-direction: column; }
+  .hr-range-presets { flex-direction: row; flex-wrap: wrap; min-width: 0; padding: 0 0 10px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .hr-range-presets button.hr-menu-item { width: auto; }
+  .hr-menu.hr-range-panel { max-width: calc(100vw - 80px); }
+  .hr-cal-month:first-child { display: none; }
+  .hr-cal-grid { grid-template-columns: repeat(7, minmax(28px, 34px)); }
+  .hr-cal-grid button.hr-cal-day { width: 100%; }
+}
 .hr-tabs { display: flex; gap: 8px; margin: 0 0 24px; }
 .hr-tabs button { background: var(--surface); border: 1px solid var(--border-strong); color: var(--text); padding: 7px 18px; font-size: 0.875rem; }
 .hr-tabs button:hover { background: var(--surface-2); }
@@ -147,16 +179,39 @@ td .hr-pct small { color: var(--text-muted); }
 .hr-num { font-family: var(--mono); font-size: 0.9375rem; font-weight: 500; font-variant-numeric: tabular-nums; }
 
 /* ----- Projects ----- */
-.hr-projects input[type="text"] { width: 100%; min-width: 110px; border-color: transparent; padding: 8px 10px; font-weight: 500; }
-.hr-projects input[type="text"]:hover { border-color: var(--border-strong); }
-.hr-projects input[type="number"] { width: 110px; padding: 8px 10px; font-family: var(--mono); font-size: 0.9375rem; }
-.hr-projects input[type="color"] { width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; overflow: hidden; }
-.hr-projects input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
-.hr-projects input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 50%; }
-.hr-projects td:nth-child(2) { display: flex; align-items: center; gap: 8px; }
+.hr-projects td { vertical-align: middle; }
+a.hr-proj-link { display: inline-flex; align-items: center; gap: 10px; font-weight: 500; text-decoration: none; }
+a.hr-proj-link:hover span:nth-child(2) { text-decoration: underline; text-underline-offset: 3px; }
 .hr-archived { opacity: 0.6; }
 .row > .hr-field-btn { flex: 0 0 auto; min-width: 0; align-self: flex-end; }
-.row > .hr-field-sm { min-width: 0; flex: 0 0 160px; }
+.row > .hr-field-sm { min-width: 0; flex: 0 0 190px; }
+.hr-field-sm { max-width: 240px; }
+.hr-field-top { margin-top: 16px; }
+.hr-check-row { align-self: flex-end; padding-bottom: 12px; color: var(--text); }
+.hr-check-lg { font-size: 1rem; color: var(--text); margin: 12px 0 6px; }
+.hr-label { display: block; font-size: 0.875rem; font-weight: 500; margin-bottom: 6px; }
+.card > p.muted { max-width: 68ch; margin: 0 0 4px; }
+
+/* Money input: the currency is a fixed block inside the field. */
+.hr-money { display: flex; align-items: stretch; width: 100%; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); overflow: hidden; }
+.hr-money:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.hr-money-cur { display: flex; align-items: center; padding: 0 14px; background: var(--surface-2); color: var(--text-muted); font-weight: 500; white-space: nowrap; }
+.hr-money input.hr-money-in { flex: 1; min-width: 0; width: 100%; border: 0; border-radius: 0; box-shadow: none; background: transparent; padding: 11px 14px; font-family: var(--mono); font-size: 0.9375rem; font-variant-numeric: tabular-nums; }
+.hr-money input.hr-money-in:focus { box-shadow: none; }
+.hr-money input.hr-money-in::placeholder { font-family: var(--font); }
+
+/* Project page */
+.hr-swatches { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hr-swatches button.hr-swatch { width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; box-shadow: 0 0 0 2px var(--surface); }
+.hr-swatches button.hr-swatch:hover { transform: scale(1.08); }
+.hr-swatches button.hr-swatch[aria-checked="true"] { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
+.hr-swatches input.hr-swatch-custom { width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; overflow: hidden; box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--border-strong); }
+.hr-swatches input.hr-swatch-custom.hr-swatch-on { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
+.hr-swatch-custom::-webkit-color-swatch-wrapper { padding: 0; }
+.hr-swatch-custom::-webkit-color-swatch { border: 0; border-radius: 50%; }
+.hr-save { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 0 0 24px; }
+a.hr-back { display: inline-block; margin-bottom: 12px; font-size: 0.875rem; font-weight: 500; color: var(--link); text-decoration: none; }
+a.hr-back:hover { text-decoration: underline; }
 
 /* ----- Waiting for the server ----- */
 div[aria-busy="true"] { opacity: 0.55; transition: opacity 0.15s; pointer-events: none; }

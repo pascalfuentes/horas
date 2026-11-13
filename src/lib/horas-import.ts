@@ -34,6 +34,7 @@ export type ImportProject = {
   client?: string;
   color?: string;
   archived?: boolean;
+  billable?: boolean;
   hourly_rate?: number | null;
 };
 
@@ -298,6 +299,7 @@ function fromBackup(data: Record<string, unknown>): Parsed {
       client: typeof p.client === "string" ? p.client : "",
       color: typeof p.color === "string" ? p.color : undefined,
       archived: p.archived === true,
+      billable: p.billable === true,
       hourly_rate: typeof p.hourly_rate === "number" ? p.hourly_rate : null,
     }));
 

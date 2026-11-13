@@ -1,6 +1,6 @@
 ---
 /**
- * Waiting state for ordinary HTML forms (login, sign-up, settings, members…).
+ * Busy state for ordinary HTML forms (login, sign-up, settings, members…).
  *
  * These forms post and reload the page, which can take a moment. On submit the
  * button is disabled and says so, which also stops a double submit. The lock
@@ -29,7 +29,7 @@
 
     document.addEventListener("submit", function (ev) {
       var form = ev.target;
-      // Forms handled by the app script manage their own waiting state.
+      // Forms handled by the app script manage their own busy state.
       if (!form || form.tagName !== "FORM" || !form.getAttribute("action")) return;
       // Wait a tick: a button disabled during the event would be left out of the submission.
       setTimeout(function () {

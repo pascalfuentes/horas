@@ -258,6 +258,8 @@ export const timeProject = sqliteTable(
     color: text("color").notNull().default("#3b82f6"),
     archived: integer("archived", { mode: "boolean" }).notNull().default(false),
     createdAt: text("createdAt").notNull(),
+    /** Whether new entries on this project start as billable (migration 0008). */
+    billable: integer("billable", { mode: "boolean" }).notNull().default(false),
     /** Hourly rate. NULL = uses the workspace default (migration 0007). */
     hourlyRate: real("hourlyRate"),
   },
