@@ -1,8 +1,9 @@
 ---
 import HeadIcons from "~/components/HeadIcons.astro";
-import BusyForms from "~/components/BusyForms.astro";
+import Logo from "~/components/Logo.astro";
 import Theme from "~/components/Theme.astro";
 import { APP_NAME, INVITE_TTL_DAYS, operator } from "~/config";
+import { socialProviders } from "~/lib/env";
 import "~/styles/global.css";
 
 export const prerender = false;
@@ -14,11 +15,69 @@ export const prerender = false;
  * fields to the application, add them here too. A policy that does not match
  * what the system does is worse than none.
  *
+ * The parts that depend on how this installation is configured (who delivers
+ * the email, which social logins exist, whether the bot check is on) are read
+ * from the environment, so the page cannot promise something the deployment
+ * does not do.
+ *
  * This is an honest base text, not legal advice. If your case involves
  * sensitive data, minors or international transfers, have it reviewed.
  */
-const OPERATOR = operator(Astro.locals.env);
-const updated = "September 17, 2026";
+const env = Astro.locals.env;
+const OPERATOR = operator(env);
+/** Without `OPERATOR_NAME` the fallback is the product name, which would read "Clockfolio runs Clockfolio". */
+const named = OPERATOR.name !== APP_NAME;
+const updated = "November 13, 2026";
+const signedIn = Boolean(Astro.locals.user);
+
+const SOCIAL_NAMES = { google: "Google", github: "GitHub" } as const;
+const social = socialProviders(env).map((p) => SOCIAL_NAMES[p]);
+const socialList = social.join(" or ") || "a social login";
+const sendsEmail = Boolean(env.RESEND_API_KEY);
+const botCheck = Boolean(env.PUBLIC_TURNSTILE_SITE_KEY && env.TURNSTILE_SECRET_KEY);
+
+/** The promises that fit in one line each. Every one is backed by a section below. */
+const short = [
+  ["No ads, no trackers", "We do not sell data, and there is no advertising or analytics script on the site."],
+  ["Your hours are yours", "Download everything as a file whenever you want. Other members of a workspace do not see your entries."],
+  ["You delete it yourself", "Deleting your account is a button under Security, not a request you have to send by email."],
+  ["Locked down", "Passwords and API tokens are stored only as hashes, and the 2FA secret is encrypted."],
+];
+
+const sections = [
+  ["who", "Who is responsible"],
+  ["account", "Your account"],
+  ["work", "Your time tracking"],
+  ["browser", "In your browser"],
+  ["ai", "Connecting an AI or a script"],
+  ["retention", "For how long"],
+  ["sharing", "Who we share it with"],
+  ["rights", "Your rights"],
+  ["security", "Security"],
+  ["changes", "Changes to this policy"],
+];
+
+const HEAD = ["Data", "Where it comes from", "What for"];
+
+const accountRows = [
+  ["Name", "you provide it, or it comes from the social login provider", "identifying you in the interface"],
+  ["Email", "you provide it when creating the account, or it comes from the social login provider", "login, password recovery, account notices"],
+  ["Profile picture", "the social login provider, if you use one", "showing it next to your name"],
+  ["Phone", "you provide it, if you want", "optional; contact"],
+  ["Password", "you set it", "authentication — stored only as a hash, never in plain text"],
+  ["2FA secret and recovery codes", "generated when you enable it", "second factor — stored encrypted"],
+  ["IP address and browser", "from your requests", "active sessions, the audit trail and limiting repeated attempts"],
+  ["Action log", "what you do to your account, to a workspace and its members, and to your tokens — not your time entries", "security: knowing who changed what and when"],
+  ["Social account identifier", `${socialList}, if you use it`, "linking the social login to your account"],
+  ["Workspaces you belong to, and your role in each one", "from whoever created the workspace or invited you", "deciding what you can see and do in each workspace"],
+];
+
+const workRows = [
+  ["Time entries: description, project, tags, start, end and whether it is billable", "you type them, import them from a file, or a client you connected creates them with your token", "the product itself: the timer, your lists and your reports"],
+  ["Projects: name, client, colour, hourly rate, currency and budget", "whoever can edit the workspace", "organizing entries and working out amounts"],
+  ["Workspace billing settings: currency and default hourly rate", "the owner or an administrator of the workspace", "working out amounts"],
+  ["Personal API tokens: the name you gave, a hash of the token, its first characters, your timezone and the last time it was used", "you create them under API & MCP", "letting your scripts or your AI act as you"],
+];
 ---
 
 <!doctype html>
@@ -26,94 +85,348 @@ const updated = "September 17, 2026";
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={`What ${APP_NAME} stores about you, why, for how long, and what you can ask for.`} />
     <HeadIcons />
     <title>Privacy Policy — {APP_NAME}</title>
     <Theme />
-    <BusyForms />
   </head>
   <body>
-    <main class="doc">
-      <h1>Privacy Policy</h1>
-      <p class="muted">{APP_NAME} · updated on {updated}</p>
+    <header class="pp-nav">
+      <a class="brand" href="/" title={APP_NAME}><Logo />{APP_NAME}</a>
+      <nav aria-label="Site">
+        {signedIn ? (
+          <a class="btn btn-sm" href="/dashboard">Back to the app</a>
+        ) : (
+          <>
+            <a href="/login">Log in</a>
+            <a class="btn btn-coral btn-sm" href="/signup">Create account</a>
+          </>
+        )}
+      </nav>
+    </header>
 
-      <p>
-        This page explains what data {APP_NAME} stores about you, why it stores it,
-        for how long, and what you can demand in that regard.
-      </p>
+    <main class="pp">
+      <section class="pp-hero">
+        <div class="pp-title">
+          <p class="badge badge-sun">Privacy</p>
+          <h1>Privacy Policy</h1>
+          <p class="pp-lead">
+            What {APP_NAME} stores about you, why it stores it, for how long, and what you can
+            ask for. Written to be read, not to be scrolled past.
+          </p>
+          <p class="pp-updated muted">Updated on {updated}</p>
+        </div>
 
-      <h2>Who is responsible</h2>
-      <p>
-        {OPERATOR.name} — contact: <a href={`mailto:${OPERATOR.contact}`}>{OPERATOR.contact}</a>.
-      </p>
+        <aside class="pp-short" aria-label="The short version">
+          <h2>The short version</h2>
+          <ul>
+            {short.map(([title, text]) => (
+              <li>
+                <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="9" /><path d="M5.8 10.4l2.8 2.8 5.6-6" /></svg>
+                <span><strong>{title}.</strong> {text}</span>
+              </li>
+            ))}
+          </ul>
+        </aside>
+      </section>
 
-      <h2>What we store</h2>
-      <table>
-        <thead><tr><th>Data</th><th>Where it comes from</th><th>What for</th></tr></thead>
-        <tbody>
-          <tr><td>Name</td><td>you provide it, or it comes from the social login provider</td><td>identifying you in the interface</td></tr>
-          <tr><td>Email</td><td>you provide it when creating the account, or it comes from the social login provider</td><td>login, password recovery, account notices</td></tr>
-          <tr><td>Phone</td><td>you provide it, if you want</td><td>optional; contact</td></tr>
-          <tr><td>Password</td><td>you set it</td><td>authentication — stored only as a hash, never in plain text</td></tr>
-          <tr><td>2FA secret and recovery codes</td><td>generated when you enable it</td><td>second factor — stored encrypted</td></tr>
-          <tr><td>IP address and browser</td><td>from your requests</td><td>active sessions and audit trail</td></tr>
-          <tr><td>Action log</td><td>what you do in the system</td><td>security: knowing who changed what and when</td></tr>
-          <tr><td>Social account identifier</td><td>Google or GitHub, if you use them</td><td>linking the social login to your account</td></tr>
-          <tr><td>Workspaces you belong to, and your role in each one</td><td>from whoever created the workspace or invited you</td><td>deciding what you can see and do in each workspace</td></tr>
-        </tbody>
-      </table>
+      <div class="pp-body">
+        <nav class="pp-toc" aria-label="On this page">
+          <p>On this page</p>
+          <ol>
+            {sections.map(([id, label]) => <li><a href={`#${id}`}>{label}</a></li>)}
+          </ol>
+        </nav>
 
-      <p>
-        When you log in with Google or GitHub, we receive <strong>only</strong> your name, email
-        and profile picture. We have no access to the contents of your account on those services.
-      </p>
+        <div class="pp-sections">
+          <section class="card" id="who">
+            <h2>Who is responsible</h2>
+            <p>
+              {named ? `${OPERATOR.name} runs` : "Whoever runs"} this installation of {APP_NAME}{named ? " and" : ""} answers
+              for the data in it.
+              Contact: <a href={`mailto:${OPERATOR.contact}`}>{OPERATOR.contact}</a>.
+            </p>
+          </section>
 
-      <h2>For how long</h2>
-      <ul>
-        <li><strong>Sessions</strong> expire in 7 days, and you can end them before that under Security.</li>
-        <li><strong>Invites</strong> expire in {INVITE_TTL_DAYS} days.</li>
-        <li><strong>Audit records</strong> are preserved for as long as the account exists. They are
-            precisely what makes it possible to investigate improper access, so they are not deleted on request.</li>
-        <li><strong>Your account data</strong> stays for as long as the account exists.</li>
-      </ul>
+          <section class="card" id="account">
+            <h2>Your account</h2>
+            <p>What it takes to know who you are, keep you signed in and keep the account safe.</p>
+            <table>
+              <thead><tr>{HEAD.map((h) => <th>{h}</th>)}</tr></thead>
+              <tbody>
+                {accountRows.map((row) => <tr>{row.map((cell, i) => <td data-label={HEAD[i]}>{cell}</td>)}</tr>)}
+              </tbody>
+            </table>
+            <p>
+              When you log in with {socialList}, we receive <strong>only</strong> your name, email
+              and profile picture. We have no access to the contents of your account on those services.
+            </p>
+          </section>
 
-      <h2>Who we share it with</h2>
-      <p>
-        With no one for commercial purposes. We do not sell data and we do not use advertising.
-        The data lives on Cloudflare's infrastructure, and the system's emails go out through an
-        email delivery provider. These vendors process the data only to deliver the service.
-      </p>
+          <section class="card" id="work">
+            <h2>Your time tracking</h2>
+            <p>What you put in so the product can do its job.</p>
+            <table>
+              <thead><tr>{HEAD.map((h) => <th>{h}</th>)}</tr></thead>
+              <tbody>
+                {workRows.map((row) => <tr>{row.map((cell, i) => <td data-label={HEAD[i]}>{cell}</td>)}</tr>)}
+              </tbody>
+            </table>
+            <p>
+              <strong>Who sees what.</strong> Your time entries are yours: the other members of a
+              workspace do not see them, and neither does its owner. Projects and their settings are
+              shared with the workspace. There is one exception, and it is a total: the budget of a
+              project shows how many hours and how much billable money the whole workspace has used,
+              without saying who logged what.
+            </p>
+          </section>
 
-      <h2>Your rights</h2>
-      <p>
-        Under Brazil's LGPD (Law 13,709/2018) you can request, at any time: confirmation that
-        we process your data, access to it, correction of anything that is wrong, and the deletion
-        of your account. Write to <a href={`mailto:${OPERATOR.contact}`}>{OPERATOR.contact}</a>.
-      </p>
-      <p>
-        An honest caveat about deletion: we delete your account data, but we preserve the
-        audit trail in dissociated form. It exists for the security of everyone in the system,
-        and deleting it would open a hole precisely where it would matter most.
-      </p>
+          <section class="card" id="browser">
+            <h2>In your browser</h2>
+            <ul>
+              <li>
+                <strong>Cookies</strong>: only the ones that keep you signed in and that complete a
+                sign-in (two-step verification, or coming back from {socialList}). There are no
+                advertising or third-party tracking cookies.
+              </li>
+              <li>
+                <strong>Preferences</strong>: the light or dark theme, the collapsed menu and the order
+                of the project list are saved in your browser's local storage. They never leave your device.
+              </li>
+              <li><strong>Fonts and scripts</strong> are served by this site itself, not by a third party.</li>
+            </ul>
+          </section>
 
-      <h2>Security</h2>
-      <p>
-        Passwords are stored as hashes. The 2FA secret and the recovery codes are
-        encrypted. All traffic goes over HTTPS. Creating an account requires confirming the
-        email, and each workspace is accessible only to those who were invited to it.
-      </p>
+          <section class="card" id="ai">
+            <h2>Connecting an AI or a script</h2>
+            <p>
+              {APP_NAME} does not send your data to any AI provider. When you connect one (through
+              MCP or the API), you create a personal token, and it is your client that reads and
+              writes with it, with the same access you have in that workspace.
+            </p>
+            <p>
+              What your AI provider does with what it reads is governed by that provider's own
+              policy, not this one. Revoking a token under API &amp; MCP ends its access at once.
+            </p>
+          </section>
 
-      <p class="muted"><small><a href="/login">Back to login</a></small></p>
+          <section class="card" id="retention">
+            <h2>For how long</h2>
+            <ul>
+              <li><strong>Sessions</strong> expire in 7 days, and you can end them before that under Security.</li>
+              <li><strong>Email confirmation and password reset links</strong> expire in 1 hour.</li>
+              <li><strong>Invites</strong> expire in {INVITE_TTL_DAYS} days.</li>
+              <li><strong>API tokens</strong> last until you revoke them.</li>
+              <li>
+                <strong>Time entries and projects</strong> stay until you delete them, the workspace
+                is deleted, or your account is deleted.
+              </li>
+              <li><strong>Your account data</strong> stays for as long as the account exists.</li>
+              <li>
+                <strong>Audit records</strong> are preserved for as long as the account exists. They are
+                precisely what makes it possible to investigate improper access, so they are not deleted on request.
+              </li>
+            </ul>
+          </section>
+
+          <section class="card" id="sharing">
+            <h2>Who we share it with</h2>
+            <p>
+              With no one for commercial purposes. We do not sell data and we do not use advertising.
+              These vendors process data only to deliver the service:
+            </p>
+            <ul>
+              <li><strong>Cloudflare</strong> hosts the application and the database, and carries the traffic.</li>
+              {sendsEmail ? (
+                <li>
+                  <strong>Resend</strong> delivers the system's emails (confirmation, password reset,
+                  invites). It receives your email address and the content of those messages.
+                </li>
+              ) : (
+                <li>An <strong>email delivery provider</strong> sends the system's emails (confirmation, password reset, invites).</li>
+              )}
+              {social.length > 0 && (
+                <li>
+                  <strong>{social.join(" and ")}</strong>, only if you choose to sign in with
+                  {social.length > 1 ? " one of them" : " it"}: the provider learns that you signed in to {APP_NAME}.
+                </li>
+              )}
+              {botCheck && (
+                <li>
+                  <strong>Cloudflare Turnstile</strong> checks that the sign-in and sign-up forms are being
+                  sent by a person. It runs in your browser when you open those forms.
+                </li>
+              )}
+            </ul>
+          </section>
+
+          <section class="card" id="rights">
+            <h2>Your rights</h2>
+            <p>
+              Under Brazil's LGPD (Law 13,709/2018) you can, at any time, confirm that we process
+              your data, access it, correct what is wrong and delete your account. Most of it you do
+              yourself, without asking anyone:
+            </p>
+            <ul>
+              <li><strong>Access and portability</strong>: Security → Download my data (JSON). Your entries also leave as JSON or CSV under Import &amp; export.</li>
+              <li><strong>Correction</strong>: My details.</li>
+              <li><strong>Deletion</strong>: Security → Delete account.</li>
+            </ul>
+            <p>
+              Deleting your account removes your profile, your sessions, your tokens and your time
+              entries in every workspace. A workspace where you are the only member is deleted with
+              you. If you are the only owner of a workspace that has other people, we ask you to hand
+              it over first, because deleting it would take their work along.
+            </p>
+            <p>
+              An honest caveat about deletion: we delete your account data, but we preserve the
+              audit trail in dissociated form (the action and the time stay, who did it does not).
+              It exists for the security of everyone in the system, and deleting it would open a
+              hole precisely where it would matter most.
+            </p>
+            <p>
+              For anything else, write to <a href={`mailto:${OPERATOR.contact}`}>{OPERATOR.contact}</a>.
+            </p>
+          </section>
+
+          <section class="card" id="security">
+            <h2>Security</h2>
+            <p>
+              Passwords are stored as hashes. The 2FA secret and the recovery codes are
+              encrypted. API tokens are stored only as a hash: the token itself is shown once, when
+              you create it. All traffic goes over HTTPS, and repeated attempts on the sign-in forms
+              are limited. Creating an account requires confirming the email, and each workspace is
+              accessible only to those who were invited to it.
+            </p>
+          </section>
+
+          <section class="card" id="changes">
+            <h2>Changes to this policy</h2>
+            <p>
+              When what the system stores changes, this page changes with it and the date at the top
+              is updated. It describes what the system does today, not what it might do one day.
+            </p>
+          </section>
+        </div>
+      </div>
     </main>
 
+    <footer class="pp-foot">
+      <span>{APP_NAME} · Free time tracking that talks to your AI.</span>
+      <span>
+        <a href="/">Home</a>
+        {signedIn ? <a href="/dashboard">Back to the app</a> : <a href="/login">Log in</a>}
+      </span>
+    </footer>
+
+    <script is:inline>
+      /**
+       * Marks, in the "On this page" list, the section being read.
+       */
+      (function () {
+        'use strict';
+
+        /** @type {HTMLAnchorElement[]} */
+        const links = Array.prototype.slice.call(document.querySelectorAll('.pp-toc a'));
+        if (!links.length || !('IntersectionObserver' in window)) return;
+
+        /** Sections currently inside the reading band, by id. @type {Object<string, boolean>} */
+        const visible = {};
+
+        /**
+         * Highlights the link of the first section that is on screen.
+         * @returns {void}
+         */
+        function paint() {
+          let found = false;
+          links.forEach(function (link) {
+            const on = !found && visible[link.hash.slice(1)] === true;
+            if (on) found = true;
+            if (on) link.setAttribute('aria-current', 'true');
+            else link.removeAttribute('aria-current');
+          });
+        }
+
+        const watcher = new IntersectionObserver(function (entries) {
+          entries.forEach(function (entry) { visible[entry.target.id] = entry.isIntersecting; });
+          paint();
+        }, { rootMargin: '-15% 0px -55% 0px' });
+
+        links.forEach(function (link) {
+          const section = document.getElementById(link.hash.slice(1));
+          if (section) watcher.observe(section);
+        });
+      })();
+    </script>
+
     <style>
-      .doc { max-width: 720px; margin: 0 auto; padding: 48px 20px 80px; }
-      .doc h1 { margin-bottom: 4px; }
-      .doc h2 { margin: 32px 0 10px; font-size: 1rem; }
-      .doc p, .doc li { line-height: 1.65; }
-      .doc ul { padding-left: 20px; }
-      .doc li { margin-bottom: 8px; }
-      .doc table { margin: 12px 0 20px; }
-      .doc td, .doc th { white-space: normal; vertical-align: top; }
+      .pp-nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; max-width: 1120px; margin: 0 auto; padding: 20px 24px; }
+      .pp-nav nav { display: flex; align-items: center; gap: 20px; font-size: 0.9375rem; }
+      .pp-nav nav a:not(.btn) { text-decoration: none; color: var(--text-muted); }
+      .pp-nav nav a:not(.btn):hover { color: var(--text); }
+      .pp-nav .btn { text-decoration: none; }
+
+      .pp { max-width: 1120px; margin: 0 auto; padding: 24px 24px 72px; }
+
+      .pp-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: center; padding: 24px 0 56px; }
+      .pp-title h1 { font-size: clamp(2.5rem, 5.5vw, 4rem); letter-spacing: -0.035em; line-height: 1.02; margin: 16px 0 16px; }
+      .pp-lead { font-size: 1.125rem; line-height: 1.55; color: var(--text-muted); max-width: 44ch; margin: 0 0 16px; text-wrap: pretty; }
+      .pp-updated { margin: 0; font-size: 0.875rem; }
+
+      /* The same sun-yellow panel of the sign-in pages: its inks are fixed, not themed. */
+      .pp-short { padding: 28px 32px; background: var(--sun); color: #1b1624; border: 2px solid #1b1624; border-radius: var(--radius-xl); box-shadow: 0 5px 0 #1b1624; transform: rotate(0.8deg); }
+      .pp-short h2 { font-size: 1.5rem; margin-bottom: 16px; }
+      .pp-short ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+      .pp-short li { display: flex; gap: 12px; align-items: flex-start; font-size: 0.9375rem; line-height: 1.45; }
+      .pp-short svg { flex: none; width: 20px; height: 20px; margin-top: 1px; }
+      .pp-short svg circle { fill: #fff; stroke: #1b1624; stroke-width: 1.5; }
+      .pp-short svg path { fill: none; stroke: #1b1624; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+      .pp-body { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; align-items: start; }
+      .pp-toc { position: sticky; top: 24px; }
+      .pp-toc p { margin: 0 0 10px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+      .pp-toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+      .pp-toc a { display: block; padding: 7px 12px; border-radius: var(--radius-sm); font-size: 0.9375rem; text-decoration: none; color: var(--text-muted); }
+      .pp-toc a:hover { background: var(--surface-2); color: var(--text); }
+      .pp-toc a[aria-current] { background: var(--sun); color: #1b1624; font-weight: 500; }
+
+      .pp-sections { display: grid; gap: 16px; }
+      .pp-sections .card { margin: 0; padding: 28px 32px; scroll-margin-top: 16px; }
+      .pp-sections h2 { font-size: 1.5rem; margin-bottom: 10px; }
+      .pp-sections p, .pp-sections li { line-height: 1.65; }
+      .pp-sections p { margin: 0 0 12px; max-width: 70ch; }
+      .pp-sections .card > :last-child { margin-bottom: 0; }
+      .pp-sections ul { margin: 0 0 12px; padding-left: 20px; max-width: 70ch; }
+      .pp-sections li { margin-bottom: 8px; }
+      .pp-sections a { color: var(--link); }
+      .pp-sections table { margin: 4px 0 16px; font-size: 0.9375rem; }
+      .pp-sections th, .pp-sections td { white-space: normal; vertical-align: top; line-height: 1.5; }
+      .pp-sections td:first-child { font-weight: 500; width: 30%; }
+      .pp-sections tbody tr:last-child td { border-bottom: 0; }
+
+      .pp-foot { max-width: 1120px; margin: 0 auto; padding: 24px 24px 40px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 0.875rem; color: var(--text-muted); }
+      .pp-foot span:last-child { display: inline-flex; gap: 20px; }
+
+      @media (max-width: 860px) {
+        .pp-hero { grid-template-columns: minmax(0, 1fr); gap: 28px; padding: 8px 0 36px; }
+        .pp-short { transform: none; padding: 22px 20px; }
+        .pp-body { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+        /* On a phone the list of sections stops following the page and becomes a box on top. */
+        .pp-toc { position: static; padding: 16px 18px; background: var(--surface); border-radius: var(--radius-lg); }
+        .pp-toc ol { grid-template-columns: 1fr 1fr; }
+        .pp-toc a { padding: 6px 8px; font-size: 0.875rem; }
+        .pp-sections .card { padding: 22px 20px; }
+      }
+      @media (max-width: 640px) {
+        .pp-nav nav a:not(.btn) { display: none; }
+        /* A three-column table does not fit: each row becomes a small block, with the column name before each value. */
+        .pp-sections thead { display: none; }
+        .pp-sections tr { display: block; padding: 12px 0; border-bottom: 1px solid var(--border); }
+        .pp-sections tbody tr:last-child { border-bottom: 0; }
+        .pp-sections td { display: block; width: auto; padding: 0; border: 0; }
+        .pp-sections td:first-child { width: auto; margin-bottom: 4px; }
+        .pp-sections td:not(:first-child)::before { content: attr(data-label) ": "; color: var(--text-muted); }
+      }
     </style>
   </body>
 </html>
