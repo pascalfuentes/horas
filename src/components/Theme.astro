@@ -32,7 +32,10 @@
       else root.removeAttribute("data-theme");
       var toggles = document.querySelectorAll("[data-theme-toggle]");
       for (var i = 0; i < toggles.length; i++) {
-        toggles[i].textContent = dark ? "Light mode" : "Dark mode";
+        // A toggle may carry an icon: then only its label changes, not the whole button.
+        var label = toggles[i].querySelector("[data-theme-label]") || toggles[i];
+        label.textContent = dark ? "Light mode" : "Dark mode";
+        toggles[i].setAttribute("title", dark ? "Light mode" : "Dark mode");
         toggles[i].setAttribute("aria-pressed", String(dark));
       }
     }

@@ -1,0 +1,60 @@
+---
+/**
+ * Collapsible sidebar, placed in the dashboard's <head>.
+ *
+ * The sidebar can shrink to a rail of icons. The choice lives in localStorage
+ * and is applied here, before the first paint, so a page never opens wide and
+ * then jumps. Any element with `data-nav-toggle` switches it.
+ */
+---
+
+<script is:inline>
+  (function () {
+    var KEY = "horas-nav";
+    var root = document.documentElement;
+
+    /** @returns {boolean} Whether the saved choice is the icon rail. */
+    function isCollapsed() {
+      try {
+        return localStorage.getItem(KEY) === "collapsed";
+      } catch (e) {
+        return false;
+      }
+    }
+
+    /**
+     * Applies the state to the page and tells the toggles what they do now.
+     * @param {boolean} collapsed
+     * @returns {void}
+     */
+    function apply(collapsed) {
+      if (collapsed) root.setAttribute("data-nav", "collapsed");
+      else root.removeAttribute("data-nav");
+      var toggles = document.querySelectorAll("[data-nav-toggle]");
+      for (var i = 0; i < toggles.length; i++) {
+        var label = collapsed ? "Expand menu" : "Collapse menu";
+        toggles[i].setAttribute("aria-expanded", String(!collapsed));
+        if (!toggles[i].hasAttribute("data-nav-keep-label")) {
+          toggles[i].setAttribute("aria-label", label);
+          toggles[i].setAttribute("title", label);
+        }
+      }
+    }
+
+    apply(isCollapsed());
+    document.addEventListener("DOMContentLoaded", function () {
+      apply(isCollapsed());
+    });
+    document.addEventListener("click", function (ev) {
+      var target = ev.target;
+      if (!target || !target.closest || !target.closest("[data-nav-toggle]")) return;
+      var collapsed = !isCollapsed();
+      try {
+        localStorage.setItem(KEY, collapsed ? "collapsed" : "open");
+      } catch (e) {
+        /* private mode: the choice lasts for this page only */
+      }
+      apply(collapsed);
+    });
+  })();
+</script>

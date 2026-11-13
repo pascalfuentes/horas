@@ -2,6 +2,7 @@
 import HeadIcons from "~/components/HeadIcons.astro";
 import BusyForms from "~/components/BusyForms.astro";
 import Theme from "~/components/Theme.astro";
+import NavCollapse from "~/components/NavCollapse.astro";
 import Alert from "~/components/Alert.astro";
 import PendingInvites from "~/components/PendingInvites.astro";
 import { APP_NAME } from "~/config";
@@ -107,13 +108,23 @@ const groups = [
     <HeadIcons />
     <title>{title}</title>
     <Theme />
+    <NavCollapse />
     <BusyForms />
     <script is:inline src="/app/select.js" defer></script>
   </head>
   <body>
     <div class="app">
       <nav class="sidenav" aria-label="Main navigation">
-        <a class="brand" href="/dashboard"><span class="logo" aria-hidden="true"></span>{APP_NAME}</a>
+        <div class="nav-top">
+          <a class="brand" href="/dashboard" title={APP_NAME}><span class="logo" aria-hidden="true"></span><span class="nav-label">{APP_NAME}</span></a>
+          <button type="button" class="nav-toggle" data-nav-toggle aria-expanded="true" aria-label="Collapse menu" title="Collapse menu">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM9.5 4v16" /><path class="nav-toggle-arrow" d="M16 9.5 13.5 12l2.5 2.5" /></svg>
+          </button>
+        </div>
+        {/* Collapsed, the workspace picker has no room: its initial stands in and opens the menu. */}
+        <button type="button" class="ws-mini" data-nav-toggle data-nav-keep-label aria-label={`${current ? current.workspaceName : "Choose workspace"}: expand menu to switch workspace`} title={current ? current.workspaceName : "Choose workspace"}>
+          {(current ? current.workspaceName : "?").trim().charAt(0).toUpperCase()}
+        </button>
         <details class="ws-picker" open={!current}>
           <summary>{current ? current.workspaceName : "Choose workspace"}</summary>
           {myWorkspaces.map((w) => (
@@ -129,14 +140,17 @@ const groups = [
           <>
             <div class="group">{g.group}</div>
             {g.items.map((item) => (
-              <a href={item.href} aria-current={path === item.href || path.startsWith(item.href + "/") ? "page" : undefined}>
+              <a href={item.href} title={item.label} aria-current={path === item.href || path.startsWith(item.href + "/") ? "page" : undefined}>
                 <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS[item.icon]} /></svg>
-                <span>{item.label}</span>
+                <span class="nav-label">{item.label}</span>
               </a>
             ))}
           </>
         ))}
-        <button type="button" class="btn-ghost btn-sm theme-toggle" data-theme-toggle>Dark mode</button>
+        <button type="button" class="btn-ghost btn-sm theme-toggle" data-theme-toggle title="Dark mode">
+          <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /></svg>
+          <span class="nav-label" data-theme-label>Dark mode</span>
+        </button>
       </nav>
 
       <main class="content">

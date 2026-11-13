@@ -310,3 +310,32 @@ td.wrap { white-space: normal; }
 .sidenav a:not(.brand) > .nav-ico { flex: none; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; opacity: 0.8; }
 .sidenav a[aria-current="page"] > .nav-ico { opacity: 1; }
 .sidenav a:not(.brand):has(> .nav-ico) { display: flex; align-items: center; gap: 10px; }
+
+/* ---------- Collapsible sidebar ---------- */
+.nav-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 0 20px; }
+.sidenav .nav-top > .brand { margin: 0; min-width: 0; }
+.sidenav button.nav-toggle { flex: none; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: var(--radius); background: transparent; color: var(--text-muted); box-shadow: none; transform: none; }
+.sidenav button.nav-toggle:hover { background: var(--surface-2); color: var(--text); }
+.sidenav .nav-toggle > .nav-ico, .sidenav .theme-toggle > .nav-ico { flex: none; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.sidenav .theme-toggle { display: inline-flex; align-items: center; gap: 8px; }
+.sidenav button.ws-mini { display: none; }
+@media (min-width: 861px) {
+  .sidenav { transition: width 0.18s ease, padding 0.18s ease; }
+  :root[data-nav="collapsed"] .sidenav { width: 76px; padding: 20px 12px; align-items: center; overflow-x: hidden; }
+  :root[data-nav="collapsed"] .sidenav .nav-label { display: none; }
+  :root[data-nav="collapsed"] .nav-top { flex-direction: column; gap: 12px; margin-bottom: 12px; }
+  :root[data-nav="collapsed"] .nav-toggle-arrow { transform: scaleX(-1); transform-origin: 14.75px 12px; }
+  :root[data-nav="collapsed"] .sidenav .ws-picker { display: none; }
+  :root[data-nav="collapsed"] .sidenav button.ws-mini { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; margin-bottom: 8px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text); font-weight: 600; box-shadow: none; transform: none; }
+  :root[data-nav="collapsed"] .sidenav button.ws-mini:hover { border-color: var(--ink); }
+  /* A group title becomes a thin rule between the groups of icons. */
+  :root[data-nav="collapsed"] .sidenav .group { width: 28px; height: 0; padding: 0; margin: 10px 0; font-size: 0; overflow: hidden; border-top: 1px solid var(--border-strong); }
+  :root[data-nav="collapsed"] .sidenav a:not(.brand):has(> .nav-ico) { justify-content: center; width: 44px; height: 44px; padding: 0; gap: 0; }
+  :root[data-nav="collapsed"] .sidenav a:not(.brand) > .nav-ico { width: 20px; height: 20px; opacity: 1; }
+  :root[data-nav="collapsed"] .sidenav .theme-toggle { align-self: center; justify-content: center; width: 40px; height: 40px; padding: 0; }
+}
+@media (max-width: 860px) {
+  /* On a phone the menu is already a compact strip: nothing to collapse. */
+  .sidenav button.nav-toggle { display: none; }
+  .nav-top { margin: 0 12px 0 0; }
+}
