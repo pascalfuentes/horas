@@ -317,16 +317,29 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
 
   async function listProjects({ includeArchived = false }: { includeArchived?: boolean } = {}): Promise<Project[]> {
     const rows = await all<{ id: number; name: string; client: string; color: string; archived: number; billable: number; hourlyRate: number | null; currency: string | null; budgetAmount: number | null; budgetHours: number | null; total: number; entries: number; billableEntries: number; allSeconds: number; allBillableSeconds: number }>(
+      // The entries are added up ONCE, per project, and only then joined to the
+      // projects. Joining first made the database go through the entries again
+      // for every project (rows read = projects x entries).
       `SELECT p.*,
-              COALESCE(SUM(CASE WHEN e."userId" = ?2 THEN (julianday(COALESCE(e."end", 'now')) - julianday(e."start")) * 86400 END), 0) AS total,
-              COUNT(CASE WHEN e."userId" = ?2 THEN e."id" END) AS entries,
-              COALESCE(SUM(CASE WHEN e."userId" = ?2 THEN e."billable" END), 0) AS billableEntries,
-              COALESCE(SUM((julianday(COALESCE(e."end", 'now')) - julianday(e."start")) * 86400), 0) AS allSeconds,
-              COALESCE(SUM(CASE WHEN e."billable" = 1 THEN (julianday(COALESCE(e."end", 'now')) - julianday(e."start")) * 86400 END), 0) AS allBillableSeconds
+              COALESCE(e."total", 0) AS total,
+              COALESCE(e."entries", 0) AS entries,
+              COALESCE(e."billableEntries", 0) AS billableEntries,
+              COALESCE(e."allSeconds", 0) AS allSeconds,
+              COALESCE(e."allBillableSeconds", 0) AS allBillableSeconds
          FROM "time_project" p
-         LEFT JOIN "time_entry" e ON e."projectId" = p."id" AND e."workspaceId" = p."workspaceId"
+         LEFT JOIN (
+           SELECT t."projectId" AS projectId,
+                  SUM(CASE WHEN t."userId" = ?2 THEN (julianday(COALESCE(t."end", 'now')) - julianday(t."start")) * 86400 END) AS total,
+                  COUNT(CASE WHEN t."userId" = ?2 THEN t."id" END) AS entries,
+                  SUM(CASE WHEN t."userId" = ?2 THEN t."billable" END) AS billableEntries,
+                  SUM((julianday(COALESCE(t."end", 'now')) - julianday(t."start")) * 86400) AS allSeconds,
+                  SUM(CASE WHEN t."billable" = 1 THEN (julianday(COALESCE(t."end", 'now')) - julianday(t."start")) * 86400 END) AS allBillableSeconds
+             FROM "time_entry" t
+            WHERE t."workspaceId" = ?1 AND t."projectId" IS NOT NULL
+            GROUP BY t."projectId"
+         ) e ON e.projectId = p."id"
         WHERE p."workspaceId" = ?1 ${includeArchived ? "" : 'AND p."archived" = 0'}
-        GROUP BY p."id" ORDER BY p."archived", p."name"`,
+        ORDER BY p."archived", p."name"`,
       ws,
       uid,
     );
