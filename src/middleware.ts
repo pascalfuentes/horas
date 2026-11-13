@@ -20,6 +20,9 @@ const PUBLIC_PAGES = new Set([
   "/two-factor",
   // Public: Google requires the policy URL to publish the OAuth app.
   "/privacy",
+  // The "not found" screen itself: an address that does not exist is rewritten
+  // to it, with or without a session.
+  "/404",
 ]);
 
 /** API endpoints reachable without a session — they are precisely the ones that create one. */
@@ -101,6 +104,13 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   if (needsSession && !context.locals.user) {
     if (isApi) return new Response("Not authenticated", { status: 401 });
+    // Outside the protected areas, a page that is not public does not exist.
+    // Asking for a login there would only postpone the "not found": the person
+    // would sign in and then learn the address was wrong. It is a rewrite and
+    // not `next()` on purpose: if a page is ever added outside those areas and
+    // left off the public list, it shows "not found" instead of opening to
+    // everyone.
+    if (!protectedArea) return context.rewrite("/404");
     return context.redirect(`/login?next=${encodeURIComponent(path + context.url.search)}`);
   }
 
