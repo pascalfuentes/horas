@@ -655,7 +655,7 @@
     const projSlot = el('div', { class: 'hr-proj' });
     const bill = /** @type {HTMLInputElement} */ (el('input', { type: 'checkbox', id: 'hr-bill' }));
     const clockEl = el('button', { type: 'button', class: 'hr-clock', text: '0:00:00', title: 'Fix the start time', onclick: function () { editStart(); } });
-    const more = el('button', { type: 'button', class: 'btn-sm hr-link', text: 'Load 30 more days', onclick: safe(async function () { windowDays += 30; await load(); }) });
+    const more = el('button', { type: 'button', class: 'btn-ghost hr-load-more', text: 'Load 30 more days', onclick: safe(async function () { windowDays += 30; await load(); }) });
     const btn = el('button', { type: 'button', class: 'hr-go', text: 'Start' });
     const totals = el('div', { class: 'hr-totals' });
     const list = el('div', { class: 'hr-days' });
@@ -1065,17 +1065,24 @@
       const max = Math.max.apply(null, days.map(function (k) { return map[k] || 0; }).concat([3600]));
       const dense = days.length > 14;
       const top = Math.max.apply(null, days.map(function (k) { return map[k] || 0; }));
-      return el('div', { class: 'hr-chart' + (dense ? ' hr-chart-dense' : ''), role: 'img', 'aria-label': 'Hours per day in the period' }, days.map(function (k) {
+      // The average counts the days that have time: empty days would pull it
+      // down to a number that describes no real working day.
+      const worked = days.filter(function (k) { return map[k] > 0; });
+      const average = worked.length > 1 ? worked.reduce(function (sum, k) { return sum + map[k]; }, 0) / worked.length : 0;
+      const line = average ? el('div', { class: 'hr-avg', style: '--avg:' + (average / max).toFixed(4), title: 'Average of the ' + worked.length + ' days with time: ' + human(Math.round(average)) }, [
+        el('span', { text: 'Avg ' + human(Math.round(average)) }),
+      ]) : null;
+      return el('div', { class: 'hr-chart' + (dense ? ' hr-chart-dense' : ''), role: 'img', 'aria-label': 'Hours per day in the period' + (average ? ', average ' + human(Math.round(average)) + ' on the days with time' : '') }, days.map(function (k) {
         const s = map[k] || 0;
         const p = k.split('-').map(Number);
         const label = days.length > 62 ? '' : new Date(p[0], p[1] - 1, p[2]).toLocaleDateString('en-US', dense ? { day: 'numeric' } : { weekday: 'short', day: 'numeric' });
         const kind = !s ? ' hr-col-zero' : (s === top && days.length > 1 ? ' hr-col-max' : '');
         return el('div', { class: 'hr-col' + kind, title: dayLabel(k) + ': ' + human(s) }, [
           el('small', { text: s && !dense ? human(s) : '' }),
-          el('div', { class: 'hr-colbar', style: 'height:' + Math.max(s ? 3 : 0, (s / max) * 100) + '%' }),
+          el('div', { class: 'hr-coltrack' }, [el('div', { class: 'hr-colbar', style: 'height:' + Math.max(s ? 3 : 0, (s / max) * 100) + '%' })]),
           el('small', { class: 'muted', text: label }),
         ]);
-      }));
+      }).concat(line ? [line] : []));
     }
 
     /**

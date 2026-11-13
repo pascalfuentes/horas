@@ -210,6 +210,14 @@ button, .btn {
   transition: background-color 0.12s;
 }
 button:hover, .btn:hover { background: var(--accent-hover); }
+/* Pill buttons rise on hover and sink when pressed, like a physical key.
+   Only the pills: chips, icon buttons and menu items keep still. */
+.btn, button:not([class]), button[class^="btn-"], button[class*=" btn-"] { transition: background-color 0.12s, transform 0.1s ease, box-shadow 0.1s ease; }
+:is(.btn, button:not([class]), button[class^="btn-"], button[class*=" btn-"]):hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 3px 0 var(--ink); }
+:is(.btn, button:not([class]), button[class^="btn-"], button[class*=" btn-"]):active:not(:disabled) { transform: translateY(1px); box-shadow: 0 0 0 var(--ink); }
+@media (prefers-reduced-motion: reduce) {
+  :is(.btn, button:not([class]), button[class^="btn-"], button[class*=" btn-"]):is(:hover, :active) { transform: none; }
+}
 button:disabled { opacity: 0.4; cursor: not-allowed; }
 /* Waiting for the server: the button keeps its colour and shows a spinner. */
 button[aria-busy="true"]:disabled { opacity: 0.75; cursor: progress; }

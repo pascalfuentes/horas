@@ -19,7 +19,7 @@ button.hr-clock:disabled { opacity: 1; cursor: default; color: var(--text-muted)
 
 /* Timer button: hard shadow, to look like a physical button. */
 button.hr-go { background: var(--go); color: var(--accent-text); border-color: var(--ink); box-shadow: var(--shadow-button); min-width: 108px; padding: 11px 32px; transition: transform 0.06s, box-shadow 0.06s; }
-button.hr-go:hover { background: var(--go); filter: brightness(1.05); }
+button.hr-go:hover { background: var(--go); filter: brightness(1.05); transform: translateY(-2px); box-shadow: 0 5px 0 var(--ink); }
 button.hr-go:active { transform: translateY(3px); box-shadow: 0 0 0 var(--ink); }
 button.hr-go.hr-stop, button.hr-go.hr-stop:hover { background: var(--stop); }
 
@@ -28,6 +28,7 @@ button.hr-go.hr-stop, button.hr-go.hr-stop:hover { background: var(--stop); }
 .hr-more-wrap { text-align: center; margin: 0 0 24px; }
 button.hr-link { background: none; border-color: transparent; color: var(--text); }
 button.hr-link:hover { background: var(--surface-2); }
+button.hr-load-more { box-shadow: var(--shadow-button); padding: 11px 32px; }
 
 /* ----- Day card + Entry row ----- */
 .hr-day { padding-bottom: 8px; }
@@ -178,10 +179,15 @@ button.hr-menu-item.hr-menu-on { background: var(--accent-subtle); }
 .hr-stat strong { font-family: var(--display); font-weight: 600; font-size: clamp(1.5rem, 2.4vw, 2.125rem); line-height: 1.15; letter-spacing: -0.02em; white-space: nowrap; }
 .hr-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
 .hr-card-head select { width: auto; }
-.hr-chart { display: flex; align-items: stretch; gap: 16px; height: 240px; margin-top: 16px; }
-.hr-chart-dense { gap: 3px; }
+/* `--lab` is the room one label line takes (its line plus the gap to the bar):
+   the bars live between the two label lines, and so does the average line. */
+.hr-chart { position: relative; display: flex; align-items: stretch; gap: 16px; height: 240px; margin-top: 16px; --lab: calc(0.8125rem * 1.2 + 8px); }
+.hr-chart-dense { gap: 3px; --lab: calc(0.6875rem * 1.2 + 8px); }
+.hr-coltrack { flex: 1; min-height: 0; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.hr-avg { position: absolute; left: 0; right: 0; bottom: calc(var(--lab) + (100% - 2 * var(--lab)) * var(--avg)); height: 0; border-top: 2px dotted var(--ink); pointer-events: none; }
+.hr-avg > span { position: absolute; right: 0; bottom: 4px; padding: 1px 8px; border-radius: 999px; background: var(--ink); color: var(--ink-text); font-size: 0.75rem; font-weight: 500; white-space: nowrap; }
 .hr-col { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 8px; }
-.hr-col small { font-size: 0.8125rem; font-weight: 500; white-space: nowrap; height: 1.2em; }
+.hr-col small { flex: none; font-size: 0.8125rem; font-weight: 500; line-height: 1.2; white-space: nowrap; height: 1.2em; }
 .hr-chart-dense .hr-col small { font-size: 0.6875rem; }
 .hr-colbar { width: 100%; max-width: 56px; background: var(--accent); border-radius: 10px 10px 0 0; min-height: 4px; }
 .hr-chart-dense .hr-colbar { border-radius: 4px 4px 0 0; }
