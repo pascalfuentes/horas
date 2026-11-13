@@ -35,6 +35,17 @@ button.hr-link:hover { background: var(--surface-2); }
 .hr-day ul { list-style: none; margin: 0; padding: 0; }
 .hr-row { display: flex; align-items: center; gap: 16px; padding: 12px 0; }
 .hr-row + .hr-row { border-top: 1px solid var(--border); }
+/* Hover: the row lifts off the card — a soft shadow, a hairline and a sun-yellow
+   edge. Drawn on a pseudo-element behind the content, so nothing moves and the
+   menus that open from a row still sit above the rows below it. */
+.hr-day ul { isolation: isolate; }
+.hr-row { position: relative; }
+.hr-row::before { content: ""; position: absolute; inset: 1px -14px; z-index: -1; border-radius: var(--radius); background: var(--surface); box-shadow: inset 4px 0 0 var(--sun), 0 0 0 1px var(--border), var(--shadow-pop); opacity: 0; transform: scale(0.995); transition: opacity 0.14s ease, transform 0.14s ease; pointer-events: none; }
+.hr-row:hover::before, .hr-row:focus-within::before { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .hr-row::before { transition: none; } }
+.hr-projects tbody tr { transition: background-color 0.14s ease; }
+.hr-projects tbody tr:hover, .hr-projects tbody tr:focus-within { background: color-mix(in srgb, var(--sun) 14%, transparent); box-shadow: inset 4px 0 0 var(--sun); }
+.hr-projects tbody tr td:first-child { padding-left: 12px; }
 .hr-what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .hr-what > span { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hr-what > span.muted { font-weight: 400; }
