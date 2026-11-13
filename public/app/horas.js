@@ -1182,6 +1182,43 @@
   }
 
   /**
+   * "12h 30min" style hours for a budget, from a decimal number of hours.
+   * @param {number} hours
+   * @returns {string}
+   */
+  function hoursLabel(hours) {
+    return human(Math.round(hours * 3600));
+  }
+
+  /**
+   * How much of a project's budget is used, as bars: one for money, one for hours.
+   * @param {object} p Project, with budget_* and spent_* fields.
+   * @param {string} currency Currency the project is billed in.
+   * @param {boolean} [compact] Only the bar and the percentage, for the list.
+   * @returns {HTMLElement|null} null when the project has no budget.
+   */
+  function budgetMeter(p, currency, compact) {
+    const lines = [];
+    if (p.budget_amount) lines.push({ used: p.spent_amount, max: p.budget_amount, text: function (n) { return money(n, currency); }, what: 'billed' });
+    if (p.budget_hours) lines.push({ used: p.spent_hours, max: p.budget_hours, text: hoursLabel, what: 'tracked' });
+    if (!lines.length) return null;
+    return el('div', { class: 'hr-budget' + (compact ? ' hr-budget-compact' : '') }, lines.map(function (l) {
+      const pct = Math.round((l.used / l.max) * 100);
+      const state = pct > 100 ? 'over' : pct >= 80 ? 'near' : 'ok';
+      const left = l.max - l.used;
+      const summary = l.text(l.used) + ' of ' + l.text(l.max) + ' ' + l.what;
+      return el('div', { class: 'hr-budget-line hr-budget-' + state, title: summary }, [
+        compact ? null : el('div', { class: 'hr-budget-text' }, [
+          el('span', { text: summary }),
+          el('strong', { text: left >= 0 ? l.text(left) + ' left' : l.text(-left) + ' over budget' }),
+        ]),
+        el('div', { class: 'hr-budget-bar', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(Math.min(pct, 100)), 'aria-label': summary }, [el('span', { style: 'width:' + Math.min(pct, 100) + '%' })]),
+        compact ? el('small', { text: pct + '%' }) : null,
+      ]);
+    }));
+  }
+
+  /**
    * Currency `<select>` for a project. The empty value means "the workspace currency".
    * @param {{id: string, value: (string|null), workspace: string, disabled?: boolean}} opts
    * @returns {HTMLSelectElement}
@@ -1268,7 +1305,7 @@
       if (document.activeElement !== defRate.input) defRate.input.value = settings.default_rate ? settings.default_rate.toFixed(2) : '';
       clientList.replaceChildren.apply(clientList, projects.map(function (p) { return p.client; }).filter(function (c, i, a) { return c && a.indexOf(c) === i; }).map(function (c) { return el('option', { value: c }); }));
       if (!projects.length) {
-        body.replaceChildren(el('tr', {}, [el('td', { colspan: '7', class: 'empty', text: 'No projects yet.' })]));
+        body.replaceChildren(el('tr', {}, [el('td', { colspan: '8', class: 'empty', text: 'No projects yet.' })]));
         return;
       }
       body.replaceChildren.apply(body, projects.map(CAN_WRITE ? editableRow : readOnlyRow));
@@ -1289,6 +1326,7 @@
         el('td', {}, [p.billable ? el('span', { class: 'badge badge-sky', text: 'Billable' }) : el('span', { class: 'muted', text: '—' })]),
         el('td', { text: p.currency || settings.currency }),
         el('td', {}, [el('span', { class: p.hourly_rate === null ? 'hr-num muted' : 'hr-num', text: p.hourly_rate === null ? 'default' : money(p.hourly_rate, p.currency || settings.currency) })]),
+        el('td', {}, [budgetMeter(p, p.currency || settings.currency, true) || el('span', { class: 'muted', text: '—' })]),
         el('td', {}, [el('span', { class: 'hr-num', text: human(p.total_seconds) })]),
         el('td', {}, [el('a', { class: 'btn btn-ghost btn-sm', href: here + '/' + p.id, text: 'View' })]),
       ]);
@@ -1378,6 +1416,7 @@
         el('td', {}, [el('label', { class: 'hr-check' }, [billIn])]),
         el('td', {}, [curIn]),
         el('td', {}, [rateIn.wrap]),
+        el('td', {}, [budgetMeter(p, p.currency || settings.currency, true) || el('a', { class: 'hr-budget-add', href: here + '/' + p.id + '#budget', text: 'Set budget' })]),
         el('td', {}, [el('span', { class: 'hr-num', text: human(p.total_seconds) })]),
         el('td', {}, [el('a', { class: 'btn btn-ghost btn-sm', href: here + '/' + p.id, text: 'Edit' })]),
       ]);
@@ -1417,7 +1456,7 @@
         el('h2', { text: 'Workspace projects' }),
         el('span', { class: 'muted', text: 'Shared among members. The time shown is yours only. Change any field right here and it saves by itself; Edit opens the project page, which also archives and deletes.' }),
         el('div', { class: 'table-wrap' }, [el('table', { class: 'hr-projects' }, [
-          el('thead', {}, [el('tr', {}, ['Project', 'Client', 'Billable', 'Currency', 'Hourly rate', 'Your time', ''].map(function (h) { return el('th', { text: h }); }))]),
+          el('thead', {}, [el('tr', {}, ['Project', 'Client', 'Billable', 'Currency', 'Hourly rate', 'Budget', 'Your time', ''].map(function (h) { return el('th', { text: h }); }))]),
           body,
         ])]),
       ]),
@@ -1462,10 +1501,32 @@
     const projCurrency = currencySelect({ id: 'pj-currency', value: p.currency, workspace: settings.currency, disabled: off });
     projCurrency.addEventListener('change', function () {
       rate.setCurrency(projCurrency.value || settings.currency);
+      budgetMoney.setCurrency(projCurrency.value || settings.currency);
       rate.input.placeholder = projCurrency.value ? '0.00' : 'default';
     });
     rate.input.placeholder = p.currency ? '0.00' : 'default';
     // "Billable by default" only reaches new entries; this offers to bring the existing ones along.
+    const budgetMoney = moneyField({ id: 'pj-budget', currency: p.currency || settings.currency, value: p.budget_amount, placeholder: 'No limit', disabled: off });
+    const budgetHours = /** @type {HTMLInputElement} */ (el('input', { type: 'text', inputmode: 'decimal', id: 'pj-budget-hours', class: 'hr-hours-in', placeholder: 'No limit', autocomplete: 'off', value: p.budget_hours ? String(p.budget_hours) : '', disabled: off }));
+    const budgetSlot = el('div', { class: 'hr-budget-slot' });
+
+    /**
+     * Reads the hours budget: null when empty, and throws on something that is not a number.
+     * @returns {number|null}
+     */
+    function readBudgetHours() {
+      const raw = budgetHours.value.trim().replace(',', '.');
+      if (!raw) return null;
+      const n = Number(raw);
+      if (!isFinite(n) || n < 0) throw new Error('Enter the hours as a number, like 40 or 12.5.');
+      return n;
+    }
+
+    /** @returns {void} */
+    function paintBudget() {
+      const meter = budgetMeter(p, p.currency || settings.currency);
+      budgetSlot.replaceChildren(meter || el('p', { class: 'muted', text: 'No budget yet. Set a limit below and this shows how much of it is used.' }));
+    }
     const applyOld = /** @type {HTMLInputElement} */ (el('input', { type: 'checkbox', id: 'pj-apply' }));
     const applyText = el('span', {});
     const applyRow = el('label', { class: 'hr-check hr-check-lg hr-apply', for: 'pj-apply' }, [applyOld, applyText]);
@@ -1503,6 +1564,7 @@
       if (heading) heading.textContent = p.name;
       timeNote.textContent = 'Your time on this project: ' + human(p.total_seconds) + ' in ' + p.entries + (p.entries === 1 ? ' entry' : ' entries') + ', ' + p.billable_entries + ' billable';
       paintApply();
+      paintBudget();
       document.title = p.name + ' · Projects';
     }
     archiveBtn.addEventListener('click', safe(async function () {
@@ -1518,7 +1580,7 @@
       el('form', { onsubmit: safe(async function (ev) {
         ev.preventDefault();
         if (projCurrency.value && rate.read() === null) throw new Error('A project in its own currency needs its own hourly rate.');
-        p = await api('/projects/' + id, 'PATCH', { name: name.value, client: client.value, color: color, billable: billable.checked, hourly_rate: rate.read(), currency: projCurrency.value, apply_to_entries: applyOld.checked });
+        p = await api('/projects/' + id, 'PATCH', { name: name.value, client: client.value, color: color, billable: billable.checked, hourly_rate: rate.read(), currency: projCurrency.value, apply_to_entries: applyOld.checked, budget_amount: budgetMoney.read(), budget_hours: readBudgetHours() });
         const changed = p.entries_updated;
         paintState();
         toast(changed ? 'Project saved. ' + changed + (changed === 1 ? ' entry' : ' entries') + ' updated.' : 'Project saved.');
@@ -1541,6 +1603,16 @@
             el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'pj-rate', text: 'Hourly rate' }), rate.wrap]),
           ]),
           el('p', { class: 'muted', text: 'Without a rate, the project uses the workspace default (' + money(settings.default_rate, settings.currency) + '). A project in another currency needs its own rate, and its amounts show in that currency in the reports. Changing the rate reprices every billable entry already logged on this project.' }),
+        ]),
+        el('div', { class: 'card', id: 'budget' }, [
+          el('h2', { text: 'Budget' }),
+          el('p', { class: 'muted', text: 'The most that may be spent on this project, as money, as hours, or both. It counts what every member of the workspace logged: billable entries for the money, all entries for the hours.' }),
+          budgetSlot,
+          el('div', { class: 'row hr-field-top' }, [
+            el('div', { class: 'field hr-field-md' }, [el('label', { for: 'pj-budget', text: 'Money budget' }), budgetMoney.wrap]),
+            el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'pj-budget-hours', text: 'Hours budget' }), el('span', { class: 'hr-money' }, [budgetHours, el('span', { class: 'hr-money-cur hr-money-unit', text: 'hours' })])]),
+          ]),
+          el('p', { class: 'muted', text: 'Leave a field empty for no limit. Going over the budget never blocks the timer; the bar turns yellow from 80% and red once it is passed.' }),
         ]),
         el('div', { class: 'hr-save' }, [
           off ? null : el('button', { type: 'submit', text: 'Save changes' }),

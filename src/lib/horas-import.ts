@@ -37,6 +37,8 @@ export type ImportProject = {
   billable?: boolean;
   hourly_rate?: number | null;
   currency?: string | null;
+  budget_amount?: number | null;
+  budget_hours?: number | null;
 };
 
 export type ImportError = { row: number; message: string };
@@ -303,6 +305,8 @@ function fromBackup(data: Record<string, unknown>): Parsed {
       billable: p.billable === true,
       hourly_rate: typeof p.hourly_rate === "number" ? p.hourly_rate : null,
       currency: typeof p.currency === "string" ? p.currency : null,
+      budget_amount: typeof p.budget_amount === "number" ? p.budget_amount : null,
+      budget_hours: typeof p.budget_hours === "number" ? p.budget_hours : null,
     }));
 
   const s = (data.settings ?? null) as Record<string, unknown> | null;

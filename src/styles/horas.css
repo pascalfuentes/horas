@@ -234,6 +234,30 @@ a.hr-proj-link:hover span:nth-child(2) { text-decoration: underline; text-underl
 .hr-money input.hr-money-in:focus { box-shadow: none; }
 .hr-money input.hr-money-in::placeholder { font-family: var(--font); }
 
+/* Budget: how much of a project's limit is used. Sky while there is room,
+   sun from 80%, the stop red once the limit is passed. */
+.hr-budget { display: flex; flex-direction: column; gap: 14px; max-width: 560px; }
+.hr-budget-line { --budget: var(--accent); }
+.hr-budget-near { --budget: var(--sun); }
+.hr-budget-over { --budget: var(--stop); }
+.hr-budget-text { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 6px; font-size: 0.9375rem; }
+.hr-budget-text strong { font-weight: 600; white-space: nowrap; }
+.hr-budget-over .hr-budget-text strong { color: var(--danger); }
+.hr-budget-bar { height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.hr-budget-bar span { display: block; height: 100%; border-radius: 999px; background: var(--budget); }
+.hr-budget-compact { gap: 5px; min-width: 110px; }
+.hr-budget-compact .hr-budget-line { display: flex; align-items: center; gap: 8px; }
+.hr-budget-compact .hr-budget-bar { flex: 1; height: 6px; }
+.hr-budget-compact small { width: 4ch; text-align: right; font-family: var(--mono); font-size: 0.75rem; color: var(--text-muted); }
+.hr-budget-compact .hr-budget-over small { color: var(--danger); font-weight: 600; }
+a.hr-budget-add { font-size: 0.8125rem; color: var(--text-muted); text-decoration: none; opacity: 0; transition: opacity 0.14s; }
+.hr-projects tr:hover a.hr-budget-add, a.hr-budget-add:focus-visible { opacity: 1; text-decoration: underline; }
+.hr-budget-slot { margin-top: 12px; }
+.hr-money input.hr-hours-in { flex: 1; min-width: 0; width: 100%; border: 0; border-radius: 0; box-shadow: none; background: transparent; padding: 11px 14px; font-family: var(--mono); font-size: 0.9375rem; }
+.hr-money input.hr-hours-in:focus { box-shadow: none; }
+.hr-money input.hr-hours-in::placeholder { font-family: var(--font); }
+.hr-money-unit { font-weight: 400; font-size: 0.875rem; }
+
 /* Project page */
 .hr-swatches { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .hr-swatches button.hr-swatch { width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; box-shadow: 0 0 0 2px var(--surface); }

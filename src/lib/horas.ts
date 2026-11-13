@@ -38,6 +38,16 @@ export type Project = {
   hourly_rate: number | null;
   /** Currency this project is billed in (ISO 4217). null = the workspace currency. */
   currency: string | null;
+  /** The most that may be spent on the project: money (project currency) and/or hours. null = no limit. */
+  budget_amount: number | null;
+  budget_hours: number | null;
+  /**
+   * What the WHOLE workspace already spent against the budget: billable amount
+   * and tracked hours of every member. Only these two totals cross the "each
+   * person sees their own entries" line, because a budget is the project's.
+   */
+  spent_amount: number;
+  spent_hours: number;
   total_seconds: number;
   /** This person's entries on the project, and how many of them are billable. */
   entries: number;
@@ -188,11 +198,23 @@ function readRate(v: unknown, field: string): number | null | undefined {
   return cents(n);
 }
 
+/** A budget: undefined = not sent, null or 0 = no limit, otherwise a positive number. */
+function readBudget(v: unknown, field: string): number | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null || v === "") return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0 || n > 1_000_000_000) throw new HorasError(`${field} must be a number between 0 and 1,000,000,000.`);
+  return n === 0 ? null : cents(n);
+}
+
 function readBoolean(v: unknown): boolean | null {
   if (v === true || v === "1" || v === "true") return true;
   if (v === false || v === "0" || v === "false") return false;
   return null;
 }
+
+/** A positive number, or null. For values that arrive from an imported file. */
+const positive = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) && v > 0 ? cents(v) : null);
 
 const isValidColor = (v: unknown): v is string => typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v);
 
@@ -294,16 +316,21 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
   /* ----- Projects (of the workspace; totals only cover this person's hours) ----- */
 
   async function listProjects({ includeArchived = false }: { includeArchived?: boolean } = {}): Promise<Project[]> {
-    const rows = await all<{ id: number; name: string; client: string; color: string; archived: number; billable: number; hourlyRate: number | null; currency: string | null; total: number; entries: number; billableEntries: number }>(
-      `SELECT p.*, COALESCE(SUM((julianday(COALESCE(e."end", 'now')) - julianday(e."start")) * 86400), 0) AS total,
-              COUNT(e."id") AS entries, COALESCE(SUM(e."billable"), 0) AS billableEntries
+    const rows = await all<{ id: number; name: string; client: string; color: string; archived: number; billable: number; hourlyRate: number | null; currency: string | null; budgetAmount: number | null; budgetHours: number | null; total: number; entries: number; billableEntries: number; allSeconds: number; allBillableSeconds: number }>(
+      `SELECT p.*,
+              COALESCE(SUM(CASE WHEN e."userId" = ?2 THEN (julianday(COALESCE(e."end", 'now')) - julianday(e."start")) * 86400 END), 0) AS total,
+              COUNT(CASE WHEN e."userId" = ?2 THEN e."id" END) AS entries,
+              COALESCE(SUM(CASE WHEN e."userId" = ?2 THEN e."billable" END), 0) AS billableEntries,
+              COALESCE(SUM((julianday(COALESCE(e."end", 'now')) - julianday(e."start")) * 86400), 0) AS allSeconds,
+              COALESCE(SUM(CASE WHEN e."billable" = 1 THEN (julianday(COALESCE(e."end", 'now')) - julianday(e."start")) * 86400 END), 0) AS allBillableSeconds
          FROM "time_project" p
-         LEFT JOIN "time_entry" e ON e."projectId" = p."id" AND e."userId" = ?2
+         LEFT JOIN "time_entry" e ON e."projectId" = p."id" AND e."workspaceId" = p."workspaceId"
         WHERE p."workspaceId" = ?1 ${includeArchived ? "" : 'AND p."archived" = 0'}
         GROUP BY p."id" ORDER BY p."archived", p."name"`,
       ws,
       uid,
     );
+    const { default_rate: defaultRate } = await getSettings();
     return rows.map((r) => ({
       id: r.id,
       name: r.name,
@@ -313,6 +340,10 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
       billable: !!r.billable,
       hourly_rate: r.hourlyRate,
       currency: r.currency,
+      budget_amount: r.budgetAmount,
+      budget_hours: r.budgetHours,
+      spent_amount: cents((r.allBillableSeconds / 3600) * (r.hourlyRate ?? defaultRate)),
+      spent_hours: Math.round((r.allSeconds / 3600) * 100) / 100,
       total_seconds: Math.round(r.total),
       entries: r.entries,
       billable_entries: r.billableEntries,
@@ -346,7 +377,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     if (currency && rate === null) throw new HorasError(`A project billed in ${currency} needs its own hourly rate: the workspace default rate is in another currency.`);
   }
 
-  async function createProject(input: { name?: string; client?: string; color?: string; hourly_rate?: unknown; billable?: unknown; currency?: unknown } = {}): Promise<Project> {
+  async function createProject(input: { name?: string; client?: string; color?: string; hourly_rate?: unknown; billable?: unknown; currency?: unknown; budget_amount?: unknown; budget_hours?: unknown } = {}): Promise<Project> {
     const name = text(input.name, 80);
     if (!name) throw new HorasError("The project needs a name.");
     if (await first('SELECT 1 AS x FROM "time_project" WHERE "workspaceId" = ?1 AND "name" = ?2', ws, name)) {
@@ -357,7 +388,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     const newCurrency = (await readCurrency(input.currency)) ?? null;
     requireOwnRate(newCurrency, readRate(input.hourly_rate, "hourly_rate") ?? null);
     const meta = await run(
-      'INSERT INTO "time_project" ("workspaceId", "name", "client", "color", "createdAt", "hourlyRate", "billable", "currency") VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)',
+      'INSERT INTO "time_project" ("workspaceId", "name", "client", "color", "createdAt", "hourlyRate", "billable", "currency", "budgetAmount", "budgetHours") VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)',
       ws,
       name,
       text(input.client, 80),
@@ -366,13 +397,15 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
       readRate(input.hourly_rate, "hourly_rate") ?? null,
       readBoolean(input.billable) ? 1 : 0,
       newCurrency,
+      readBudget(input.budget_amount, "budget_amount") ?? null,
+      readBudget(input.budget_hours, "budget_hours") ?? null,
     );
     return getProject(meta.last_row_id);
   }
 
   async function updateProject(
     id: number | string,
-    patch: { name?: string; client?: string; color?: string; archived?: boolean; hourly_rate?: unknown; billable?: unknown; currency?: unknown; apply_to_entries?: unknown } = {},
+    patch: { name?: string; client?: string; color?: string; archived?: boolean; hourly_rate?: unknown; billable?: unknown; currency?: unknown; apply_to_entries?: unknown; budget_amount?: unknown; budget_hours?: unknown } = {},
   ): Promise<Project & { entries_updated?: number }> {
     const cur = await getProject(id);
     const name = patch.name !== undefined ? text(patch.name, 80) : cur.name;
@@ -381,6 +414,8 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
       throw new HorasError(`A project named "${name}" already exists.`, 409);
     }
     const rate = readRate(patch.hourly_rate, "hourly_rate");
+    const budgetAmount = readBudget(patch.budget_amount, "budget_amount");
+    const budgetHours = readBudget(patch.budget_hours, "budget_hours");
     const newRate = rate === undefined ? cur.hourly_rate : rate;
     const sentCurrency = await readCurrency(patch.currency);
     const newCurrency = sentCurrency === undefined ? cur.currency : sentCurrency;
@@ -388,7 +423,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     // Only checked when one of the two changes: an archive toggle must not fail on old data.
     if (rate !== undefined || sentCurrency !== undefined) requireOwnRate(newCurrency, newRate);
     await run(
-      'UPDATE "time_project" SET "name" = ?1, "client" = ?2, "color" = ?3, "archived" = ?4, "hourlyRate" = ?7, "billable" = ?8, "currency" = ?9 WHERE "id" = ?5 AND "workspaceId" = ?6',
+      'UPDATE "time_project" SET "name" = ?1, "client" = ?2, "color" = ?3, "archived" = ?4, "hourlyRate" = ?7, "billable" = ?8, "currency" = ?9, "budgetAmount" = ?10, "budgetHours" = ?11 WHERE "id" = ?5 AND "workspaceId" = ?6',
       name,
       patch.client !== undefined ? text(patch.client, 80) : cur.client,
       isValidColor(patch.color) ? patch.color : cur.color,
@@ -398,6 +433,8 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
       newRate,
       newBillable ? 1 : 0,
       newCurrency,
+      budgetAmount === undefined ? cur.budget_amount : budgetAmount,
+      budgetHours === undefined ? cur.budget_hours : budgetHours,
     );
     // "Billable by default" only reaches new entries. On request, this person's
     // existing entries on the project follow it too (never another member's).
@@ -726,7 +763,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
       exported_at: nowIso(),
       timezone: tz,
       settings,
-      projects: projects.map((p) => ({ name: p.name, client: p.client, color: p.color, archived: p.archived, billable: p.billable, hourly_rate: p.hourly_rate, currency: p.currency })),
+      projects: projects.map((p) => ({ name: p.name, client: p.client, color: p.color, archived: p.archived, billable: p.billable, hourly_rate: p.hourly_rate, currency: p.currency, budget_amount: p.budget_amount, budget_hours: p.budget_hours })),
       entries: rows.map((r) => ({
         description: r.description,
         project: r.project ?? "",
@@ -797,17 +834,17 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     const projectRows = () => all<{ id: number; name: string }>('SELECT "id", "name" FROM "time_project" WHERE "workspaceId" = ?1', ws);
     let existingProjects = await projectRows();
     const known = new Set(existingProjects.map((p) => p.name.toLowerCase()));
-    const wanted = new Map<string, { name: string; client: string; color: string | null; archived: number; billable: number; rate: number | null; currency: string | null }>();
+    const wanted = new Map<string, { name: string; client: string; color: string | null; archived: number; billable: number; rate: number | null; currency: string | null; budgetAmount: number | null; budgetHours: number | null }>();
     for (const p of parsed.projects) {
       const name = text(p.name, 80);
       if (!name || known.has(name.toLowerCase())) continue;
       const rate = typeof p.hourly_rate === "number" && p.hourly_rate >= 0 ? cents(p.hourly_rate) : null;
-      wanted.set(name.toLowerCase(), { name, client: text(p.client, 80), color: isValidColor(p.color) ? p.color : null, archived: p.archived ? 1 : 0, billable: p.billable ? 1 : 0, rate, currency: typeof p.currency === "string" && /^[A-Za-z]{3}$/.test(p.currency) && rate !== null ? p.currency.toUpperCase() : null });
+      wanted.set(name.toLowerCase(), { name, client: text(p.client, 80), color: isValidColor(p.color) ? p.color : null, archived: p.archived ? 1 : 0, billable: p.billable ? 1 : 0, rate, currency: typeof p.currency === "string" && /^[A-Za-z]{3}$/.test(p.currency) && rate !== null ? p.currency.toUpperCase() : null, budgetAmount: positive(p.budget_amount), budgetHours: positive(p.budget_hours) });
     }
     for (const r of fresh) {
       const k = r.project.toLowerCase();
       if (!r.project || known.has(k) || wanted.has(k)) continue;
-      wanted.set(k, { name: r.project, client: r.client, color: null, archived: 0, billable: 0, rate: null, currency: null });
+      wanted.set(k, { name: r.project, client: r.client, color: null, archived: 0, billable: 0, rate: null, currency: null, budgetAmount: null, budgetHours: null });
     }
     if (existingProjects.length + wanted.size > MAX_PROJECTS) {
       throw new HorasError(`This import would exceed the limit of ${MAX_PROJECTS} projects per workspace.`);
@@ -837,9 +874,10 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
       // parameter, which stays clear of D1's cap on bound parameters.
       const payload = [...wanted.values()].map((p, i) => ({ ...p, color: p.color ?? COLORS[(existingProjects.length + i) % COLORS.length] }));
       await run(
-        `INSERT INTO "time_project" ("workspaceId", "name", "client", "color", "archived", "createdAt", "hourlyRate", "billable", "currency")
+        `INSERT INTO "time_project" ("workspaceId", "name", "client", "color", "archived", "createdAt", "hourlyRate", "billable", "currency", "budgetAmount", "budgetHours")
          SELECT ?1, json_extract(value, '$.name'), json_extract(value, '$.client'), json_extract(value, '$.color'),
-                json_extract(value, '$.archived'), ?2, json_extract(value, '$.rate'), json_extract(value, '$.billable'), json_extract(value, '$.currency')
+                json_extract(value, '$.archived'), ?2, json_extract(value, '$.rate'), json_extract(value, '$.billable'), json_extract(value, '$.currency'),
+                json_extract(value, '$.budgetAmount'), json_extract(value, '$.budgetHours')
            FROM json_each(?3)`,
         ws,
         now,

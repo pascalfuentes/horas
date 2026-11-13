@@ -264,6 +264,9 @@ export const timeProject = sqliteTable(
     hourlyRate: real("hourlyRate"),
     /** ISO 4217 code this project is billed in; null = the workspace currency (migration 0009). */
     currency: text("currency"),
+    /** The most that may be spent: money in the project currency and/or hours; null = no limit (migration 0010). */
+    budgetAmount: real("budgetAmount"),
+    budgetHours: real("budgetHours"),
   },
   (t) => [uniqueIndex("time_project_workspace_name_idx").on(t.workspaceId, t.name)],
 );
