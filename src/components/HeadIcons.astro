@@ -1,0 +1,16 @@
+---
+/**
+ * Icons of the app, for every page's <head>: the browser tab icon, the icon
+ * iOS uses when the site is added to the home screen (the "web clip"), and
+ * the manifest Android reads for the same thing.
+ * The PNGs are drawn by `scripts/make-icons.py`.
+ */
+import { APP_NAME } from "~/config";
+---
+
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<link rel="manifest" href="/site.webmanifest" />
+<meta name="apple-mobile-web-app-title" content={APP_NAME} />
+<meta name="application-name" content={APP_NAME} />
+<meta name="theme-color" content="#f9f6f3" />
