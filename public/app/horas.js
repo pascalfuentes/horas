@@ -1074,7 +1074,7 @@
       return el('div', { class: 'hr-stats' }, [
         stat('Total', human(s.total_seconds)),
         stat('Billable', human(s.billable_seconds)),
-        stat('Amount', money(s.billable_amount, s.currency)),
+        stat('Amount', moneyList(s.billable_amounts, s.currency)),
         stat('Entries', String(s.entries)),
       ]);
     }
@@ -1092,7 +1092,7 @@
           return [
             el('span', {}, [r.color ? el('span', { class: 'hr-dot', style: 'background:' + r.color }) : null, (r.color ? ' ' : '') + g.name(r)]),
             el('span', { class: 'hr-num', text: human(r.seconds) }),
-            el('span', { class: 'hr-num', text: r.amount ? money(r.amount, s.currency) : '—' }),
+            el('span', { class: 'hr-num', text: r.amounts.length ? moneyList(r.amounts, s.currency) : '—' }),
             el('span', { class: 'hr-pct' }, [el('span', { style: 'width:' + pct + '%;background:' + color }), el('small', { text: pct + '%' })]),
           ];
         }), groupBy.value === 'tag' ? 'An entry with several tags counts in each of them.' : '')
@@ -1113,7 +1113,7 @@
             el('span', {}, [el('span', { class: 'hr-dot', style: 'background:' + (e.project_color || 'var(--border)') }), ' ' + (e.project || 'No project')]),
             e.running ? hhmm(e.start) + ' – now' : hhmm(e.start) + ' – ' + hhmm(e.end),
             el('span', { class: 'hr-num', text: clock(e.duration_seconds) }),
-            el('span', { class: 'hr-num', text: e.billable ? money(e.amount, s.currency) : '—' }),
+            el('span', { class: 'hr-num', text: e.billable ? money(e.amount, e.currency) : '—' }),
             CAN_WRITE && !e.running ? el('button', { type: 'button', class: 'btn-ghost btn-sm', text: 'Edit', onclick: function () { entryDialog({ entry: e, projects: projects, tags: tags, onDone: load }); } }) : '',
           ];
         }), entries.length >= 1000 ? 'Showing the 1000 most recent in the period. The total above covers all of them.' : '')
@@ -1163,6 +1163,34 @@
   /* ------------------------------------------------------------------ */
   /* Screen: Projects                                                   */
   /* ------------------------------------------------------------------ */
+
+  /** Currencies offered in the pickers: [ISO 4217 code, label]. */
+  const CURRENCIES = [['BRL', 'Real (R$)'], ['USD', 'US dollar (US$)'], ['EUR', 'Euro (€)'], ['GBP', 'Pound (£)'], ['CAD', 'Canadian dollar (CA$)'], ['AUD', 'Australian dollar (A$)'], ['CHF', 'Swiss franc (CHF)'], ['JPY', 'Yen (¥)'], ['MXN', 'Mexican peso (MX$)'], ['ARS', 'Argentine peso (ARS)']];
+
+  /**
+   * A total that may span several currencies: "R$ 100.00 + US$ 840.00".
+   * Amounts in different currencies are never added together.
+   * @param {Array<{currency: string, amount: number}>} amounts
+   * @param {string} fallback Currency of the zero shown when there is nothing.
+   * @returns {string}
+   */
+  function moneyList(amounts, fallback) {
+    if (!amounts || !amounts.length) return money(0, fallback);
+    return amounts.map(function (a) { return money(a.amount, a.currency); }).join(' + ');
+  }
+
+  /**
+   * Currency `<select>` for a project. The empty value means "the workspace currency".
+   * @param {{id: string, value: (string|null), workspace: string, disabled?: boolean}} opts
+   * @returns {HTMLSelectElement}
+   */
+  function currencySelect(opts) {
+    const options = [el('option', { value: '', text: 'Workspace currency (' + opts.workspace + ')' })].concat(CURRENCIES.filter(function (c) { return c[0] !== opts.workspace; }).map(function (c) { return el('option', { value: c[0], text: c[1] }); }));
+    if (opts.value && !CURRENCIES.some(function (c) { return c[0] === opts.value; })) options.push(el('option', { value: opts.value, text: opts.value }));
+    const select = /** @type {HTMLSelectElement} */ (el('select', { id: opts.id, disabled: !!opts.disabled }, options));
+    select.value = opts.value || '';
+    return select;
+  }
 
   /**
    * The symbol of a currency ("R$", "US$", "€"), as the user's locale writes it.
@@ -1214,7 +1242,10 @@
     const billable = /** @type {HTMLInputElement} */ (el('input', { type: 'checkbox', id: 'np-bill' }));
     const rate = moneyField({ id: 'np-rate', currency: 'BRL', value: null, placeholder: 'default' });
     const clientList = el('datalist', { id: 'np-clients' });
-    const currency = /** @type {HTMLSelectElement} */ (el('select', { id: 'st-currency' }, [['BRL', 'Real (R$)'], ['USD', 'Dollar (US$)'], ['EUR', 'Euro (€)'], ['GBP', 'Pound (£)']].map(function (c) { return el('option', { value: c[0], text: c[1] }); })));
+    const currency = /** @type {HTMLSelectElement} */ (el('select', { id: 'st-currency' }, CURRENCIES.map(function (c) { return el('option', { value: c[0], text: c[1] }); })));
+    const newCurrencySlot = el('span', { class: 'hr-slot' });
+    /** @type {HTMLSelectElement|null} */
+    let newCurrency = null;
     const defRate = moneyField({ id: 'st-rate', currency: 'BRL', value: null, placeholder: '0.00', disabled: !CAN_WRITE });
     let settings = { currency: 'BRL', default_rate: 0 };
 
@@ -1225,8 +1256,13 @@
       settings = got[1];
       if (!currency.querySelector('option[value="' + settings.currency + '"]')) currency.appendChild(el('option', { value: settings.currency, text: settings.currency }));
       currency.value = settings.currency;
-      rate.setCurrency(settings.currency);
       defRate.setCurrency(settings.currency);
+      // The project currency picker names the workspace currency, so it is rebuilt when that changes.
+      const keep = newCurrency ? newCurrency.value : '';
+      newCurrency = currencySelect({ id: 'np-currency', value: keep === settings.currency ? '' : keep, workspace: settings.currency });
+      newCurrency.addEventListener('change', function () { rate.setCurrency(newCurrency.value || settings.currency); });
+      newCurrencySlot.replaceChildren(newCurrency);
+      rate.setCurrency(newCurrency.value || settings.currency);
       if (document.activeElement !== defRate.input) defRate.input.value = settings.default_rate ? settings.default_rate.toFixed(2) : '';
       clientList.replaceChildren.apply(clientList, projects.map(function (p) { return p.client; }).filter(function (c, i, a) { return c && a.indexOf(c) === i; }).map(function (c) { return el('option', { value: c }); }));
       if (!projects.length) {
@@ -1241,7 +1277,7 @@
           ])]),
           el('td', { class: 'wrap', text: p.client || '—' }),
           el('td', {}, [p.billable ? el('span', { class: 'badge badge-sky', text: 'Billable' }) : el('span', { class: 'muted', text: '—' })]),
-          el('td', {}, [el('span', { class: p.hourly_rate === null ? 'hr-num muted' : 'hr-num', text: p.hourly_rate === null ? 'default' : money(p.hourly_rate, settings.currency) })]),
+          el('td', {}, [el('span', { class: p.hourly_rate === null ? 'hr-num muted' : 'hr-num', text: p.hourly_rate === null ? 'default' : money(p.hourly_rate, p.currency || settings.currency) })]),
           el('td', {}, [el('span', { class: 'hr-num', text: human(p.total_seconds) })]),
           el('td', {}, [el('a', { class: 'btn btn-ghost btn-sm', href: here + '/' + p.id, text: CAN_WRITE ? 'Edit' : 'View' })]),
         ]);
@@ -1264,13 +1300,15 @@
         el('h2', { text: 'New project' }),
         el('form', { class: 'row', onsubmit: safe(async function (ev) {
           ev.preventDefault();
-          await api('/projects', 'POST', { name: name.value, client: client.value, hourly_rate: rate.read(), billable: billable.checked });
+          await api('/projects', 'POST', { name: name.value, client: client.value, hourly_rate: rate.read(), billable: billable.checked, currency: newCurrency ? newCurrency.value : '' });
           name.value = client.value = rate.input.value = '';
+          if (newCurrency) newCurrency.value = '';
           billable.checked = false;
           await load();
         }) }, [
           el('div', { class: 'field' }, [el('label', { for: 'np-name', text: 'Name' }), name]),
           el('div', { class: 'field' }, [el('label', { for: 'np-client', text: 'Client (optional)' }), client]),
+          el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'np-currency', text: 'Currency' }), newCurrencySlot]),
           el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'np-rate', text: 'Hourly rate' }), rate.wrap]),
           el('label', { class: 'hr-check hr-check-row', for: 'np-bill' }, [billable, ' Billable by default']),
           el('div', { class: 'field hr-field-btn' }, [el('button', { type: 'submit', text: 'Create' })]),
@@ -1286,9 +1324,9 @@
       ]),
       el('div', { class: 'card' }, [
         el('h2', { text: 'Billing' }),
-        el('span', { class: 'muted', text: 'The amount of a billable entry is hours × the project hourly rate. Projects without their own rate use the default below. Changing a rate recalculates everything already logged.' }),
+        el('span', { class: 'muted', text: 'The amount of a billable entry is hours × the project hourly rate. Projects without their own rate use the default below. A project for a client abroad can have its own currency, set on the project. Changing a rate recalculates everything already logged.' }),
         el('div', { class: 'row' }, [
-          el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'st-currency', text: 'Currency' }), currency]),
+          el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'st-currency', text: 'Workspace currency' }), currency]),
           el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'st-rate', text: 'Default hourly rate' }), defRate.wrap]),
         ]),
       ])
@@ -1321,7 +1359,31 @@
     const client = /** @type {HTMLInputElement} */ (el('input', { type: 'text', id: 'pj-client', maxlength: '80', list: 'pj-clients', autocomplete: 'off', value: p.client, disabled: off }));
     const custom = /** @type {HTMLInputElement} */ (el('input', { type: 'color', class: 'hr-swatch-custom', value: p.color, disabled: off, 'aria-label': 'Custom color', title: 'Another color' }));
     const billable = /** @type {HTMLInputElement} */ (el('input', { type: 'checkbox', id: 'pj-bill', checked: p.billable, disabled: off }));
-    const rate = moneyField({ id: 'pj-rate', currency: settings.currency, value: p.hourly_rate, placeholder: 'default', disabled: off });
+    const rate = moneyField({ id: 'pj-rate', currency: p.currency || settings.currency, value: p.hourly_rate, placeholder: 'default', disabled: off });
+    const projCurrency = currencySelect({ id: 'pj-currency', value: p.currency, workspace: settings.currency, disabled: off });
+    projCurrency.addEventListener('change', function () {
+      rate.setCurrency(projCurrency.value || settings.currency);
+      rate.input.placeholder = projCurrency.value ? '0.00' : 'default';
+    });
+    rate.input.placeholder = p.currency ? '0.00' : 'default';
+    // "Billable by default" only reaches new entries; this offers to bring the existing ones along.
+    const applyOld = /** @type {HTMLInputElement} */ (el('input', { type: 'checkbox', id: 'pj-apply' }));
+    const applyText = el('span', {});
+    const applyRow = el('label', { class: 'hr-check hr-check-lg hr-apply', for: 'pj-apply' }, [applyOld, applyText]);
+    const timeNote = el('span', { class: 'muted' });
+
+    /**
+     * Shows the offer only when some of this person's entries disagree with the checkbox.
+     * @param {boolean} [suggest] True right after the user toggled the checkbox: the offer comes ticked.
+     * @returns {void}
+     */
+    function paintApply(suggest) {
+      const differ = billable.checked ? p.entries - p.billable_entries : p.billable_entries;
+      applyRow.hidden = off || !differ;
+      applyText.textContent = ' Also mark my ' + differ + ' existing ' + (differ === 1 ? 'entry' : 'entries') + ' on this project as ' + (billable.checked ? 'billable' : 'non-billable');
+      applyOld.checked = !applyRow.hidden && !!suggest;
+    }
+    billable.addEventListener('change', function () { paintApply(true); });
     const swatches = el('div', { class: 'hr-swatches', role: 'radiogroup', 'aria-label': 'Color' });
     let color = p.color;
 
@@ -1340,6 +1402,8 @@
     function paintState() {
       archiveBtn.textContent = p.archived ? 'Restore project' : 'Archive project';
       if (heading) heading.textContent = p.name;
+      timeNote.textContent = 'Your time on this project: ' + human(p.total_seconds) + ' in ' + p.entries + (p.entries === 1 ? ' entry' : ' entries') + ', ' + p.billable_entries + ' billable';
+      paintApply();
       document.title = p.name + ' · Projects';
     }
     archiveBtn.addEventListener('click', safe(async function () {
@@ -1354,9 +1418,11 @@
       off ? el('p', { class: 'alert alert-info', text: 'Your role in this workspace is read-only.' }) : null,
       el('form', { onsubmit: safe(async function (ev) {
         ev.preventDefault();
-        p = await api('/projects/' + id, 'PATCH', { name: name.value, client: client.value, color: color, billable: billable.checked, hourly_rate: rate.read() });
+        if (projCurrency.value && rate.read() === null) throw new Error('A project in its own currency needs its own hourly rate.');
+        p = await api('/projects/' + id, 'PATCH', { name: name.value, client: client.value, color: color, billable: billable.checked, hourly_rate: rate.read(), currency: projCurrency.value, apply_to_entries: applyOld.checked });
+        const changed = p.entries_updated;
         paintState();
-        toast('Project saved.');
+        toast(changed ? 'Project saved. ' + changed + (changed === 1 ? ' entry' : ' entries') + ' updated.' : 'Project saved.');
       }) }, [
         el('div', { class: 'card' }, [
           el('h2', { text: 'Details' }),
@@ -1369,13 +1435,17 @@
         el('div', { class: 'card' }, [
           el('h2', { text: 'Billing' }),
           el('label', { class: 'hr-check hr-check-lg', for: 'pj-bill' }, [billable, ' Billable by default']),
-          el('p', { class: 'muted', text: 'New entries on this project start as billable. You can still switch the “$” on any single entry. Entries that already exist are not changed.' }),
-          el('div', { class: 'field hr-field-sm hr-field-top' }, [el('label', { for: 'pj-rate', text: 'Hourly rate' }), rate.wrap]),
-          el('p', { class: 'muted', text: 'Leave it empty to use the workspace default (' + money(settings.default_rate, settings.currency) + '). Changing it reprices every billable entry already logged on this project.' }),
+          el('p', { class: 'muted', text: 'New entries on this project start as billable. You can still switch the “$” on any single entry. Entries that already exist only change if you ask below.' }),
+          applyRow,
+          el('div', { class: 'row hr-field-top' }, [
+            el('div', { class: 'field hr-field-md' }, [el('label', { for: 'pj-currency', text: 'Currency' }), projCurrency]),
+            el('div', { class: 'field hr-field-sm' }, [el('label', { for: 'pj-rate', text: 'Hourly rate' }), rate.wrap]),
+          ]),
+          el('p', { class: 'muted', text: 'Without a rate, the project uses the workspace default (' + money(settings.default_rate, settings.currency) + '). A project in another currency needs its own rate, and its amounts show in that currency in the reports. Changing the rate reprices every billable entry already logged on this project.' }),
         ]),
         el('div', { class: 'hr-save' }, [
           off ? null : el('button', { type: 'submit', text: 'Save changes' }),
-          el('span', { class: 'muted', text: 'Your time on this project: ' + human(p.total_seconds) }),
+          timeNote,
         ]),
       ]),
       off ? null : el('div', { class: 'card' }, [

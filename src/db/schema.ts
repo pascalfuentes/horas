@@ -262,6 +262,8 @@ export const timeProject = sqliteTable(
     billable: integer("billable", { mode: "boolean" }).notNull().default(false),
     /** Hourly rate. NULL = uses the workspace default (migration 0007). */
     hourlyRate: real("hourlyRate"),
+    /** ISO 4217 code this project is billed in; null = the workspace currency (migration 0009). */
+    currency: text("currency"),
   },
   (t) => [uniqueIndex("time_project_workspace_name_idx").on(t.workspaceId, t.name)],
 );

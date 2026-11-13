@@ -36,6 +36,7 @@ export type ImportProject = {
   archived?: boolean;
   billable?: boolean;
   hourly_rate?: number | null;
+  currency?: string | null;
 };
 
 export type ImportError = { row: number; message: string };
@@ -301,6 +302,7 @@ function fromBackup(data: Record<string, unknown>): Parsed {
       archived: p.archived === true,
       billable: p.billable === true,
       hourly_rate: typeof p.hourly_rate === "number" ? p.hourly_rate : null,
+      currency: typeof p.currency === "string" ? p.currency : null,
     }));
 
   const s = (data.settings ?? null) as Record<string, unknown> | null;

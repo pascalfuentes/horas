@@ -185,6 +185,12 @@ a.hr-proj-link:hover span:nth-child(2) { text-decoration: underline; text-underl
 .hr-archived { opacity: 0.6; }
 .row > .hr-field-btn { flex: 0 0 auto; min-width: 0; align-self: flex-end; }
 .row > .hr-field-sm { min-width: 0; flex: 0 0 190px; }
+.row > .hr-field-md { min-width: 0; flex: 0 0 260px; }
+.hr-slot { display: flex; width: 100%; }
+.hr-slot .sel { display: flex; width: 100%; }
+.hr-apply[hidden] { display: none; }
+.hr-apply { padding: 10px 14px; border-radius: var(--radius); background: var(--accent-subtle); width: fit-content; }
+.card.hr-stat strong { white-space: normal; overflow-wrap: anywhere; }
 .hr-field-sm { max-width: 240px; }
 .hr-field-top { margin-top: 16px; }
 .hr-check-row { align-self: flex-end; padding-bottom: 12px; color: var(--text); }

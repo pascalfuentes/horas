@@ -98,7 +98,7 @@ export async function handleHoras(
     if (resource === "export.csv" && !id && method === "GET") {
       const entries = await store.listEntries({ ...filter, limit: 5000 });
       const lines = [
-        ["id", "description", "project", "client", "tags", "billable", "start", "end", "hours", "amount"].join(","),
+        ["id", "description", "project", "client", "tags", "billable", "start", "end", "hours", "amount", "currency"].join(","),
         ...entries.map((e) =>
           [
             e.id,
@@ -111,6 +111,7 @@ export async function handleHoras(
             e.end ?? "",
             (e.duration_seconds / 3600).toFixed(2),
             e.amount.toFixed(2),
+            e.currency,
           ].join(","),
         ),
       ];
