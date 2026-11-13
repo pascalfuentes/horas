@@ -719,11 +719,38 @@
       done.forEach(function (e) { (groups[dayKey(new Date(e.start))] = groups[dayKey(new Date(e.start))] || []).push(e); });
       list.replaceChildren.apply(list, Object.keys(groups).sort().reverse().map(function (key) {
         const total = groups[key].reduce(function (a, e) { return a + e.duration_seconds; }, 0);
+        const earned = dayAmounts(groups[key]);
         return el('section', { class: 'card hr-day' }, [
-          el('header', {}, [el('h2', { text: dayLabel(key) }), el('span', { class: 'badge badge-sun', text: human(total) })]),
+          el('header', {}, [el('h2', { text: dayLabel(key) }), el('span', { class: 'hr-day-totals' }, [
+            earned.length ? el('span', { class: 'badge badge-sky', title: 'Billable amount of the day', text: moneyList(earned, '') }) : null,
+            el('span', { class: 'badge badge-sun', text: human(total) }),
+          ])]),
           el('ul', {}, groups[key].map(row)),
         ]);
       }));
+    }
+
+    /**
+     * What a day is worth: the billable amounts of its entries, added up per
+     * currency (amounts in different currencies are never added together).
+     * @param {object[]} entries Entries of one day.
+     * @returns {Array<{currency: string, amount: number}>}
+     */
+    function dayAmounts(entries) {
+      /** @type {Object<string, number>} */
+      const sums = {};
+      entries.forEach(function (e) { if (e.amount) sums[e.currency] = (sums[e.currency] || 0) + e.amount; });
+      return Object.keys(sums).sort().map(function (c) { return { currency: c, amount: Math.round(sums[c] * 100) / 100 }; });
+    }
+
+    /**
+     * The money one entry is worth, or a dash when it is not billable.
+     * @param {object} e Entry.
+     * @returns {HTMLElement}
+     */
+    function amountCell(e) {
+      if (!e.amount) return el('span', { class: 'hr-amt hr-amt-none', title: e.billable ? 'Billable, but there is no hourly rate' : 'Not billable', text: '–' });
+      return el('span', { class: 'hr-amt', title: 'Billable amount of this entry', text: money(e.amount, e.currency) });
     }
 
     /**
@@ -764,6 +791,7 @@
           ]),
           el('span', { class: 'hr-when muted', text: hhmm(e.start) + ' – ' + hhmm(e.end) }),
           el('strong', { class: 'hr-dur', text: clock(e.duration_seconds) }),
+          amountCell(e),
         ]);
       }
 
@@ -831,6 +859,7 @@
         ]),
         el('span', { class: 'hr-times' }, [fromIn, el('span', { class: 'muted', text: '–' }), toIn]),
         durIn,
+        amountCell(e),
         el('button', { type: 'button', class: 'hr-play', title: 'Continue this entry', 'aria-label': 'Continue', onclick: safe(async function () {
           await api('/timer/start', 'POST', { description: e.description, project_id: e.project_id || 0, tags: e.tags, billable: e.billable });
           await load();

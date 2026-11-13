@@ -51,6 +51,9 @@ button.hr-link:hover { background: var(--surface-2); }
 .hr-what > span.muted { font-weight: 400; }
 .hr-what small { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hr-when { font-size: 0.875rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hr-amt { flex: none; min-width: 9ch; font-family: var(--mono); font-size: 0.875rem; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.hr-amt-none { color: var(--text-muted); }
+.hr-day-totals { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .hr-dur { font-family: var(--mono); font-size: 0.9375rem; font-weight: 500; font-variant-numeric: tabular-nums; min-width: 7ch; text-align: right; }
 button.hr-play { width: 32px; height: 32px; padding: 0; background: var(--surface-2); border: 0; flex: none; }
 button.hr-play:hover { background: var(--border-strong); }
