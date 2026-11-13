@@ -1,5 +1,5 @@
 ---
-import Auth from "~/layouts/Auth.astro";
+import ErrorScreen from "~/layouts/ErrorScreen.astro";
 export const prerender = false;
 
 /**
@@ -10,10 +10,13 @@ export const prerender = false;
 const { error } = Astro.props;
 if (error) console.error("Unhandled error:", error);
 ---
-<Auth title="Something went wrong" heading="Something went wrong" subheading="The failure was logged on our side.">
-  <p class="muted">
+<ErrorScreen code="500" title="Something went wrong" heading="Something went wrong" lead="We lost track of time for a moment. The failure was logged on our side.">
+  <p>
     Try again in a moment. If it keeps happening, let an administrator know — the exact time
     helps find the log entry.
   </p>
-  <a class="btn btn-block" href="/login">Back to start</a>
-</Auth>
+  <Fragment slot="actions">
+    <a class="btn" href="/dashboard">Try again</a>
+    <a class="btn btn-ghost" href="/">Back to the home page</a>
+  </Fragment>
+</ErrorScreen>

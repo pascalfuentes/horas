@@ -3,15 +3,27 @@ import HeadIcons from "~/components/HeadIcons.astro";
 import BusyForms from "~/components/BusyForms.astro";
 import Theme from "~/components/Theme.astro";
 import Alert from "~/components/Alert.astro";
+import Logo from "~/components/Logo.astro";
+import { APP_NAME } from "~/config";
 import "~/styles/global.css";
 
 interface Props {
   title: string;
   heading: string;
   subheading?: string;
+  /** Headline of the brand panel next to the form. */
+  pitch?: string;
+  /** One or two sentences under that headline. */
+  pitchText?: string;
 }
 
-const { title, heading, subheading } = Astro.props;
+const {
+  title,
+  heading,
+  subheading,
+  pitch = "The time tracker you don't need to open.",
+  pitchText = "Start a timer, log hours and ask for reports from the web or straight from your AI.",
+} = Astro.props;
 const params = Astro.url.searchParams;
 ---
 
@@ -28,12 +40,34 @@ const params = Astro.url.searchParams;
   </head>
   <body>
     <main class="auth-shell">
-      <div class="auth-card">
-        <h1>{heading}</h1>
-        {subheading && <p class="muted">{subheading}</p>}
-        <Alert error={params.get("e")} success={params.get("ok")} />
-        <slot />
-      </div>
+      <!-- The brand panel: on a phone only the logo stays, above the form. -->
+      <aside class="auth-brand">
+        <a class="brand" href="/" title={APP_NAME}><Logo />{APP_NAME}</a>
+        <div class="auth-pitch">
+          <h2>{pitch}</h2>
+          <p>{pitchText}</p>
+          <div class="auth-demo" aria-hidden="true">
+            <div class="auth-demo-bar">
+              <span class="auth-demo-what">Site review</span>
+              <span class="auth-demo-chip"><i style="background:#5dcdf1"></i>Acme</span>
+              <span class="auth-demo-clock">0:42:17</span>
+              <span class="auth-demo-stop">Stop</span>
+            </div>
+            <div class="auth-demo-row"><i style="background:#4cc98c"></i><span>Home page layout</span><b>2:15:40</b></div>
+            <div class="auth-demo-row"><i style="background:#fd976d"></i><span>Kickoff meeting</span><b>1:30:00</b></div>
+          </div>
+        </div>
+        <p class="auth-brand-foot">Free · Built to work with AI</p>
+      </aside>
+
+      <section class="auth-main">
+        <div class="auth-card">
+          <h1>{heading}</h1>
+          {subheading && <p class="muted">{subheading}</p>}
+          <Alert error={params.get("e")} success={params.get("ok")} />
+          <slot />
+        </div>
+      </section>
     </main>
   </body>
 </html>

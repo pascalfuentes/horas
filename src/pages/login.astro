@@ -9,7 +9,13 @@ export const prerender = false;
 const next = safeNext(Astro.url.searchParams.get("next") ?? "");
 ---
 
-<Auth title="Log in" heading="Log in" subheading="Access your account to continue.">
+<Auth
+  title="Log in"
+  heading="Log in"
+  subheading="Access your account to continue."
+  pitch="Welcome back. The clock kept your place."
+  pitchText="Pick up the timer where you left it, or ask your AI how the week went."
+>
   <form method="post" action="/api/login" class="stack">
     <input type="hidden" name="next" value={next} />
 

@@ -1,0 +1,48 @@
+---
+/**
+ * Full-page screen for "not found" and "something went wrong".
+ * The status code is drawn large, and every zero in it is the brand stopwatch.
+ */
+import HeadIcons from "~/components/HeadIcons.astro";
+import Theme from "~/components/Theme.astro";
+import Logo from "~/components/Logo.astro";
+import { APP_NAME } from "~/config";
+import "~/styles/global.css";
+
+interface Props {
+  /** Status code shown large, for example "404". */
+  code: string;
+  title: string;
+  heading: string;
+  /** The short line under the heading. */
+  lead: string;
+}
+
+const { code, title, heading, lead } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <HeadIcons />
+    <title>{title}</title>
+    <Theme />
+  </head>
+  <body>
+    <main class="err-shell">
+      <a class="brand" href="/" title={APP_NAME}><Logo />{APP_NAME}</a>
+      <div class="err-body">
+        <p class="err-code" aria-label={code}>
+          {code.split("").map((digit) => (digit === "0" ? <Logo /> : <span aria-hidden="true">{digit}</span>))}
+        </p>
+        <h1>{heading}</h1>
+        <p class="err-lead">{lead}</p>
+        <div class="err-more muted"><slot /></div>
+        <div class="err-actions"><slot name="actions" /></div>
+      </div>
+    </main>
+  </body>
+</html>

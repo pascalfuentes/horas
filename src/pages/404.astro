@@ -1,11 +1,14 @@
 ---
-import Auth from "~/layouts/Auth.astro";
+import ErrorScreen from "~/layouts/ErrorScreen.astro";
 export const prerender = false;
 ---
-<Auth title="Page not found" heading="Page not found" subheading="The address you opened does not exist here.">
-  <p class="muted">
+<ErrorScreen code="404" title="Page not found" heading="Page not found" lead="This page clocked out. The address you opened does not exist here.">
+  <p>
     If you got here from an invite or password reset link, it has probably already expired
     or been used. Request a new one.
   </p>
-  <a class="btn btn-block" href="/login">Go to login</a>
-</Auth>
+  <Fragment slot="actions">
+    <a class="btn" href="/dashboard">Go to the app</a>
+    <a class="btn btn-ghost" href="/">Back to the home page</a>
+  </Fragment>
+</ErrorScreen>
