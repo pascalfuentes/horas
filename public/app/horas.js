@@ -710,6 +710,20 @@
         el('span', { class: 'badge badge-sky', text: 'This week · ' + human(st.week_seconds) }),
       ] : []);
       const done = state.entries.filter(function (e) { return !e.running; });
+      // Average and busiest day of what the list shows (the last `windowDays` days).
+      /** @type {Object<string, number>} */
+      const perDay = {};
+      done.forEach(function (e) { const k = dayKey(new Date(e.start)); perDay[k] = (perDay[k] || 0) + e.duration_seconds; });
+      const worked = Object.keys(perDay);
+      if (st && worked.length > 1) {
+        const sum = worked.reduce(function (a, k) { return a + perDay[k]; }, 0);
+        const top = worked.slice().sort(function (x, y) { return perDay[y] - perDay[x]; })[0];
+        const scope = 'In the last ' + windowDays + ' days, counting the ' + worked.length + ' days with time';
+        totals.append(
+          el('span', { class: 'badge', title: scope, text: 'Daily average · ' + human(Math.round(sum / worked.length)) }),
+          el('span', { class: 'badge badge-admin', title: scope, text: 'Busiest day · ' + dayLabel(top) + ' · ' + human(perDay[top]) })
+        );
+      }
       if (!done.length) {
         list.replaceChildren(el('p', { class: 'empty', text: 'No entries in the last ' + windowDays + ' days. Start the timer above or ask your AI to log time for you.' }));
         return;
@@ -1104,16 +1118,103 @@
     }
 
     /**
+     * Monday of the week a day belongs to, as YYYY-MM-DD.
+     * @param {string} key YYYY-MM-DD
+     * @returns {string}
+     */
+    function weekOf(key) {
+      const p = key.split('-').map(Number);
+      const d = new Date(p[0], p[1] - 1, p[2]);
+      d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+      return dayKey(d);
+    }
+
+    /**
+     * The numbers behind the boxes: what the hover of each one explains.
+     * A period of up to 31 days is averaged per day with time; a longer one,
+     * per week with time. Empty days and weeks are left out, so an average
+     * describes a real working day (or week).
+     * @param {object} s Response of /summary.
+     * @returns {Object<string, Array<Array<string>>>} Lines [label, value] per box.
+     */
+    function insights(s) {
+      const days = s.by_day.filter(function (d) { return d.seconds > 0; });
+      const a = period.from().split('-').map(Number);
+      const b = period.to().split('-').map(Number);
+      const span = Math.round((new Date(b[0], b[1] - 1, b[2]).getTime() - new Date(a[0], a[1] - 1, a[2]).getTime()) / 86400000) + 1;
+      const weekly = span > 31;
+      const weeks = days.map(function (d) { return weekOf(d.day); }).filter(function (w, i, all) { return all.indexOf(w) === i; });
+      const units = Math.max(1, weekly ? weeks.length : days.length);
+      const per = weekly ? 'week' : 'day';
+      const avg = 'Average per ' + per;
+      const none = [['', 'Nothing tracked in this period.']];
+      if (!s.entries) return { total: none, billable: none, amount: none, entries: none };
+
+      const busiest = days.slice().sort(function (x, y) { return y.seconds - x.seconds; })[0];
+      const share = function (part, whole) { return whole ? Math.round((part / whole) * 100) + '%' : '0%'; };
+      const total = [
+        [avg, human(Math.round(s.total_seconds / units))],
+        ['Busiest day', dayLabel(busiest.day) + ' · ' + human(busiest.seconds)],
+        [weekly ? 'Weeks with time' : 'Days with time', (weekly ? weeks.length : days.length) + ' of ' + (weekly ? Math.ceil(span / 7) : span)],
+      ];
+      const billable = [
+        ['Share of the time', share(s.billable_seconds, s.total_seconds)],
+        [avg, human(Math.round(s.billable_seconds / units))],
+        ['Non-billable', human(s.total_seconds - s.billable_seconds)],
+      ];
+
+      // Money is never added across currencies, so each currency gets its own lines.
+      const amount = [];
+      s.billable_amounts.forEach(function (sum) {
+        const tag = s.billable_amounts.length > 1 ? ' (' + sum.currency + ')' : '';
+        const best = function (list, name) {
+          return list.map(function (g) {
+            const m = (g.amounts || []).filter(function (x) { return x.currency === sum.currency; })[0];
+            return { name: name(g), amount: m ? m.amount : 0 };
+          }).sort(function (x, y) { return y.amount - x.amount; })[0];
+        };
+        const project = best(s.by_project, function (g) { return g.project || 'No project'; });
+        const client = best(s.by_client, function (g) { return g.client || 'No client'; });
+        if (project && project.amount) amount.push(['Top project' + tag, project.name + ' · ' + money(project.amount, sum.currency) + ' · ' + share(project.amount, sum.amount)]);
+        if (client && client.amount) amount.push(['Top client' + tag, client.name + ' · ' + money(client.amount, sum.currency) + ' · ' + share(client.amount, sum.amount)]);
+        amount.push([avg + tag, money(sum.amount / units, sum.currency)]);
+        if (s.billable_seconds) amount.push(['Per billable hour' + tag, money(sum.amount / (s.billable_seconds / 3600), sum.currency)]);
+      });
+      if (!amount.length) amount.push(['', 'No billable amount in this period. Mark entries as billable and give the project an hourly rate.']);
+
+      const most = s.by_project.slice().sort(function (x, y) { return y.entries - x.entries; })[0];
+      const entries = [
+        [avg, String(Math.round((s.entries / units) * 10) / 10)],
+        ['Average length', human(Math.round(s.total_seconds / s.entries))],
+        ['Most entries', (most.project || 'No project') + ' · ' + most.entries],
+      ];
+      return { total: total, billable: billable, amount: amount, entries: entries };
+    }
+
+    /**
+     * The four boxes at the top. Each one explains itself on hover (or on
+     * focus, with the keyboard): averages, the busiest day, who pays the most.
      * @param {object} s Response of /summary.
      * @returns {HTMLElement}
      */
     function stats(s) {
-      const stat = function (label, value) { return el('div', { class: 'card hr-stat' }, [el('small', { class: 'muted', text: label }), el('strong', { text: value })]); };
+      const tips = insights(s);
+      let n = 0;
+      const stat = function (label, value, lines) {
+        const id = 'hr-tip-' + (++n);
+        return el('div', { class: 'card hr-stat', tabindex: '0', 'aria-describedby': id }, [
+          el('small', { class: 'muted', text: label }),
+          el('strong', { text: value }),
+          el('div', { class: 'hr-tip', id: id, role: 'tooltip' }, lines.map(function (line) {
+            return el('p', {}, line[0] ? [el('span', { text: line[0] }), el('b', { text: line[1] })] : [el('span', { text: line[1] })]);
+          })),
+        ]);
+      };
       return el('div', { class: 'hr-stats' }, [
-        stat('Total', human(s.total_seconds)),
-        stat('Billable', human(s.billable_seconds)),
-        stat('Amount', moneyList(s.billable_amounts, s.currency)),
-        stat('Entries', String(s.entries)),
+        stat('Total', human(s.total_seconds), tips.total),
+        stat('Billable', human(s.billable_seconds), tips.billable),
+        stat('Amount', moneyList(s.billable_amounts, s.currency), tips.amount),
+        stat('Entries', String(s.entries), tips.entries),
       ]);
     }
 
