@@ -3,6 +3,7 @@ import HeadIcons from "~/components/HeadIcons.astro";
 import BusyForms from "~/components/BusyForms.astro";
 import Theme from "~/components/Theme.astro";
 import NavCollapse from "~/components/NavCollapse.astro";
+import WorkspacePicker from "~/components/WorkspacePicker.astro";
 import Alert from "~/components/Alert.astro";
 import PendingInvites from "~/components/PendingInvites.astro";
 import Logo from "~/components/Logo.astro";
@@ -110,6 +111,7 @@ const groups = [
     <title>{title}</title>
     <Theme />
     <NavCollapse />
+    <WorkspacePicker />
     <BusyForms />
     <script is:inline src="/app/select.js" defer></script>
     <script is:inline src="/app/datepicker.js" defer></script>
@@ -127,16 +129,24 @@ const groups = [
         <button type="button" class="ws-mini" data-nav-toggle data-nav-keep-label aria-label={`${current ? current.workspaceName : "Choose workspace"}: expand menu to switch workspace`} title={current ? current.workspaceName : "Choose workspace"}>
           {(current ? current.workspaceName : "?").trim().charAt(0).toUpperCase()}
         </button>
-        <details class="ws-picker" open={!current}>
-          <summary>{current ? current.workspaceName : "Choose workspace"}</summary>
-          {myWorkspaces.map((w) => (
-            <a href={`/w/${w.workspaceSlug}/time`} aria-current={w.workspaceSlug === current?.workspaceSlug ? "true" : undefined}>
-              {w.workspaceName}
-              <small class="muted"> · {ROLE_LABELS[w.role]}</small>
-            </a>
-          ))}
-          <a href="/workspaces" aria-current={path === "/workspaces" ? "true" : undefined}>Manage workspaces</a>
-          <a href="/workspaces#create">+ New workspace</a>
+        {/* A real dropdown: the list floats over the menu instead of pushing it down. */}
+        <details class="ws-picker" data-ws-picker>
+          <summary title={current ? current.workspaceName : "Choose workspace"}>
+            <span class="ws-current">{current ? current.workspaceName : "Choose workspace"}</span>
+          </summary>
+          <div class="ws-menu">
+            {myWorkspaces.map((w) => (
+              <a href={`/w/${w.workspaceSlug}/time`} aria-current={w.workspaceSlug === current?.workspaceSlug ? "true" : undefined}>
+                <span class="ws-opt">
+                  <span class="ws-opt-name">{w.workspaceName}</span>
+                  <small class="muted">{ROLE_LABELS[w.role]}</small>
+                </span>
+              </a>
+            ))}
+            <hr />
+            <a href="/workspaces" aria-current={path === "/workspaces" ? "true" : undefined}>Manage workspaces</a>
+            <a href="/workspaces#create">+ New workspace</a>
+          </div>
         </details>
 
         {groups.map((g) => (

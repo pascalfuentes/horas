@@ -1,0 +1,91 @@
+---
+/**
+ * Behaviour of the workspace picker in the sidebar, placed in the dashboard's
+ * <head>.
+ *
+ * The picker is a <details> whose list floats over the menu, so it opens and
+ * follows its links with no JavaScript at all. What a <details> does not do by
+ * itself is behave like a dropdown once it is open: close when the person
+ * clicks or tabs somewhere else, close on Escape, and walk the list with the
+ * arrow keys. That is all this script adds.
+ */
+---
+
+<script is:inline>
+  (function () {
+    /** @returns {HTMLDetailsElement|null} The picker of this page, if it has one. */
+    function picker() {
+      return document.querySelector("[data-ws-picker]");
+    }
+
+    /**
+     * @param {HTMLDetailsElement} el
+     * @returns {HTMLElement[]} The links of the list, in order.
+     */
+    function links(el) {
+      return Array.prototype.slice.call(el.querySelectorAll(".ws-menu a"));
+    }
+
+    /**
+     * Closes the list.
+     * @param {HTMLDetailsElement} el
+     * @param {boolean} refocus Whether the focus goes back to the button.
+     * @returns {void}
+     */
+    function close(el, refocus) {
+      if (!el.open) return;
+      el.open = false;
+      if (refocus) el.querySelector("summary").focus();
+    }
+
+    /**
+     * Closes the list when the event happened outside the picker.
+     * @param {Event} ev
+     * @returns {void}
+     */
+    function closeIfOutside(ev) {
+      var el = picker();
+      if (el && el.open && !el.contains(ev.target)) close(el, false);
+    }
+
+    /**
+     * Escape closes; the arrows, Home and End walk the list (opening it first).
+     * @param {KeyboardEvent} ev
+     * @returns {void}
+     */
+    function onKey(ev) {
+      var el = picker();
+      if (!el) return;
+      var inside = el.contains(document.activeElement);
+      if (ev.key === "Escape") {
+        if (!el.open) return;
+        ev.preventDefault();
+        close(el, inside);
+        return;
+      }
+      if (!inside) return;
+      if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp" && ev.key !== "Home" && ev.key !== "End") return;
+      var list = links(el);
+      if (!list.length) return;
+      ev.preventDefault();
+      el.open = true;
+      var at = list.indexOf(document.activeElement);
+      var last = list.length - 1;
+      var next;
+      if (ev.key === "Home") next = 0;
+      else if (ev.key === "End") next = last;
+      else if (ev.key === "ArrowDown") next = at < 0 || at === last ? 0 : at + 1;
+      else next = at <= 0 ? last : at - 1;
+      list[next].focus();
+    }
+
+    document.addEventListener("click", closeIfOutside);
+    document.addEventListener("focusin", closeIfOutside);
+    document.addEventListener("keydown", onKey);
+    // Coming back with the browser's Back button would show the list still open.
+    window.addEventListener("pageshow", function () {
+      var el = picker();
+      if (el) el.open = false;
+    });
+  })();
+</script>
