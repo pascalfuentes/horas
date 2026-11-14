@@ -1,31 +1,100 @@
 ---
 import PendingInvites from "~/components/PendingInvites.astro";
 import Dashboard from "~/layouts/Dashboard.astro";
+import { formatDateTime } from "~/lib/format";
 import { pendingInvitesFor } from "~/lib/members";
-import { ROLE_DESCRIPTIONS, ROLE_LABELS } from "~/lib/permissions";
-import { userWorkspaces } from "~/lib/workspaces";
+import { can, PERMISSIONS, ROLE_DESCRIPTIONS, ROLE_LABELS } from "~/lib/permissions";
+import { workspaceSummaries } from "~/lib/workspaces";
 
 export const prerender = false;
 
 const me = Astro.locals.user!;
-const mine = await userWorkspaces(Astro.locals.env, me.id);
+const mine = await workspaceSummaries(Astro.locals.env, me.id);
 
 // Here the list comes in full: this is the page that answers "where do I
 // belong", and a pending invite is part of that answer. The layout omits the
 // top notice on this route precisely to avoid duplicating it.
 const invites = await pendingInvitesFor(Astro.locals.env, me.email);
+
+/**
+ * The only owner cannot leave: the workspace would be left without one.
+ * Everyone else can, and the server checks the same rule again.
+ */
+const canLeave = (w: (typeof mine)[number]) => !(w.role === "owner" && w.ownerCount === 1);
 ---
 
 <Dashboard
   title="Workspaces"
   heading="Your workspaces"
-  description="Each workspace has its own data, members and permissions."
+  description="Open, manage or leave the workspaces you belong to, and create new ones."
 >
   {invites.length > 0 && (
     <PendingInvites invites={invites} verified={me.emailVerified} />
   )}
 
   <div class="card">
+    <h2>Where you belong ({mine.length})</h2>
+    <span class="muted">
+      Each workspace has its own data, members and permissions. What you can do in each one depends
+      on your role there.
+    </span>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Workspace</th><th>Your role</th><th>People</th><th>Member since</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+          {mine.map((w) => (
+            <tr>
+              <td>
+                <a class="ws-name" href={`/w/${w.workspaceSlug}`}><strong>{w.workspaceName}</strong></a><br />
+                <small class="muted">/w/{w.workspaceSlug}</small>
+              </td>
+              <td class="wrap">
+                <span class={`badge ${w.role === "owner" ? "badge-admin" : ""}`}>{ROLE_LABELS[w.role]}</span><br />
+                <small class="muted">{ROLE_DESCRIPTIONS[w.role]}</small>
+              </td>
+              <td>{w.memberCount === 1 ? "Only you" : `${w.memberCount} people`}</td>
+              <td>{formatDateTime(w.since)}</td>
+              <td>
+                <div class="row-actions">
+                  <a class="btn btn-sm" href={`/w/${w.workspaceSlug}`}>Open</a>
+                  {can(w.role, PERMISSIONS.MEMBERS_READ) && (
+                    <a class="btn btn-ghost btn-sm" href={`/w/${w.workspaceSlug}/members`}>Members</a>
+                  )}
+                  {can(w.role, PERMISSIONS.WORKSPACE_READ) && (
+                    <a class="btn btn-ghost btn-sm" href={`/w/${w.workspaceSlug}/settings`}>Settings</a>
+                  )}
+                  {canLeave(w) ? (
+                    <form
+                      method="post"
+                      action={`/api/w/${w.workspaceSlug}/members`}
+                      class="inline-form"
+                      data-confirm={`Leave ${w.workspaceName}? You lose access to its content, and to come back someone has to invite you again.`}
+                    >
+                      <input type="hidden" name="action" value="leave" />
+                      <button class="btn-danger btn-sm" type="submit" data-busy="Leaving…">Leave</button>
+                    </form>
+                  ) : (
+                    <button
+                      class="btn-danger btn-sm"
+                      type="button"
+                      disabled
+                      title="You are the only owner. Transfer ownership in Members before leaving, or delete the workspace in Settings."
+                    >
+                      Leave
+                    </button>
+                  )}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" id="create">
     <h2>Create workspace</h2>
     <span class="muted">You join as owner and can invite anyone you like later.</span>
 
@@ -36,24 +105,5 @@ const invites = await pendingInvitesFor(Astro.locals.env, me.email);
       </div>
       <div><button type="submit">Create</button></div>
     </form>
-  </div>
-
-  <div class="card">
-    <h2>Where you belong ({mine.length})</h2>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Workspace</th><th>Your role</th><th>What it allows</th><th></th></tr></thead>
-        <tbody>
-          {mine.map((w) => (
-            <tr>
-              <td class="wrap"><strong>{w.workspaceName}</strong><br /><small class="muted">/w/{w.workspaceSlug}</small></td>
-              <td><span class={`badge ${w.role === "owner" ? "badge-admin" : ""}`}>{ROLE_LABELS[w.role]}</span></td>
-              <td class="wrap"><small class="muted">{ROLE_DESCRIPTIONS[w.role]}</small></td>
-              <td><a class="btn btn-ghost btn-sm" href={`/w/${w.workspaceSlug}`}>Open</a></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   </div>
 </Dashboard>

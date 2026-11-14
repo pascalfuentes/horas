@@ -98,6 +98,59 @@ export async function userWorkspaces(env: AppEnv, userId: string): Promise<Membe
     .all();
 }
 
+/** A membership plus what the management screen shows about the workspace. */
+export type WorkspaceSummary = Membership & {
+  /** When the person joined. */
+  since: Date;
+  /** People in the workspace, the person included. */
+  memberCount: number;
+  ownerCount: number;
+};
+
+/**
+ * A person's workspaces with their size: how many people and how many owners.
+ *
+ * The owner count is what decides whether leaving is offered: the only owner
+ * of a workspace cannot leave it without handing ownership over first.
+ */
+export async function workspaceSummaries(env: AppEnv, userId: string): Promise<WorkspaceSummary[]> {
+  const mine = await getDb(env)
+    .select({
+      workspaceId: organization.id,
+      workspaceName: organization.name,
+      workspaceSlug: organization.slug,
+      role: member.role,
+      since: member.createdAt,
+    })
+    .from(member)
+    .innerJoin(organization, eq(organization.id, member.organizationId))
+    .where(eq(member.userId, userId))
+    .orderBy(organization.name)
+    .all();
+  if (mine.length === 0) return [];
+
+  // One pass over the members of those workspaces, found through the person's
+  // own memberships (both sides of the join are indexed).
+  const counts = await env.DB.prepare(
+    `SELECT others."organizationId" AS id,
+            COUNT(*) AS members,
+            SUM(CASE WHEN others."role" = 'owner' THEN 1 ELSE 0 END) AS owners
+       FROM "member" m
+       JOIN "member" others ON others."organizationId" = m."organizationId"
+      WHERE m."userId" = ?1
+      GROUP BY others."organizationId"`,
+  )
+    .bind(userId)
+    .all<{ id: string; members: number; owners: number }>();
+  const byId = new Map((counts.results ?? []).map((row) => [row.id, row]));
+
+  return mine.map((w) => ({
+    ...w,
+    memberCount: Number(byId.get(w.workspaceId)?.members ?? 1),
+    ownerCount: Number(byId.get(w.workspaceId)?.owners ?? 0),
+  }));
+}
+
 /**
  * A person's membership in a workspace, by slug.
  *

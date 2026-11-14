@@ -135,7 +135,8 @@ const groups = [
               <small class="muted"> · {ROLE_LABELS[w.role]}</small>
             </a>
           ))}
-          <a href="/workspaces">+ New workspace</a>
+          <a href="/workspaces" aria-current={path === "/workspaces" ? "true" : undefined}>Manage workspaces</a>
+          <a href="/workspaces#create">+ New workspace</a>
         </details>
 
         {groups.map((g) => (

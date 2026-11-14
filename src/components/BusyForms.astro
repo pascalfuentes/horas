@@ -7,6 +7,9 @@
  * is released if the page comes back from the browser's history, or after a
  * few seconds when the submit turned out to be a file download and the page
  * never navigated.
+ *
+ * A form with `data-confirm="question"` asks that question first and is only
+ * sent on a yes.
  */
 ---
 
@@ -31,6 +34,8 @@
       var form = ev.target;
       // Forms handled by the app script manage their own busy state.
       if (!form || form.tagName !== "FORM" || !form.getAttribute("action")) return;
+      var question = form.getAttribute("data-confirm");
+      if (question && !window.confirm(question)) { ev.preventDefault(); return; }
       // Wait a tick: a button disabled during the event would be left out of the submission.
       setTimeout(function () {
         if (ev.defaultPrevented) return;

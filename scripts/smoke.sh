@@ -281,6 +281,10 @@ echo; echo "$(c 1 'Workspace invitations')"
 post "$ADMIN" /api/workspaces name="Time de Teste" >/dev/null
 WS="$(sql "SELECT slug FROM organization WHERE name='Time de Teste'" | python3 -c 'import sys,json;print(json.load(sys.stdin)[0]["slug"])')"
 check "creating a workspace works"                     "200"                   "$(get "/w/$WS" "$ADMIN")"
+# The page that manages the person's workspaces.
+check "the workspaces page lists the new one"          "yes"                   "$(has /workspaces "$ADMIN" "Time de Teste")"
+check "and says the owner is alone in it"              "yes"                   "$(has /workspaces "$ADMIN" "Only you")"
+check "the only owner is not offered a way out"        "yes"                   "$(has /workspaces "$ADMIN" "You are the only owner")"
 check "admin invites someone as editor"                "ok=ok_invite_sent" "$(post "$ADMIN" "/api/w/$WS/invites" action=invite email=leitor@exemplo.com role=editor)"
 check "inviting again is blocked"                      "e=invite_pending"    "$(post "$ADMIN" "/api/w/$WS/invites" action=invite email=leitor@exemplo.com role=editor)"
 check "inviting as owner is refused"                   "e=invalid_role"      "$(post "$ADMIN" "/api/w/$WS/invites" action=invite email=outra@exemplo.com role=owner)"
@@ -302,6 +306,8 @@ check "accepting with the WRONG account is refused"    "e=not_recipient"  "$(pos
 check "and nobody joined the workspace because of it"  '"n": 1'                "$(sql "SELECT COUNT(*) AS n FROM member m JOIN organization o ON o.id=m.organizationId WHERE o.slug='$WS'")"
 
 check "accepting with the right account works"         "ok=ok_invite_accepted"  "$(post "$VIEWER" /api/invite/accept "id=$INVITE")"
+check "the workspaces page counts the new member"     "yes"                   "$(has /workspaces "$ADMIN" "2 people")"
+check "and offers the member a way out"                "yes"                   "$(has /workspaces "$VIEWER" "action=\"/api/w/$WS/members\"")"
 check "and the role came from the INVITATION"          '"role": "editor"'      "$(role_of leitor@exemplo.com "$WS")"
 check "now they can open the workspace"                "200"                   "$(get "/w/$WS" "$VIEWER")"
 check "and can write, as editor"                       "ok=ok_note"            "$(post "$VIEWER" "/api/w/$WS/notes" title=DoEditor)"

@@ -47,7 +47,7 @@ const isSoleOwner = ws.role === "owner" && (await countOwners(Astro.locals.env, 
       <p class="alert alert-info">
         <span>
           You are the only owner here. Transfer ownership to someone else in{" "}
-          <a href={`/w/${ws.workspaceSlug}/members`}> Members</a> before leaving — otherwise the
+          <a href={`/w/${ws.workspaceSlug}/members`}>Members</a> before leaving — otherwise the
           workspace would be left without an owner.
         </span>
       </p>
