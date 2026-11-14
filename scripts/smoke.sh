@@ -285,6 +285,22 @@ check "creating a workspace works"                     "200"                   "
 check "the workspaces page lists the new one"          "yes"                   "$(has /workspaces "$ADMIN" "Time de Teste")"
 check "and says the owner is alone in it"              "yes"                   "$(has /workspaces "$ADMIN" "Only you")"
 check "the only owner is not offered a way out"        "yes"                   "$(has /workspaces "$ADMIN" "You are the only owner")"
+
+# Deleting a workspace THROUGH THE APP. The SQL check further up only proves the
+# cascade; it did not notice that Better Auth's own route removes the
+# memberships first and trips the last-owner trigger, so the button always
+# failed. This goes through the real endpoint.
+post "$ADMIN" /api/workspaces name="Para Apagar" >/dev/null
+WS_DEL="$(sql "SELECT slug FROM organization WHERE name='Para Apagar'" | python3 -c 'import sys,json;print(json.load(sys.stdin)[0]["slug"])')"
+ID_DEL="$(sql "SELECT id FROM organization WHERE name='Para Apagar'" | python3 -c 'import sys,json;print(json.load(sys.stdin)[0]["id"])')"
+check "deleting asks for the name typed right"         "e=confirm_name"        "$(post "$ADMIN" "/api/w/$WS_DEL/workspace" action=delete confirmation=errado)"
+check "and nothing is recorded as deleted yet"         "[]"                    "$(sql "SELECT id FROM audit_log WHERE action='workspace.deleted'")"
+check "the owner deletes the workspace in the app"     "ok=ok_workspace_deleted" "$(post "$ADMIN" "/api/w/$WS_DEL/workspace" action=delete "confirmation=Para Apagar")"
+check "and it is really gone"                          "[]"                    "$(sql "SELECT id FROM organization WHERE id='$ID_DEL'")"
+check "with its memberships"                           "[]"                    "$(sql "SELECT id FROM member WHERE organizationId='$ID_DEL'")"
+check "no session still points at it"                  "[]"                    "$(sql "SELECT id FROM session WHERE activeOrganizationId='$ID_DEL'")"
+check "the audit trail says who deleted what"          "para-apagar"           "$(sql "SELECT details FROM audit_log WHERE action='workspace.deleted'")"
+check "the list no longer shows it"                    "no"                    "$(has /workspaces "$ADMIN" "Para Apagar")"
 check "admin invites someone as editor"                "ok=ok_invite_sent" "$(post "$ADMIN" "/api/w/$WS/invites" action=invite email=leitor@exemplo.com role=editor)"
 check "inviting again is blocked"                      "e=invite_pending"    "$(post "$ADMIN" "/api/w/$WS/invites" action=invite email=leitor@exemplo.com role=editor)"
 check "inviting as owner is refused"                   "e=invalid_role"      "$(post "$ADMIN" "/api/w/$WS/invites" action=invite email=outra@exemplo.com role=owner)"
@@ -312,6 +328,7 @@ check "and the role came from the INVITATION"          '"role": "editor"'      "
 check "now they can open the workspace"                "200"                   "$(get "/w/$WS" "$VIEWER")"
 check "and can write, as editor"                       "ok=ok_note"            "$(post "$VIEWER" "/api/w/$WS/notes" title=DoEditor)"
 check "but an editor does NOT invite anyone"           "403"                   "$(post "$VIEWER" "/api/w/$WS/invites" action=invite email=x@y.com role=viewer)"
+check "and does NOT delete the workspace"              "403"                   "$(post "$VIEWER" "/api/w/$WS/workspace" action=delete "confirmation=Time de Teste")"
 
 check "the notice disappears after accepting"          "no"                    "$(has /dashboard/profile "$VIEWER" "waiting")"
 # The plugin marks the freshly accepted workspace as active, so /dashboard

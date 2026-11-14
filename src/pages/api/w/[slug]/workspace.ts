@@ -5,6 +5,7 @@ import { callAuth } from "~/lib/auth";
 import { actor, deny, currentWorkspace } from "~/lib/guards";
 import { codeFromAuthError, fail, handleAuthResponse, ok, str } from "~/lib/http";
 import { PERMISSIONS } from "~/lib/permissions";
+import { deleteWorkspace } from "~/lib/workspaces";
 
 export const prerender = false;
 
@@ -52,21 +53,21 @@ export const POST: APIRoute = async ({ request, locals }) => {
         return fail(PAGE, "confirm_name");
       }
 
-      // Recorded BEFORE: after deleting, the audit_log FK becomes NULL and
-      // there would be no workspace left to point to.
+      // Not through Better Auth: its route removes the memberships first and
+      // the database refuses to leave an existing workspace without an owner.
+      await deleteWorkspace(locals.env, ws.workspaceId);
+
+      // Recorded AFTER, so the trail never says "deleted" about a workspace
+      // that is still there. It carries no `workspaceId`: the row is gone (the
+      // FK would have turned to NULL anyway), so the name and the address in
+      // the details are what identify it.
       await audit(locals.env, {
         action: AUDIT.WORKSPACE_DELETED,
         actorId: me.id,
         actorEmail: me.email,
-        workspaceId: ws.workspaceId,
         details: { name: ws.workspaceName, slug: ws.workspaceSlug },
         request,
       });
-
-      const res = await callAuth(locals.auth, request, "/organization/delete", {
-        organizationId: ws.workspaceId,
-      });
-      if (!res.ok) return handleAuthResponse(res, "/workspaces", PAGE);
 
       return ok("/workspaces", "ok_workspace_deleted");
     }

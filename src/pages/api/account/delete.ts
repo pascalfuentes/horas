@@ -3,10 +3,7 @@ import type { APIRoute } from "astro";
 import { AUDIT, audit } from "~/lib/audit";
 import { callAuth } from "~/lib/auth";
 import { isLastAdminError } from "~/lib/errors";
-import { getDb } from "~/lib/auth";
-import { organization } from "~/db/schema";
-import { workspacesWhereSoleOwner } from "~/lib/workspaces";
-import { eq } from "drizzle-orm";
+import { deleteWorkspace, workspacesWhereSoleOwner } from "~/lib/workspaces";
 import { actor, denyAccount } from "~/lib/guards";
 import { fail, handleAuthResponse, ok, str } from "~/lib/http";
 
@@ -69,9 +66,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
     // Order matters: deleting the user first would make the cascade try to
     // remove an owner from a workspace that still exists, and the trigger would
     // refuse.
-    const db = getDb(locals.env);
     for (const ws of soleOwned) {
-      await db.delete(organization).where(eq(organization.id, ws.id));
+      await deleteWorkspace(locals.env, ws.id);
     }
 
     const res = await callAuth(locals.auth, request, "/delete-user", { password });

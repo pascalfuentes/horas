@@ -179,6 +179,28 @@ export async function membershipBySlug(
 }
 
 /** Workspaces where the person is the ONLY owner, with the member count. */
+/**
+ * Deletes a workspace and everything in it.
+ *
+ * It removes the `organization` row itself and lets the database cascade to the
+ * memberships, invitations, projects, entries, tokens and settings. Better
+ * Auth's own `/organization/delete` cannot do this job here: it deletes the
+ * memberships FIRST, while the workspace still exists, and that is exactly what
+ * the `keep_one_owner_on_delete` trigger refuses ("a workspace that exists
+ * always has an owner"). Deleting through it failed every time.
+ *
+ * The sessions that remembered this workspace as the last one used are cleared
+ * in the same transaction, so nothing is left pointing at an id that is gone.
+ */
+export async function deleteWorkspace(env: AppEnv, workspaceId: string): Promise<void> {
+  await env.DB.batch([
+    env.DB.prepare(`UPDATE "session" SET "activeOrganizationId" = NULL WHERE "activeOrganizationId" = ?1`).bind(
+      workspaceId,
+    ),
+    env.DB.prepare(`DELETE FROM "organization" WHERE "id" = ?1`).bind(workspaceId),
+  ]);
+}
+
 export async function workspacesWhereSoleOwner(
   env: AppEnv,
   userId: string,
