@@ -111,10 +111,7 @@ button.hr-bill[aria-pressed="true"], button.hr-bill[aria-pressed="true"]:hover {
 button.hr-bill[aria-busy="true"] span { display: none; }
 button.hr-icon { width: 32px; height: 32px; padding: 0; flex: none; border: 0; background: transparent; color: var(--text-muted); }
 button.hr-icon:hover { background: var(--surface-2); }
-.hr-date { position: relative; display: inline-flex; }
-.hr-row .hr-date input.hr-date-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; padding: 0; border: 0; }
-.hr-cal { width: 14px; height: 13px; border: 1.5px solid currentColor; border-radius: 3px; position: relative; }
-.hr-cal::before { content: ""; position: absolute; left: -1.5px; right: -1.5px; top: 2.5px; border-top: 1.5px solid currentColor; }
+.hr-date { display: inline-flex; }
 .hr-kebab, .hr-kebab::before, .hr-kebab::after { width: 3.5px; height: 3.5px; border-radius: 50%; background: currentColor; }
 .hr-kebab { position: relative; }
 .hr-kebab::before, .hr-kebab::after { content: ""; position: absolute; left: 0; }
@@ -131,6 +128,7 @@ button.hr-icon:hover { background: var(--surface-2); }
 .hr-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .hr-grid4 > .field, .hr-grid2 > .field { min-width: 0; }
 .hr-dialog .hr-grid4 input, .hr-dialog .hr-grid2 input { width: 100%; padding-left: 12px; padding-right: 8px; }
+.hr-dialog .hr-grid4 .dp button.dp-btn, .hr-dialog .hr-grid2 .dp button.dp-btn { gap: 8px; padding-left: 12px; padding-right: 8px; }
 .hr-dialog-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .hr-dialog-foot .btn-ghost:not(.btn-sm) { border-color: transparent; }
 
@@ -149,26 +147,23 @@ button.hr-icon:hover { background: var(--surface-2); }
 .hr-menu.hr-range-panel { display: flex; flex-direction: row; gap: 14px; width: max-content; min-width: 0; max-width: calc(100vw - 32px); padding: 14px; }
 .hr-range-presets { display: flex; flex-direction: column; gap: 2px; min-width: 140px; padding-right: 14px; border-right: 1px solid var(--border); }
 button.hr-menu-item.hr-menu-on { background: var(--accent-subtle); }
-.hr-cal-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
-.hr-cal-nav button.btn-sm { padding: 4px 12px; font-size: 1rem; line-height: 1.2; }
+/* The days themselves are the calendar of the design system (global.css, `.cal-*`). */
+.hr-cal-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .hr-cal-months { display: flex; gap: 22px; }
-.hr-cal-month > strong { display: block; margin-bottom: 8px; font-size: 0.9375rem; text-align: center; }
-.hr-cal-grid { display: grid; grid-template-columns: repeat(7, 34px); row-gap: 2px; justify-items: stretch; text-align: center; }
-.hr-cal-grid small { padding-bottom: 4px; font-size: 0.75rem; }
-.hr-cal-grid button.hr-cal-day { width: 34px; height: 32px; padding: 0; font-size: 0.875rem; font-weight: 400; font-variant-numeric: tabular-nums; color: var(--text); background: transparent; border: 0; border-radius: 0; box-shadow: none; transform: none; }
-.hr-cal-grid button.hr-cal-day:hover { background: var(--surface-2); border-radius: 8px; }
-.hr-cal-grid button.hr-cal-day.hr-cal-today { font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
-.hr-cal-grid button.hr-cal-day.hr-cal-in { background: var(--accent-subtle); border-radius: 0; }
-.hr-cal-grid button.hr-cal-day.hr-cal-end { background: var(--accent); color: var(--accent-text); font-weight: 600; border-radius: 8px; }
 @media (max-width: 860px) {
   .hr-menu.hr-range-panel { flex-direction: column; }
   .hr-range-presets { flex-direction: row; flex-wrap: wrap; min-width: 0; padding: 0 0 10px; border-right: 0; border-bottom: 1px solid var(--border); }
   .hr-range-presets button.hr-menu-item { width: auto; }
   .hr-menu.hr-range-panel { max-width: calc(100vw - 80px); }
-  .hr-cal-month:first-child { display: none; }
-  .hr-cal-grid { grid-template-columns: repeat(7, minmax(28px, 34px)); }
-  .hr-cal-grid button.hr-cal-day { width: 100%; }
+  .hr-cal-months .cal-month:first-child { display: none; }
+  .hr-range-panel .cal-grid { grid-template-columns: repeat(7, minmax(28px, 36px)); }
+  .hr-range-panel .cal-grid button.cal-day { width: 100%; height: auto; aspect-ratio: 1; }
 }
+/* Two or three choices side by side, one of them on (hours or amount on the chart). */
+.hr-seg { display: inline-flex; gap: 2px; padding: 3px; background: var(--surface-2); border-radius: 999px; }
+.hr-seg button.hr-seg-btn { padding: 5px 14px; font-size: 0.8125rem; font-weight: 500; color: var(--text-muted); background: transparent; border: 0; border-radius: 999px; box-shadow: none; transform: none; }
+.hr-seg button.hr-seg-btn:hover { color: var(--text); background: transparent; }
+.hr-seg button.hr-seg-btn[aria-pressed="true"] { background: var(--ink); color: var(--ink-text); }
 .hr-tabs { display: flex; gap: 8px; margin: 0 0 24px; }
 .hr-tabs button { background: var(--surface); border: 1px solid var(--border-strong); color: var(--text); padding: 7px 18px; font-size: 0.875rem; }
 .hr-tabs button:hover { background: var(--surface-2); }

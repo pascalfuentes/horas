@@ -360,6 +360,43 @@ td.wrap { white-space: normal; }
 .sel-opt[aria-selected="true"]::after { content: ""; margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 .sel-opt[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
 
+/* Date field (public/app/datepicker.js): the native date input stays in the
+   page, hidden, and keeps the value; a button shows the day and opens the calendar. */
+.dp { position: relative; display: inline-flex; }
+.field .dp { display: flex; width: 100%; }
+.dp input.dp-native { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
+.dp button.dp-btn { display: flex; align-items: center; justify-content: flex-start; gap: 10px; width: 100%; padding: 11px 16px; font: inherit; font-size: 1rem; font-weight: 400; text-align: left; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: none; transform: none; cursor: pointer; }
+.dp button.dp-btn:hover { background: var(--surface); border-color: var(--ink); }
+.dp button.dp-btn:focus-visible, .dp button.dp-btn[aria-expanded="true"] { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.dp button.dp-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.dp-ico { flex: none; width: 16px; height: 16px; color: var(--text-muted); }
+.dp-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dp-label.dp-empty { color: var(--text-muted); }
+/* Only the icon, for a row that has no room for the day written out. */
+.dp-icon-only button.dp-btn { justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; }
+.dp-icon-only button.dp-btn:hover { background: var(--surface-2); }
+.dp-icon-only button.dp-btn:focus-visible, .dp-icon-only button.dp-btn[aria-expanded="true"] { background: var(--accent-subtle); box-shadow: none; }
+.dp-icon-only button.dp-btn[aria-expanded="true"] .dp-ico { color: var(--text); }
+
+/* Calendar: one look for every place that picks a day. Today is the sun,
+   the chosen day is the sky with the ink outline of a primary button. */
+.cal-pop { position: fixed; z-index: 70; box-sizing: border-box; width: max-content; max-width: calc(100vw - 16px); margin: 0; padding: 16px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-pop); }
+.cal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.cal-title { display: block; font-family: var(--display); font-size: 1.0625rem; font-weight: 600; text-align: center; }
+.cal-month > .cal-title { margin-bottom: 10px; }
+button.cal-nav { width: 30px; height: 30px; padding: 0 0 2px; flex: none; font-size: 1.125rem; line-height: 1; color: var(--text); background: var(--surface); border: 1.5px solid var(--ink); border-radius: 50%; }
+button.cal-nav:hover { background: var(--sun); color: var(--accent-text); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 36px); row-gap: 2px; text-align: center; }
+.cal-grid small { padding-bottom: 6px; font-family: var(--mono); font-size: 0.6875rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+.cal-grid button.cal-day { width: 36px; height: 36px; padding: 0; font-size: 0.875rem; font-weight: 400; font-variant-numeric: tabular-nums; color: var(--text); background: transparent; border: 1.5px solid transparent; border-radius: 50%; box-shadow: none; transform: none; }
+.cal-grid button.cal-day:hover:not(:disabled) { background: var(--surface-2); }
+.cal-grid button.cal-day:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+.cal-grid button.cal-day.cal-today { background: var(--sun); color: var(--accent-text); font-weight: 600; }
+.cal-grid button.cal-day.cal-in { background: var(--accent-subtle); color: var(--text); border-radius: 0; }
+.cal-grid button.cal-day.cal-end { background: var(--accent); color: var(--accent-text); border-color: var(--ink); border-radius: 50%; font-weight: 600; }
+.cal-grid button.cal-day:disabled { opacity: 0.3; }
+.cal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+
 /* Sidebar icons. */
 .sidenav a:not(.brand) > .nav-ico { flex: none; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; opacity: 0.8; }
 .sidenav a[aria-current="page"] > .nav-ico { opacity: 1; }

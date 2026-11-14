@@ -395,8 +395,8 @@
           const hi = a < end ? end : a;
           Array.prototype.forEach.call(months.querySelectorAll('button[data-day]'), function (d) {
             const k = d.dataset.day;
-            d.classList.toggle('hr-cal-in', k > lo && k < hi);
-            d.classList.toggle('hr-cal-end', k === lo || k === hi);
+            d.classList.toggle('cal-in', k > lo && k < hi);
+            d.classList.toggle('cal-end', k === lo || k === hi);
             d.setAttribute('aria-pressed', String(k === lo || k === hi));
           });
           hint.textContent = picking ? 'Now pick the last day.' : 'Pick the first day, then the last day.';
@@ -413,22 +413,12 @@
         }
 
         /**
+         * One month, drawn by the calendar of the design system (datepicker.js).
          * @param {Date} month First day of the month to draw.
          * @returns {HTMLElement}
          */
         function grid(month) {
-          const todayKey = dayKey(day(0));
-          const cells = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(function (w) { return el('small', { class: 'muted', text: w }); });
-          for (let i = (month.getDay() + 6) % 7; i > 0; i--) cells.push(el('span', {}));
-          const count = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-          for (let n = 1; n <= count; n++) {
-            const k = dayKey(new Date(month.getFullYear(), month.getMonth(), n));
-            cells.push(el('button', { type: 'button', class: 'hr-cal-day' + (k === todayKey ? ' hr-cal-today' : ''), 'data-day': k, text: String(n), 'aria-label': dayLabel(k), onclick: function () { choose(k); }, onmouseenter: function () { if (picking) mark(k); } }));
-          }
-          return el('div', { class: 'hr-cal-month' }, [
-            el('strong', { text: month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }),
-            el('div', { class: 'hr-cal-grid' }, cells),
-          ]);
+          return window.ClockCalendar.month(month, { onPick: choose, onHover: function (k) { if (picking) mark(k); } });
         }
 
         /** @returns {void} */
@@ -453,9 +443,9 @@
           })),
           el('div', { class: 'hr-range-cal' }, [
             el('div', { class: 'hr-cal-nav' }, [
-              el('button', { type: 'button', class: 'btn-ghost btn-sm', text: '‹', 'aria-label': 'Previous month', onclick: go(-1) }),
+              window.ClockCalendar.navButton('‹', 'Previous month', go(-1)),
               hint,
-              el('button', { type: 'button', class: 'btn-ghost btn-sm', text: '›', 'aria-label': 'Next month', onclick: go(1) }),
+              window.ClockCalendar.navButton('›', 'Next month', go(1)),
             ]),
             months,
           ]),
@@ -849,7 +839,8 @@
         return saveRow(li, e, { end: new Date(start.getTime() + secs * 1000).toISOString() });
       }));
 
-      const dateIn = /** @type {HTMLInputElement} */ (el('input', { type: 'date', class: 'hr-date-input', value: dayKey(start), tabindex: '-1', 'aria-hidden': 'true' }));
+      // datepicker.js turns this input into the calendar icon of the row.
+      const dateIn = /** @type {HTMLInputElement} */ (el('input', { type: 'date', 'data-picker': 'icon', value: dayKey(start), 'aria-label': 'Change the day', title: 'Move to another day' }));
       dateIn.addEventListener('change', safe(function () {
         if (!dateIn.value) return Promise.resolve();
         const r = span(dateIn.value, hhmm(e.start), hhmm(e.end));
@@ -865,12 +856,7 @@
           ]),
         ]),
         el('button', { type: 'button', class: 'hr-bill', 'aria-pressed': String(e.billable), title: e.billable ? 'Billable. Click to make it non-billable' : 'Not billable. Click to make it billable', 'aria-label': 'Billable', onclick: safe(function () { return saveRow(li, e, { billable: !e.billable }); }) }, [el('span', { text: '$' })]),
-        el('span', { class: 'hr-date' }, [
-          el('button', { type: 'button', class: 'hr-icon', title: 'Move to another day', 'aria-label': 'Change the day', onclick: function () {
-            if (dateIn.showPicker) dateIn.showPicker(); else dateIn.focus();
-          } }, [el('span', { class: 'hr-cal' })]),
-          dateIn,
-        ]),
+        el('span', { class: 'hr-date' }, [dateIn]),
         el('span', { class: 'hr-times' }, [fromIn, el('span', { class: 'muted', text: '–' }), toIn]),
         durIn,
         amountCell(e),
@@ -1063,40 +1049,120 @@
       return '?' + p.toString();
     }
 
+    /** What the bars of "By day" measure: 'time', or 'amount:USD' for money in one currency. */
+    const CHART_KEY = 'horas-report-chart';
+    let chartView = 'time';
+    try { chartView = localStorage.getItem(CHART_KEY) || 'time'; } catch (e) { /* storage blocked: start on hours */ }
+
     /**
-     * Bar chart per day, filling in the days without entries.
-     * @param {Array<{day: string, seconds: number}>} byDay
+     * The views the chart can show in a period: hours, and the billable
+     * amount of each currency in it (money is never added across currencies).
+     * @param {object} s Response of /summary.
+     * @returns {Array<{key: string, label: string, currency: string}>} `currency` is empty for hours.
+     */
+    function chartViews(s) {
+      const sums = s.billable_amounts.length ? s.billable_amounts : [{ currency: s.currency }];
+      return [{ key: 'time', label: 'Hours', currency: '' }].concat(sums.map(function (sum) {
+        return { key: 'amount:' + sum.currency, label: sums.length > 1 ? sum.currency : 'Amount', currency: sum.currency };
+      }));
+    }
+
+    /**
+     * Money without cents, for the small labels of the chart.
+     * @param {number} n
+     * @param {string} currency ISO 4217 code.
+     * @returns {string}
+     */
+    function moneyShort(n, currency) {
+      try {
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'BRL', maximumFractionDigits: 0 }).format(n || 0);
+      } catch (e) {
+        return String(Math.round(n || 0));
+      }
+    }
+
+    /**
+     * Bar chart per day, filling in the days without entries. The bars show
+     * the hours of each day or, with a currency, its billable amount.
+     * @param {Array<{day: string, seconds: number, amounts: Array<{currency: string, amount: number}>}>} byDay
+     * @param {string} currency Empty for hours; a currency code for the billable amount in it.
      * @returns {HTMLElement}
      */
-    function chart(byDay) {
+    function chart(byDay, currency) {
       /** @type {Object<string, number>} */
       const map = {};
-      byDay.forEach(function (d) { map[d.day] = d.seconds; });
+      byDay.forEach(function (d) {
+        const paid = (d.amounts || []).filter(function (a) { return a.currency === currency; })[0];
+        map[d.day] = currency ? (paid ? paid.amount : 0) : d.seconds;
+      });
+      /** @param {number} n @returns {string} The value written in full. */
+      const full = function (n) { return currency ? money(n, currency) : human(Math.round(n)); };
+      /** @param {number} n @returns {string} The value written short, for a label. */
+      const short = function (n) { return currency ? moneyShort(n, currency) : human(Math.round(n)); };
       const days = [];
       const a = period.from().split('-').map(Number);
       const end = new Date(period.to() + 'T00:00');
       for (let d = new Date(a[0], a[1] - 1, a[2]); d <= end && days.length < 400; d.setDate(d.getDate() + 1)) days.push(dayKey(d));
-      const max = Math.max.apply(null, days.map(function (k) { return map[k] || 0; }).concat([3600]));
+      // The scale never goes below one hour (or one unit of money), so a
+      // period with almost nothing does not draw tall bars.
+      const max = Math.max.apply(null, days.map(function (k) { return map[k] || 0; }).concat([currency ? 1 : 3600]));
       const dense = days.length > 14;
       const top = Math.max.apply(null, days.map(function (k) { return map[k] || 0; }));
-      // The average counts the days that have time: empty days would pull it
-      // down to a number that describes no real working day.
+      // The average counts the days that have a value: empty days would pull
+      // it down to a number that describes no real working day.
       const worked = days.filter(function (k) { return map[k] > 0; });
+      const what = currency ? 'a billable amount' : 'time';
       const average = worked.length > 1 ? worked.reduce(function (sum, k) { return sum + map[k]; }, 0) / worked.length : 0;
-      const line = average ? el('div', { class: 'hr-avg', style: '--avg:' + (average / max).toFixed(4), title: 'Average of the ' + worked.length + ' days with time: ' + human(Math.round(average)) }, [
-        el('span', { text: 'Avg ' + human(Math.round(average)) }),
+      const line = average ? el('div', { class: 'hr-avg', style: '--avg:' + (average / max).toFixed(4), title: 'Average of the ' + worked.length + ' days with ' + what + ': ' + full(average) }, [
+        el('span', { text: 'Avg ' + short(average) }),
       ]) : null;
-      return el('div', { class: 'hr-chart' + (dense ? ' hr-chart-dense' : ''), role: 'img', 'aria-label': 'Hours per day in the period' + (average ? ', average ' + human(Math.round(average)) + ' on the days with time' : '') }, days.map(function (k) {
+      return el('div', { class: 'hr-chart' + (dense ? ' hr-chart-dense' : ''), role: 'img', 'aria-label': (currency ? 'Billable amount per day in the period, in ' + currency : 'Hours per day in the period') + (average ? ', average ' + full(average) + ' on the days with ' + what : '') }, days.map(function (k) {
         const s = map[k] || 0;
         const p = k.split('-').map(Number);
         const label = days.length > 62 ? '' : new Date(p[0], p[1] - 1, p[2]).toLocaleDateString('en-US', dense ? { day: 'numeric' } : { weekday: 'short', day: 'numeric' });
         const kind = !s ? ' hr-col-zero' : (s === top && days.length > 1 ? ' hr-col-max' : '');
-        return el('div', { class: 'hr-col' + kind, title: dayLabel(k) + ': ' + human(s) }, [
-          el('small', { text: s && !dense ? human(s) : '' }),
+        return el('div', { class: 'hr-col' + kind, title: dayLabel(k) + ': ' + full(s) }, [
+          el('small', { text: s && !dense ? short(s) : '' }),
           el('div', { class: 'hr-coltrack' }, [el('div', { class: 'hr-colbar', style: 'height:' + Math.max(s ? 3 : 0, (s / max) * 100) + '%' })]),
           el('small', { class: 'muted', text: label }),
         ]);
       }).concat(line ? [line] : []));
+    }
+
+    /**
+     * The "By day" card: the chart and the switch between hours and amount.
+     * The choice is remembered on this device; switching redraws the chart
+     * from the numbers already loaded.
+     * @param {object} s Response of /summary.
+     * @returns {HTMLElement}
+     */
+    function dayCard(s) {
+      const views = chartViews(s);
+      const holder = el('div', {});
+      const seg = el('div', { class: 'hr-seg', role: 'group', 'aria-label': 'What the chart shows' });
+
+      /** @returns {{key: string, label: string, currency: string}} The remembered view, or the closest one this period has. */
+      function current() {
+        const exact = views.filter(function (v) { return v.key === chartView; })[0];
+        if (exact) return exact;
+        return chartView === 'time' ? views[0] : views[1];
+      }
+
+      /** @returns {void} */
+      function paint() {
+        const on = current();
+        seg.replaceChildren.apply(seg, views.map(function (v) {
+          return el('button', { type: 'button', class: 'hr-seg-btn', 'aria-pressed': String(v === on), text: v.label, title: v.currency ? 'Billable amount per day, in ' + v.currency : 'Hours tracked per day', onclick: function () {
+            chartView = v.key;
+            try { localStorage.setItem(CHART_KEY, chartView); } catch (e) { /* storage blocked: the choice lasts until the page closes */ }
+            paint();
+          } });
+        }));
+        holder.replaceChildren(chart(s.by_day, on.currency));
+      }
+
+      paint();
+      return el('div', { class: 'card' }, [el('div', { class: 'hr-card-head' }, [el('h2', { text: 'By day' }), seg]), holder]);
     }
 
     /**
@@ -1224,7 +1290,7 @@
       const g = groups[groupBy.value];
       out.replaceChildren(
         stats(s),
-        el('div', { class: 'card' }, [el('h2', { text: 'By day' }), chart(s.by_day)]),
+        dayCard(s),
         table(el('div', { class: 'hr-card-head' }, [el('h2', { text: 'By ' + g.label.toLowerCase() }), groupBy]), [g.label, 'Time', 'Amount', '%'], s[g.key].map(function (r) {
           const pct = s.total_seconds ? Math.round((r.seconds / s.total_seconds) * 100) : 0;
           const color = r.color || 'var(--accent)';
