@@ -175,7 +175,9 @@
       }
     }
 
-    document.body.appendChild(menu);
+    // Inside a modal <dialog>, anything outside it is behind the modal and
+    // cannot be seen or clicked, so the list opens inside the dialog itself.
+    (select.closest('dialog') || document.body).appendChild(menu);
     button.setAttribute('aria-expanded', 'true');
     button.setAttribute('aria-controls', id);
     place();
