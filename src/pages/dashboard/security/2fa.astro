@@ -133,11 +133,11 @@ const showingResult = codes.length > 0;
     <div class="card">
       <h2>{totpURI ? "2. Save the recovery codes" : "Your new codes"}</h2>
       <span class="muted">
-        If you lose your phone, these are what get you back in — each one works only once.
+        If you lose your phone, these are what get you back in — each one works only once.{" "}
         <strong>This is the only time they are shown.</strong> Save them in your password manager
         before leaving this screen.
       </span>
-      <pre style="background:var(--surface-2);padding:14px;border-radius:10px;font-size:0.9rem;line-height:1.9;margin:0">{codes.join("\n")}</pre>
+      <pre style="background:var(--surface-2);padding:14px;border-radius:10px;font-family:var(--mono);font-size:0.9rem;line-height:1.9;margin:0">{codes.join("\n")}</pre>
     </div>
   )}
 

@@ -71,7 +71,7 @@ const sorted = [...sessions].sort((a, b) => b.createdAt.getTime() - a.createdAt.
       <p class="muted" style="margin:14px 0 0">
         <small>
           Yours is an administrator account, so two-step verification is mandatory and cannot
-          be disabled. To turn it off, change <code>REQUIRE_2FA_FOR_ADMINS</code> in
+          be disabled. To turn it off, change <code>REQUIRE_2FA_FOR_ADMINS</code> in{" "}
           <code>src/config.ts</code>.
         </small>
       </p>
@@ -115,7 +115,7 @@ const sorted = [...sessions].sort((a, b) => b.createdAt.getTime() - a.createdAt.
   <div class="card">
     <h2>Delete my account</h2>
     <span class="muted">
-      Deletes your account data, sessions and login methods. <strong>There is no going back.</strong>
+      Deletes your account data, sessions and login methods. <strong>There is no going back.</strong>{" "}
       The audit trail is preserved in dissociated form: the action and the time remain,
       who did it does not — it exists for the security of everyone in the system.
     </span>

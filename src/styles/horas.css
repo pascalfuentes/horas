@@ -161,7 +161,7 @@ button.hr-menu-item.hr-menu-on { background: var(--accent-subtle); }
 }
 /* Two or three choices side by side, one of them on (hours or amount on the chart). */
 .hr-seg { display: inline-flex; gap: 2px; padding: 3px; background: var(--surface-2); border-radius: 999px; }
-.hr-seg button.hr-seg-btn { padding: 5px 14px; font-size: 0.8125rem; font-weight: 500; color: var(--text-muted); background: transparent; border: 0; border-radius: 999px; box-shadow: none; transform: none; }
+.hr-seg button.hr-seg-btn { padding: 5px 14px; font-size: 0.875rem; font-weight: 500; color: var(--text-muted); background: transparent; border: 0; border-radius: 999px; box-shadow: none; transform: none; }
 .hr-seg button.hr-seg-btn:hover { color: var(--text); background: transparent; }
 .hr-seg button.hr-seg-btn[aria-pressed="true"] { background: var(--ink); color: var(--ink-text); }
 .hr-tabs { display: flex; gap: 8px; margin: 0 0 24px; }
