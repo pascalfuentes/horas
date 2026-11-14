@@ -2,11 +2,12 @@
 import SocialButtons from "~/components/SocialButtons.astro";
 import Turnstile from "~/components/Turnstile.astro";
 import Auth from "~/layouts/Auth.astro";
-import { safeNext } from "~/lib/http";
+import { errorCodeFrom, safeNext } from "~/lib/http";
 
 export const prerender = false;
 
 const next = safeNext(Astro.url.searchParams.get("next") ?? "");
+const unconfirmed = errorCodeFrom(Astro.url.searchParams) === "social_unconfirmed";
 ---
 
 <Auth
@@ -35,6 +36,9 @@ const next = safeNext(Astro.url.searchParams.get("next") ?? "");
 
   <SocialButtons next={next} verb="Log in with" />
 
+  {unconfirmed && (
+    <p class="auth-foot"><a href="/verify-email">Send me a new confirmation link</a></p>
+  )}
   <p class="auth-foot">
     <a href="/forgot-password">Forgot my password</a>
   </p>

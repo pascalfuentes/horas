@@ -5,6 +5,7 @@ import Theme from "~/components/Theme.astro";
 import Alert from "~/components/Alert.astro";
 import Logo from "~/components/Logo.astro";
 import { APP_NAME } from "~/config";
+import { errorCodeFrom } from "~/lib/http";
 import "~/styles/global.css";
 
 interface Props {
@@ -64,7 +65,7 @@ const params = Astro.url.searchParams;
         <div class="auth-card">
           <h1>{heading}</h1>
           {subheading && <p class="muted">{subheading}</p>}
-          <Alert error={params.get("e")} success={params.get("ok")} />
+          <Alert error={errorCodeFrom(params)} success={params.get("ok")} />
           <slot />
         </div>
       </section>

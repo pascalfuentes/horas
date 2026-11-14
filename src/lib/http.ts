@@ -30,6 +30,8 @@ export const MESSAGES: Record<string, string> = {
   social_unavailable: "This sign-in method isn't available.",
   social_failed:
     "We couldn't sign you in with this account. If it has been disabled, contact an administrator.",
+  social_unconfirmed:
+    "This email already has an account here that was never confirmed, so we couldn't join the two. Confirm it with the link we emailed you (you can ask for a new one below) and sign in again.",
   rate_limit: "Too many attempts. Wait a moment and try again.",
   own_role: "You can't change your own role.",
   own_status: "You can't disable your own account.",
@@ -75,6 +77,23 @@ export const MESSAGES: Record<string, string> = {
   ok_2fa_disabled: "Two-step verification disabled.",
   ok_2fa_codes: "New recovery codes generated. The old ones no longer work.",
 };
+
+/**
+ * The error code a page should show, read from its address.
+ *
+ * A failed social sign-in comes back as `?e=social_failed`, and Better Auth
+ * adds its own `error=<reason>`. One reason deserves its own words: the email
+ * already has an account created with a password that was never confirmed.
+ * Joining the two is refused on purpose (whoever created that account may not
+ * own the address), and "contact an administrator" would send the person the
+ * wrong way. They have just proved the address is theirs with the provider,
+ * so saying that an account exists reveals nothing to a stranger.
+ */
+export function errorCodeFrom(params: URLSearchParams): string | null {
+  const code = params.get("e");
+  if (code === "social_failed" && params.get("error") === "account_not_linked") return "social_unconfirmed";
+  return code;
+}
 
 export function messageFor(code: string | null): string | null {
   if (!code) return null;
