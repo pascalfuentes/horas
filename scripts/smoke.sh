@@ -285,6 +285,9 @@ check "creating a workspace works"                     "200"                   "
 check "the workspaces page lists the new one"          "yes"                   "$(has /workspaces "$ADMIN" "Time de Teste")"
 check "and says the owner is alone in it"              "yes"                   "$(has /workspaces "$ADMIN" "Only you")"
 check "the only owner is not offered a way out"        "yes"                   "$(has /workspaces "$ADMIN" "You are the only owner")"
+# The phone menu: the button and the list it opens are part of every dashboard page.
+check "the dashboard carries the phone menu button"    "yes"                   "$(has /workspaces "$ADMIN" 'data-menu-toggle')"
+check "and the list that button opens"                 "yes"                   "$(has /workspaces "$ADMIN" 'id="nav-menu"')"
 
 # Deleting a workspace THROUGH THE APP. The SQL check further up only proves the
 # cascade; it did not notice that Better Auth's own route removes the

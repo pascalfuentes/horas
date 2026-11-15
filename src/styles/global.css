@@ -438,6 +438,10 @@ button.cal-nav:hover { background: var(--sun); color: var(--accent-text); }
 .sidenav .nav-toggle > .nav-ico, .sidenav .theme-toggle > .nav-ico { flex: none; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .sidenav .theme-toggle { display: inline-flex; align-items: center; gap: 8px; }
 .sidenav button.ws-mini { display: none; }
+/* The phone menu. On a wide screen its box does not exist: the items are laid
+   out by the sidebar itself, and the button that opens it is not shown. */
+.nav-menu { display: contents; }
+.sidenav button.nav-burger { display: none; }
 @media (min-width: 861px) {
   .sidenav { transition: width 0.18s ease, padding 0.18s ease; }
   :root[data-nav="collapsed"] .sidenav { width: 76px; padding: 20px 12px; align-items: center; overflow-x: hidden; }
@@ -454,7 +458,30 @@ button.cal-nav:hover { background: var(--sun); color: var(--accent-text); }
   :root[data-nav="collapsed"] .sidenav .theme-toggle { align-self: center; justify-content: center; width: 40px; height: 40px; padding: 0; }
 }
 @media (max-width: 860px) {
-  /* On a phone the menu is already a compact strip: nothing to collapse. */
+  /* On a phone there is no sidebar to shrink: the bar keeps the name and the
+     button, and the destinations wait in the list the button opens. */
   .sidenav button.nav-toggle { display: none; }
   .nav-top { margin: 0 12px 0 0; }
+  :root[data-menu] .sidenav { position: relative; flex-wrap: nowrap; }
+  :root[data-menu] .nav-top { flex: 1; margin: 0; }
+  :root[data-menu] .sidenav button.nav-burger { flex: none; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text); box-shadow: none; transform: none; }
+  :root[data-menu] .sidenav button.nav-burger:hover { border-color: var(--ink); background: var(--surface); }
+  :root[data-menu="open"] .sidenav button.nav-burger, :root[data-menu] .sidenav button.nav-burger:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .nav-burger > .nav-ico { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+  .burger-close, :root[data-menu="open"] .burger-lines { display: none; }
+  :root[data-menu="open"] .burger-close { display: inline; }
+  :root[data-menu] .nav-menu { display: none; }
+  :root[data-menu="open"] .nav-menu {
+    display: flex; flex-direction: column; align-items: stretch; gap: 4px;
+    position: absolute; z-index: 55; top: calc(100% - 4px); left: 12px; right: 12px; padding: 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-pop);
+  }
+  /* The list is not a scrolling box: the workspace list inside it has to be
+     allowed out of a short menu, and a menu taller than the screen is reached
+     by scrolling the page, which grows to hold it. */
+  /* Inside the list the items stack like in the sidebar, not side by side. */
+  :root[data-menu] .ws-picker { flex: none; margin: 0 0 4px; }
+  :root[data-menu] .sidenav .group { padding: 12px 0 4px; }
+  :root[data-menu] .sidenav a:not(.brand) { padding: 10px 12px; font-size: 1rem; }
+  :root[data-menu] .theme-toggle { margin-top: 12px; }
 }

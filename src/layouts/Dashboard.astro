@@ -124,7 +124,13 @@ const groups = [
           <button type="button" class="nav-toggle" data-nav-toggle aria-expanded="true" aria-label="Collapse menu" title="Collapse menu">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM9.5 4v16" /><path class="nav-toggle-arrow" d="M16 9.5 13.5 12l2.5 2.5" /></svg>
           </button>
+          {/* On a phone the destinations wait in a list that this button opens. */}
+          <button type="button" class="nav-burger" data-menu-toggle aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu" title="Open menu">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path class="burger-lines" d="M4 7h16M4 12h16M4 17h16" /><path class="burger-close" d="M6 6l12 12M18 6 6 18" /></svg>
+          </button>
         </div>
+        {/* A box of its own only on a phone; on a wide screen its items are the sidebar's own. */}
+        <div class="nav-menu" id="nav-menu">
         {/* Collapsed, the workspace picker has no room: its initial stands in and opens the menu. */}
         <button type="button" class="ws-mini" data-nav-toggle data-nav-keep-label aria-label={`${current ? current.workspaceName : "Choose workspace"}: expand menu to switch workspace`} title={current ? current.workspaceName : "Choose workspace"}>
           {(current ? current.workspaceName : "?").trim().charAt(0).toUpperCase()}
@@ -164,6 +170,7 @@ const groups = [
           <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /></svg>
           <span class="nav-label" data-theme-label>Dark mode</span>
         </button>
+        </div>
       </nav>
 
       <main class="content">

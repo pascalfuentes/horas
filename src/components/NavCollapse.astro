@@ -5,6 +5,13 @@
  * The sidebar can shrink to a rail of icons. The choice lives in localStorage
  * and is applied here, before the first paint, so a page never opens wide and
  * then jumps. Any element with `data-nav-toggle` switches it.
+ *
+ * On a phone there is no sidebar: the bar keeps the name and a button, and the
+ * destinations wait in a list that the button (`data-menu-toggle`) opens. The
+ * list closes on Escape, on a click or tap outside it and when the page comes
+ * back from the browser history. `data-menu` is set here, before the first
+ * paint; without JavaScript it is never set and the destinations simply stay
+ * on the page, as a strip under the name.
  */
 ---
 
@@ -55,6 +62,49 @@
         /* private mode: the choice lasts for this page only */
       }
       apply(collapsed);
+    });
+
+    /** @returns {boolean} Whether the phone menu is open. */
+    function menuOpen() {
+      return root.getAttribute("data-menu") === "open";
+    }
+
+    /**
+     * Opens or closes the phone menu and tells its button what it does now.
+     * @param {boolean} open
+     * @param {boolean} [refocus] Whether the focus goes back to the button.
+     * @returns {void}
+     */
+    function setMenu(open, refocus) {
+      root.setAttribute("data-menu", open ? "open" : "closed");
+      var buttons = document.querySelectorAll("[data-menu-toggle]");
+      for (var i = 0; i < buttons.length; i++) {
+        var label = open ? "Close menu" : "Open menu";
+        buttons[i].setAttribute("aria-expanded", String(open));
+        buttons[i].setAttribute("aria-label", label);
+        buttons[i].setAttribute("title", label);
+        if (refocus && i === 0) buttons[i].focus();
+      }
+    }
+
+    setMenu(false);
+    document.addEventListener("click", function (ev) {
+      var target = ev.target;
+      if (!target || !target.closest) return;
+      if (target.closest("[data-menu-toggle]")) {
+        setMenu(!menuOpen());
+        return;
+      }
+      if (menuOpen() && !target.closest("#nav-menu")) setMenu(false);
+    });
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key !== "Escape" || !menuOpen()) return;
+      // The workspace list inside the menu closes first; the next Escape closes the menu.
+      if (document.querySelector("[data-ws-picker][open]")) return;
+      setMenu(false, true);
+    });
+    window.addEventListener("pageshow", function () {
+      setMenu(false);
     });
   })();
 </script>
