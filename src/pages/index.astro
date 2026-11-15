@@ -190,7 +190,22 @@ const tools = ["get_status", "start_timer", "stop_timer", "add_entry", "summary_
     .lp { padding: 12px; gap: 12px; }
     .lp main { gap: 12px; }
     .lp-nav nav a:not(.btn):not([href="/login"]) { display: none; }
-    .lp-hero, .lp-mcp { grid-template-columns: 1fr; }
+    /* minmax(0, …): a column of plain 1fr grows to its widest word, and the
+       line that never wraps (the timer, the command) pushed the page sideways. */
+    .lp-hero, .lp-mcp { grid-template-columns: minmax(0, 1fr); }
     .lp-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 480px) {
+    /* A phone fits the name and one button. The hero already offers
+       "I already have an account" right below. */
+    .lp-top { padding-left: 16px; padding-right: 16px; }
+    .lp-nav { flex-wrap: wrap; gap: 12px; }
+    .lp-nav nav a[href="/login"] { display: none; }
+    .lp-nav .btn { padding: 9px 16px; font-size: 0.9375rem; white-space: nowrap; }
+    /* The sample timer keeps its whole label next to the clock and the button. */
+    .lp-chat { padding: 16px; }
+    .lp-timer { gap: 10px; padding: 14px 16px; }
+    .lp-timer b { font-size: 1.125rem; }
+    .lp-timer em { padding: 8px 16px; }
   }
 </style>

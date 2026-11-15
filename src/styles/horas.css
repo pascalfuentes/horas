@@ -191,7 +191,7 @@ button.hr-menu-item.hr-menu-on { background: var(--accent-subtle); }
 .hr-pct { display: flex; align-items: center; gap: 10px; min-width: 150px; }
 .hr-pct > span { display: block; height: 10px; border-radius: 999px; min-width: 3px; max-width: 120px; flex: 0 0 auto; }
 td .hr-pct small { color: var(--text-muted); }
-.hr-num { font-family: var(--mono); font-size: 0.9375rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.hr-num { font-family: var(--mono); font-size: 0.9375rem; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* ----- Projects ----- */
 .hr-projects td { vertical-align: middle; }
@@ -308,6 +308,22 @@ input[type="file"]::file-selector-button { font: inherit; font-weight: 500; marg
   .hr-stats { grid-template-columns: 1fr 1fr; }
   .hr-grid4 { grid-template-columns: 1fr 1fr; }
   .hr-chart { gap: 6px; }
+  /* Two boxes per row: a number fits on one line, and each explanation opens
+     toward the middle instead of out of the screen. */
+  .hr-stat { padding: 16px; }
+  .hr-stat strong { font-size: 1.25rem; }
+  .hr-stats > .hr-stat:nth-child(odd) > .hr-tip { left: 0; right: auto; }
+  .hr-stats > .hr-stat:nth-child(even) > .hr-tip { left: auto; right: 0; }
+  /* A week of columns is narrower than "3h 00min": the value above a bar may
+     take two short lines, and both label rows keep the same height so the
+     average line still lands on the bars. */
+  .hr-chart:not(.hr-chart-dense) { --lab: calc(0.6875rem * 2.4 + 8px); }
+  .hr-chart:not(.hr-chart-dense) .hr-col small { display: flex; align-items: flex-end; justify-content: center; height: 2.4em; font-size: 0.6875rem; white-space: normal; text-align: center; }
+  .hr-chart:not(.hr-chart-dense) .hr-col small.muted { align-items: flex-start; }
+  /* The share is read as a number; the bar next to it does not fit. */
+  .hr-pct { min-width: 0; }
+  .hr-pct > span { display: none; }
+  .hr-num { font-size: 0.8125rem; }
 }
 
 /* ----- Sorting the project list by a column ----- */
