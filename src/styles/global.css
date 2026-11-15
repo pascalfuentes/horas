@@ -228,7 +228,11 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
   .sidenav .group { width: 100%; padding: 8px 0 2px; }
   .sidenav a:not(.brand) { padding: 8px 12px; font-size: 0.9375rem; }
   .page-head { flex-direction: column-reverse; align-items: flex-start; gap: 12px; }
-  .who { align-self: flex-end; }
+  /* The person's row takes the whole width: who they are on the left, the way out on the right. */
+  .who { align-self: stretch; text-align: left; }
+  .who .avatar { order: -1; }
+  .who-text { min-width: 0; overflow-wrap: anywhere; }
+  .who .inline-form { flex: none; margin-left: auto; }
 }
 
 /* ---------- Cards and forms ---------- */
