@@ -380,6 +380,19 @@ check "another nonexistent file too"                  "404"              "$(get 
 check "the project favicon is served"                 "200"              "$(get /favicon.svg)"
 check "but /dashboard/*.json still requires a session"  "/login?next"      "$(get /dashboard/relatorio.json)"
 
+echo; echo "$(c 1 'One address')"
+# The development server has a local address, where nothing is redirected. So
+# the rule is exercised on the function the middleware calls, with addresses
+# that only exist in production.
+elsewhere() { # elsewhere <request URL> <site address>: where the request is sent, or "stays"
+  node -e "import('./src/lib/address.ts').then(m => console.log(m.elsewhere(new URL(process.argv[1]), process.argv[2]) ?? 'stays'))" "$1" "$2"
+}
+check "another host goes to the same page of the site" "https://app.example/w/a?from=1" "$(elsewhere 'https://app.example.workers.dev/w/a?from=1' https://app.example)"
+check "the site's own address stays"                   "stays"            "$(elsewhere https://app.example/login https://app.example)"
+check "a local request is never sent away"             "stays"            "$(elsewhere http://127.0.0.1:4321/login https://app.example)"
+check "and nothing is while the site address is local" "stays"            "$(elsewhere https://app.example/login http://localhost:4321)"
+check "this server answers where it was called"        "200"              "$(get /privacy)"
+
 echo; echo "$(c 1 'Credentials and anti-enumeration')"
 npx wrangler d1 execute "$DB" --local -c "$CFG" --command 'DELETE FROM "rateLimit";' >/dev/null 2>&1
 check "new password works"                             "/dashboard"     "$(post - /api/login email=leitor@exemplo.com password=senha-nova-do-leitor)"

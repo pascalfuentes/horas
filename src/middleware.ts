@@ -1,6 +1,7 @@
 import { defineMiddleware } from "astro:middleware";
 
 import { REQUIRE_2FA_FOR_ADMINS } from "~/config";
+import { elsewhere } from "~/lib/address";
 import { createAuth } from "~/lib/auth";
 import { env } from "~/lib/env";
 import { canAdministerPlatform } from "~/lib/permissions";
@@ -67,14 +68,41 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   const path = context.url.pathname;
 
-  // Better Auth's own routes handle their own authorization.
-  if (path.startsWith("/api/auth/")) return next();
-
   // Token API and MCP server: authentication is the personal token, checked
   // inside the handler itself (`authenticateToken`). There is no cookie or
   // session here — going through the gate below would only yield a redirect to
   // the login.
-  if (path.startsWith("/api/v1/") || path === "/mcp" || path.startsWith("/mcp/")) return next();
+  const tokenRoute = path.startsWith("/api/v1/") || path === "/mcp" || path.startsWith("/mcp/");
+
+  // One address. A request that arrived at another one (the `*.workers.dev`
+  // address next to a custom domain, a domain the site used to have) goes to
+  // the same page at the site's address, the only place where the session
+  // cookie and the origin check work.
+  //
+  // The token routes are the exception and answer wherever they are called:
+  // nothing in them depends on the address, and a client that POSTs does not
+  // follow a redirect — a connector set up with the previous address would
+  // just stop working.
+  //
+  // Temporary and never cached, on purpose. The direction follows a secret:
+  // while a new domain is attached but `BETTER_AUTH_URL` still holds the old
+  // address, the NEW domain is the one sent away. A permanent redirect from
+  // that moment would stay in the browser and become a loop the day the
+  // secret changes.
+  if (!tokenRoute) {
+    const target = elsewhere(context.url, env.BETTER_AUTH_URL);
+    if (target) {
+      return new Response(null, {
+        status: 307,
+        headers: { Location: target, "Cache-Control": "no-store" },
+      });
+    }
+  }
+
+  // Better Auth's own routes handle their own authorization.
+  if (path.startsWith("/api/auth/")) return next();
+
+  if (tokenRoute) return next();
 
   const isApi = path.startsWith("/api/");
   const protectedArea =

@@ -33,6 +33,12 @@
     }
   ]
 
+  // Custom domain: attach it in the dashboard (the Worker's Settings → Domains
+  // & Routes); a deploy without "routes" leaves it alone. Declaring it here
+  // works too, but then add "workers_dev": true as well: with "routes" present
+  // wrangler turns the *.workers.dev address off by default, and the links
+  // that point to it stop being redirected to the site (see BETTER_AUTH_URL).
+
   // Secrets (NEVER in the repository: use `wrangler secret put <NAME>`):
   //   BETTER_AUTH_SECRET   openssl rand -base64 32
   //   BETTER_AUTH_URL      https://your-domain.com

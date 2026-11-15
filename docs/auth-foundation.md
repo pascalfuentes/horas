@@ -98,6 +98,18 @@ npm run deploy
 domain being served, session cookies and the origin check fail and nobody gets
 in.
 
+That URL is the site's one address. A request that reaches the Worker through
+any other host (the `*.workers.dev` address after a custom domain is attached,
+or the domain the site used to have) is redirected to the same page there. The
+token API (`/api/v1`) and the MCP server (`/mcp`) are the exception: they
+answer on every host, so a client configured with a previous address keeps
+working.
+
+To move to a new domain: attach it to the Worker, add its callback URLs to the
+OAuth apps, then change `BETTER_AUTH_URL`. The redirect follows the secret, so
+until that last step it is the new domain that is sent to the old address.
+Everyone signs in again, because the session cookie belongs to the host.
+
 After creating the first admin at `/setup`, delete the secret:
 
 ```bash
