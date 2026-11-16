@@ -3,6 +3,7 @@ import type { APIRoute } from "astro";
 import { AUDIT, audit } from "~/lib/audit";
 import { actor, denyAccount } from "~/lib/guards";
 import { codeFromAuthError, fail, ok, str } from "~/lib/http";
+import { ownSessionToken } from "~/lib/sessions";
 
 export const prerender = false;
 
@@ -11,7 +12,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (denied) return denied;
 
   const form = await request.formData();
-  const token = str(form, "token");
+  const id = str(form, "id");
+  if (!id) return fail("/dashboard/security", "fields");
+  // The page names a session by its id; the token stays on the server.
+  const token = await ownSessionToken(locals.env, actor(locals).id, id);
   if (!token) return fail("/dashboard/security", "fields");
 
   try {

@@ -315,6 +315,16 @@ check "the only owner is not offered a way out"        "yes"                   "
 check "the dashboard carries the phone menu button"    "yes"                   "$(has /workspaces "$ADMIN" 'data-menu-toggle')"
 check "and the list that button opens"                 "yes"                   "$(has /workspaces "$ADMIN" 'id="nav-menu"')"
 
+# The Security page lists the sessions of the account. Better Auth's own list
+# refuses a session older than `freshAge` (15 minutes) and the page used to die
+# with it, a quarter of an hour after every login: the session is aged here.
+check "the Security page opens"                        "200"                   "$(get /dashboard/security "$ADMIN")"
+sql "UPDATE session SET createdAt = createdAt - 3600 WHERE userId = '$ADMIN_ID'" >/dev/null
+SECURITY="$(curl -s -b "$ADMIN" "$BASE/dashboard/security")"
+check "and still opens an hour after the login"        "200"                   "$(get /dashboard/security "$ADMIN")"
+check "listing the session that asked"                 "yes"                   "$(found 'this session' "$SECURITY")"
+check "without handing out any session token"          "no"                    "$(found 'name="token"' "$SECURITY")"
+
 # Deleting a workspace THROUGH THE APP. The SQL check further up only proves the
 # cascade; it did not notice that Better Auth's own route removes the
 # memberships first and trips the last-owner trigger, so the button always

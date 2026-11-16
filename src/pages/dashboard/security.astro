@@ -3,6 +3,7 @@ import Dashboard from "~/layouts/Dashboard.astro";
 import { formatDateTime } from "~/lib/format";
 import { REQUIRE_2FA_FOR_ADMINS } from "~/config";
 import { analytics } from "~/lib/env";
+import { ownSessions } from "~/lib/sessions";
 
 export const prerender = false;
 
@@ -14,8 +15,7 @@ const twoFactorActive = Boolean((user as { twoFactorEnabled?: boolean }).twoFact
 const measured = Boolean(analytics(Astro.locals.env));
 const enforced = REQUIRE_2FA_FOR_ADMINS && user.role === "admin";
 
-const sessions = await Astro.locals.auth.api.listSessions({ headers: Astro.request.headers });
-const sorted = [...sessions].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+const sessions = await ownSessions(Astro.locals.env, user.id, current.token);
 ---
 
 <Dashboard title="Security" heading="Security" description="Password, email and connected devices.">
@@ -161,19 +161,19 @@ const sorted = [...sessions].sort((a, b) => b.createdAt.getTime() - a.createdAt.
           <tr><th>Device</th><th>IP</th><th>Started</th><th>Expires</th><th></th></tr>
         </thead>
         <tbody>
-          {sorted.map((s) => (
+          {sessions.map((s) => (
             <tr>
               <td class="wrap">
                 {s.userAgent ? s.userAgent.slice(0, 60) : "Unknown"}
-                {s.token === current.token && <> <span class="badge badge-ok">this session</span></>}
+                {s.current && <> <span class="badge badge-ok">this session</span></>}
               </td>
               <td>{s.ipAddress || "—"}</td>
               <td>{formatDateTime(s.createdAt)}</td>
               <td>{formatDateTime(s.expiresAt)}</td>
               <td>
-                {s.token !== current.token && (
+                {!s.current && (
                   <form method="post" action="/api/security/session" class="inline-form">
-                    <input type="hidden" name="token" value={s.token} />
+                    <input type="hidden" name="id" value={s.id} />
                     <button class="btn-danger btn-sm" type="submit">End</button>
                   </form>
                 )}
