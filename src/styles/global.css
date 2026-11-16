@@ -45,6 +45,8 @@
   --shadow-pop: 0 24px 48px -16px rgb(27 22 36 / 0.16);
   --shadow-button: 0 3px 0 var(--ink);
 
+  --h1-size: clamp(2rem, 4vw, 3rem);
+
   --font: "DM Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --display: "Fraunces Variable", ui-serif, Georgia, "Times New Roman", serif;
   --mono: "DM Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
@@ -89,7 +91,7 @@ body {
 }
 a { color: inherit; }
 h1, h2, h3 { font-family: var(--display); font-weight: 600; line-height: 1.15; margin: 0; letter-spacing: -0.02em; }
-h1 { font-size: clamp(2rem, 4vw, 3rem); letter-spacing: -0.025em; }
+h1 { font-size: var(--h1-size); letter-spacing: -0.025em; }
 h2 { font-size: 1.5rem; }
 h3 { font-size: 1.25rem; }
 p { margin: 0 0 0.75rem; }
@@ -206,6 +208,15 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 .sidenav a:not(.brand):hover { background: var(--surface-2); color: var(--text); }
 .sidenav a[aria-current="page"], .sidenav a[aria-current="page"]:hover { background: var(--sun); color: var(--accent-text); }
 .content { flex: 1; min-width: 0; padding: 48px 56px 80px; }
+/* The page title and the person's row sit on the line of the name in the
+   sidebar, whose middle is 43.5px from the top (20 of padding, 4 of margin and
+   half of its 39). The title's first line is 1.15 times its size, so the page
+   starts half of that above the middle, and the person's row is as tall as
+   that line and starts with it, at the top right. */
+@media (min-width: 861px) {
+  .content { padding-top: calc(43.5px - var(--h1-size) * 0.575); }
+  .who { align-self: flex-start; min-height: calc(var(--h1-size) * 1.15); }
+}
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
 .page-head p { margin: 6px 0 0; font-size: 1.125rem; }
 .who { display: flex; align-items: center; gap: 10px; font-size: 0.875rem; font-weight: 500; text-align: right; line-height: 1.3; flex: none; }
@@ -436,7 +447,8 @@ button.cal-nav:hover { background: var(--sun); color: var(--accent-text); }
 
 /* ---------- Collapsible sidebar ---------- */
 .nav-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 0 20px; }
-.sidenav .nav-top > .brand { margin: 0; min-width: 0; }
+/* As tall with the name hidden (the rail) as with it: the page title sits on this line. */
+.sidenav .nav-top > .brand { margin: 0; min-width: 0; min-height: 39px; }
 .sidenav button.nav-toggle { flex: none; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: var(--radius); background: transparent; color: var(--text-muted); box-shadow: none; transform: none; }
 .sidenav button.nav-toggle:hover { background: var(--surface-2); color: var(--text); }
 .sidenav .nav-toggle > .nav-ico, .sidenav .theme-toggle > .nav-ico { flex: none; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
