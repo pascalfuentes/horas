@@ -216,7 +216,7 @@
   const BUSY_LABELS = {
     'Start': 'Starting…', 'Stop': 'Stopping…', 'Save': 'Saving…', 'Delete': 'Deleting…', 'Duplicate': 'Duplicating…',
     'Create': 'Creating…', 'Archive': 'Archiving…', 'Restore': 'Restoring…', 'Revoke': 'Revoking…',
-    'Generate token': 'Generating…', 'Export CSV': 'Exporting…', 'Load 30 more days': 'Loading…',
+    'Generate token': 'Generating…', 'Export CSV': 'Exporting…', 'Load 7 more days': 'Loading…', 'Load 30 more days': 'Loading…',
     'Download backup (JSON)': 'Preparing…', 'Download entries (CSV)': 'Preparing…', 'Copy': 'Copying…',
   };
 
@@ -665,14 +665,32 @@
     /** @type {{projects: object[], running: object|null, entries: object[], status: object|null}} */
     const state = { projects: [], running: null, entries: [], status: null, tags: [] };
     let ticker = 0;
-    /** How many days back the list shows; "Load more" adds 30. */
-    let windowDays = 30;
+    /** The periods the list can open with, in days. */
+    const PERIODS = [7, 30];
+    const PERIOD_KEY = 'horas-time-days';
+    /** The period chosen in the selector: how the list opens and how much "Load more" adds. */
+    let period = PERIODS[0];
+    try {
+      const saved = Number(localStorage.getItem(PERIOD_KEY));
+      if (PERIODS.indexOf(saved) !== -1) period = saved;
+    } catch (e) { /* storage blocked: the list opens with the shortest period */ }
+    /** How many days the list shows now, today included. */
+    let windowDays = period;
 
     const desc = /** @type {HTMLInputElement} */ (el('input', { type: 'text', placeholder: 'What are you working on?', maxlength: '500', 'aria-label': 'Description' }));
     const projSlot = el('div', { class: 'hr-proj' });
     const bill = /** @type {HTMLInputElement} */ (el('input', { type: 'checkbox', id: 'hr-bill' }));
     const clockEl = el('button', { type: 'button', class: 'hr-clock', text: '0:00:00', title: 'Fix the start time', onclick: function () { editStart(); } });
-    const more = el('button', { type: 'button', class: 'btn-ghost hr-load-more', text: 'Load 30 more days', onclick: safe(async function () { windowDays += 30; await load(); }) });
+    const more = el('button', { type: 'button', class: 'btn-ghost hr-load-more', text: 'Load ' + period + ' more days', onclick: safe(async function () { windowDays += period; await load(); }) });
+    const periodIn = /** @type {HTMLSelectElement} */ (el('select', { 'aria-label': 'Period of the list' }, PERIODS.map(function (n) { return el('option', { value: String(n), text: 'Last ' + n + ' days' }); })));
+    periodIn.value = String(period);
+    periodIn.addEventListener('change', safe(async function () {
+      period = Number(periodIn.value);
+      windowDays = period;
+      try { localStorage.setItem(PERIOD_KEY, String(period)); } catch (e) { /* private mode: the choice lasts until the page closes */ }
+      more.textContent = 'Load ' + period + ' more days';
+      await load();
+    }));
     const btn = el('button', { type: 'button', class: 'hr-go', text: 'Start' });
     const totals = el('div', { class: 'hr-totals' });
     const list = el('div', { class: 'hr-days' });
@@ -975,7 +993,7 @@
       const got = await Promise.all([
         api('/projects'),
         api('/status'),
-        api('/entries?from=' + dayKey(day(-windowDays)) + '&limit=2000'),
+        api('/entries?from=' + dayKey(day(1 - windowDays)) + '&limit=2000'),
         api('/tags'),
       ]);
       state.projects = got[0];
@@ -1007,7 +1025,10 @@
       ]) : el('p', { class: 'alert alert-info', text: 'Your role in this workspace is read-only.' }),
       el('div', { class: 'hr-sub' }, [
         totals,
-        CAN_WRITE && el('button', { type: 'button', class: 'btn-ghost btn-sm', text: '+ Manual entry', onclick: function () { openDialog(); } }),
+        el('div', { class: 'hr-sub-actions' }, [
+          periodIn,
+          CAN_WRITE && el('button', { type: 'button', class: 'btn-ghost btn-sm', text: '+ Manual entry', onclick: function () { openDialog(); } }),
+        ]),
       ]),
       list,
       el('div', { class: 'hr-more-wrap' }, [more])
