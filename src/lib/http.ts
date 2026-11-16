@@ -122,9 +122,12 @@ export function str(form: FormData, key: string): string {
 }
 
 /**
- * Cloudflare Turnstile. Without `TURNSTILE_SECRET_KEY` configured, it passes
- * straight through — the template runs without requiring you to create a
- * widget first.
+ * Cloudflare Turnstile. Without a secret it passes straight through — the
+ * template runs without requiring you to create a widget first.
+ *
+ * Callers pass `turnstileSecret(env)`, never the raw variable: that helper
+ * only hands the secret over when the sitekey exists too, so the server asks
+ * for a token exactly when the page is able to produce one.
  */
 export async function verifyTurnstile(
   secret: string | undefined,

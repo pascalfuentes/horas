@@ -15,7 +15,7 @@ import { drizzle } from "drizzle-orm/d1";
 
 import { APP_NAME, INVITE_TTL_DAYS } from "~/config";
 import { schema } from "~/db/schema";
-import { assertEnv, socialProviders, type AppEnv } from "~/lib/env";
+import { assertEnv, socialProviders, turnstileSecret, type AppEnv } from "~/lib/env";
 import { emailLayout, sendEmail } from "~/lib/email";
 import { verifyTurnstile } from "~/lib/http";
 import { createWorkspace } from "~/lib/workspaces";
@@ -353,7 +353,8 @@ function build(env: AppEnv) {
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
         if (ctx.path !== "/sign-up/email") return;
-        if (!env.TURNSTILE_SECRET_KEY) return; // no Turnstile configured, nothing to check
+        const secret = turnstileSecret(env);
+        if (!secret) return; // no Turnstile configured, nothing to check
 
         // During bootstrap there is no system to protect, and the lock is
         // SETUP_SECRET. The exception closes itself: as soon as a superadmin
@@ -370,7 +371,7 @@ function build(env: AppEnv) {
           ctx.request?.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
           null;
 
-        if (!(await verifyTurnstile(env.TURNSTILE_SECRET_KEY, token, ip))) {
+        if (!(await verifyTurnstile(secret, token, ip))) {
           throw new APIError("BAD_REQUEST", { message: "TURNSTILE_FAILED" });
         }
       }),

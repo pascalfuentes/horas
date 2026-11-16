@@ -23,6 +23,22 @@ export type AppEnv = Env & {
   OPERATOR_CONTACT?: string;
 };
 
+/**
+ * The Turnstile secret, but only when the widget can be shown too.
+ *
+ * The page renders the widget when BOTH keys exist; the server has to decide
+ * by the same rule. Looking at the secret alone left a trap: with the secret
+ * set and the sitekey missing (a deploy from a copy of the config without it,
+ * or the two set in the wrong order), no page showed a challenge and every
+ * password login, sign-up and password reset was refused for lack of a token.
+ * Nothing half enabled: one key without the other means no Turnstile.
+ */
+export function turnstileSecret(value: AppEnv): string | undefined {
+  return value.PUBLIC_TURNSTILE_SITE_KEY && value.TURNSTILE_SECRET_KEY
+    ? value.TURNSTILE_SECRET_KEY
+    : undefined;
+}
+
 /** Social providers actually configured in this environment. */
 export function socialProviders(value: AppEnv): Array<"google" | "github"> {
   const list: Array<"google" | "github"> = [];

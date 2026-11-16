@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 
 import { clientIp } from "~/lib/audit";
 import { callAuth } from "~/lib/auth";
+import { turnstileSecret } from "~/lib/env";
 import {
   codeFromAuthError,
   fail,
@@ -25,7 +26,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!isEmail(email) || !password) return fail(back, "fields");
 
   const human = await verifyTurnstile(
-    locals.env.TURNSTILE_SECRET_KEY,
+    turnstileSecret(locals.env),
     str(form, "cf-turnstile-response"),
     clientIp(request),
   );

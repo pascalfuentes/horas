@@ -3,7 +3,7 @@ import HeadIcons from "~/components/HeadIcons.astro";
 import Logo from "~/components/Logo.astro";
 import Theme from "~/components/Theme.astro";
 import { APP_NAME, INVITE_TTL_DAYS, operator } from "~/config";
-import { socialProviders } from "~/lib/env";
+import { socialProviders, turnstileSecret } from "~/lib/env";
 import "~/styles/global.css";
 
 export const prerender = false;
@@ -34,7 +34,7 @@ const SOCIAL_NAMES = { google: "Google", github: "GitHub" } as const;
 const social = socialProviders(env).map((p) => SOCIAL_NAMES[p]);
 const socialList = social.join(" or ") || "a social login";
 const sendsEmail = Boolean(env.RESEND_API_KEY);
-const botCheck = Boolean(env.PUBLIC_TURNSTILE_SITE_KEY && env.TURNSTILE_SECRET_KEY);
+const botCheck = Boolean(turnstileSecret(env));
 
 /** The promises that fit in one line each. Every one is backed by a section below. */
 const short = [

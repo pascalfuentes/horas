@@ -22,8 +22,11 @@
  * 2. `onload` does not fire if the script has already loaded, hence the
  *    `window.turnstile` check — and `data-rendered` prevents rendering twice.
  */
-const { PUBLIC_TURNSTILE_SITE_KEY: siteKey, TURNSTILE_SECRET_KEY: secret } = Astro.locals.env;
-const enabled = Boolean(siteKey && secret);
+import { turnstileSecret } from "~/lib/env";
+
+const siteKey = Astro.locals.env.PUBLIC_TURNSTILE_SITE_KEY;
+// The same rule the server uses to decide whether to ask for a token.
+const enabled = Boolean(turnstileSecret(Astro.locals.env));
 ---
 {enabled && (
   <>
