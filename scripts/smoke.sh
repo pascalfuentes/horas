@@ -36,7 +36,10 @@ post() { # post <jar|-> <path> <field=value...>
 }
 get() { curl -s -o /dev/null -w '%{http_code} %{redirect_url}' ${2:+-b "$2"} "$BASE$1"; }
 has() { # has <path> <jar> <text>: "yes" if the page contains the text, "no" otherwise
-  if curl -s -b "$2" "$BASE$1" | grep -qF "$3"; then echo yes; else echo no; fi
+  # The whole page is read before answering: a grep that stops at the first
+  # match closes the pipe on curl, and with pipefail that reads as "not found"
+  # whenever the text comes early in a page that is still arriving.
+  if curl -s -b "$2" "$BASE$1" | grep -cF "$3" >/dev/null; then echo yes; else echo no; fi
 }
 sql() { npx wrangler d1 execute "$DB" --local -c "$CFG" --json --command "$1" 2>/dev/null \
         | python3 -c 'import sys,json;print(json.dumps(json.load(sys.stdin)[0]["results"]))'; }
