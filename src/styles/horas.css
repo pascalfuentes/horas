@@ -38,10 +38,12 @@ button.hr-load-more { box-shadow: var(--shadow-button); padding: 11px 32px; }
 .hr-day > header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .hr-day ul { list-style: none; margin: 0; padding: 0; }
 .hr-row { display: flex; align-items: center; gap: 16px; padding: 12px 0; }
-/* Every other row of a day, the first one included, sits on a band of the page
-   colour, so the eye can follow a row across the card. The band is as wide as
-   the hover layer and is drawn behind it. */
-.hr-row:nth-child(odd)::after { content: ""; position: absolute; inset: 0 -14px; z-index: -2; border-radius: var(--radius); background: var(--bg); pointer-events: none; }
+/* Every other item of a day, the first one included, sits on a band of the page
+   colour, so the eye can follow a row across the card. An item is one entry, or
+   one task with its entries under it. The band is as wide as the hover layer
+   and is drawn behind it. */
+.hr-day > ul > li { position: relative; }
+.hr-day > ul > li:nth-child(odd)::after { content: ""; position: absolute; inset: 0 -14px; z-index: -2; border-radius: var(--radius); background: var(--bg); pointer-events: none; }
 /* Hover: the row lifts off the card — a soft shadow, a hairline and a sun-yellow
    edge. Drawn on a pseudo-element behind the content, so nothing moves and the
    menus that open from a row still sit above the rows below it. */
@@ -50,6 +52,22 @@ button.hr-load-more { box-shadow: var(--shadow-button); padding: 11px 32px; }
 .hr-row::before { content: ""; position: absolute; inset: 1px -14px; z-index: -1; border-radius: var(--radius); background: var(--surface); box-shadow: inset 4px 0 0 var(--sun), 0 0 0 1px var(--border), var(--shadow-pop); opacity: 0; transform: scale(0.995); transition: opacity 0.14s ease, transform 0.14s ease; pointer-events: none; }
 .hr-row:hover::before, .hr-row:focus-within::before { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) { .hr-row::before { transition: none; } }
+
+/* ----- Entries of the same task in one day: one row that opens ----- */
+/* The row says how many entries there are and what they add up to; nothing in
+   it is typed into. Its columns end where the columns of an entry end, so the
+   totals sit over the numbers they add. */
+.hr-row-group { gap: 10px; padding-right: 42px; cursor: pointer; }
+.hr-row-group .hr-what small .hr-dot { width: 8px; height: 8px; margin-right: 6px; }
+.hr-row-group .hr-dur { width: 9ch; min-width: 0; text-align: center; }
+button.hr-count { flex: none; gap: 6px; min-width: 44px; height: 28px; margin-right: 6px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-family: var(--mono); font-size: 0.8125rem; font-weight: 500; }
+button.hr-count::after { content: ""; flex: none; width: 6px; height: 6px; margin-top: -3px; border-right: 1.5px solid var(--text-muted); border-bottom: 1.5px solid var(--text-muted); transform: rotate(45deg); }
+button.hr-count:hover { background: var(--surface); border-color: var(--ink); }
+button.hr-count[aria-expanded="true"], button.hr-count:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+button.hr-count[aria-expanded="true"]::after { margin-top: 3px; transform: rotate(225deg); }
+/* The entries of the task start under its description. */
+.hr-day ul.hr-group-rows { margin-left: 60px; }
+.hr-group-rows > li { border-top: 1px solid var(--border); }
 .hr-projects tbody tr { transition: background-color 0.14s ease; }
 .hr-projects tbody tr:hover, .hr-projects tbody tr:focus-within { background: color-mix(in srgb, var(--sun) 14%, transparent); box-shadow: inset 4px 0 0 var(--sun); }
 .hr-projects tbody tr td:first-child { padding-left: 12px; }
@@ -311,6 +329,12 @@ input[type="file"]::file-selector-button { font: inherit; font-weight: 500; marg
   .hr-when { display: none; }
   .hr-row-edit { flex-wrap: wrap; }
   .hr-row-edit .hr-what { flex: 1 1 100%; }
+  /* A task: the number and the description on one line, the totals under them. */
+  .hr-row-group { flex-wrap: wrap; padding-right: 0; }
+  .hr-row-group .hr-what { flex: 1 1 calc(100% - 66px); }
+  .hr-row-group .hr-dur { margin-left: 60px; width: auto; text-align: left; }
+  .hr-row-group .hr-amt { flex: 1; text-align: left; }
+  .hr-day ul.hr-group-rows { margin-left: 16px; }
   .hr-stats { grid-template-columns: 1fr 1fr; }
   .hr-grid4 { grid-template-columns: 1fr 1fr; }
   .hr-chart { gap: 6px; }

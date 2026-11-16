@@ -676,6 +676,11 @@
     } catch (e) { /* storage blocked: the list opens with the shortest period */ }
     /** How many days the list shows now, today included. */
     let windowDays = period;
+    /** Tasks whose entries are showing, by day and task: the list is rebuilt after every change and they stay open. */
+    const openTasks = new Set();
+    /** An entry that has just changed: the task it lands in opens, so its row does not drop out of sight. */
+    let reveal = 0;
+    let taskSeq = 0;
 
     const desc = /** @type {HTMLInputElement} */ (el('input', { type: 'text', placeholder: 'What are you working on?', maxlength: '500', 'aria-label': 'Description' }));
     const projSlot = el('div', { class: 'hr-proj' });
@@ -778,9 +783,131 @@
             earned.length ? el('span', { class: 'badge badge-sky', title: 'Billable amount of the day', text: moneyList(earned, '') }) : null,
             el('span', { class: 'badge badge-sun', text: human(total) }),
           ])]),
-          el('ul', {}, groups[key].map(row)),
+          el('ul', {}, dayRows(key, groups[key])),
         ]);
       }));
+    }
+
+    /**
+     * What makes entries of one day the same task: the description, the project,
+     * whether it is billable and the tags, as in Clockify. An entry with neither
+     * a description nor a project is nobody's task and stays alone.
+     * @param {object} e Entry.
+     * @returns {string} Empty when the entry is never grouped.
+     */
+    function taskOf(e) {
+      const text = e.description.trim();
+      if (!text && !e.project_id) return '';
+      return JSON.stringify([text, e.project_id || 0, !!e.billable, e.tags.slice().sort()]);
+    }
+
+    /**
+     * The rows of one day: entries of the same task become one row that opens.
+     * @param {string} dayStr YYYY-MM-DD
+     * @param {object[]} entries Entries of that day, in the order they are listed.
+     * @returns {HTMLElement[]}
+     */
+    function dayRows(dayStr, entries) {
+      /** @type {Object<string, object[]>} */
+      const tasks = {};
+      /** @type {Array<object[]>} */
+      const order = [];
+      entries.forEach(function (e) {
+        const key = taskOf(e);
+        if (key && tasks[key]) { tasks[key].push(e); return; }
+        const bucket = [e];
+        if (key) tasks[key] = bucket;
+        order.push(bucket);
+      });
+      return order.map(function (bucket) { return bucket.length > 1 ? taskRow(dayStr + '|' + taskOf(bucket[0]), bucket) : row(bucket[0]); });
+    }
+
+    /**
+     * Several entries of the same task in one day, as one row: how many they
+     * are, from when to when, the time they add up to and what they are worth.
+     * The number opens the entries, each one edited in place as usual.
+     * @param {string} id Day and task.
+     * @param {object[]} entries At least two, in the order they are listed.
+     * @returns {HTMLElement}
+     */
+    function taskRow(id, entries) {
+      const first = entries[0];
+      if (entries.some(function (e) { return e.id === reveal; })) openTasks.add(id);
+      const seconds = entries.reduce(function (a, e) { return a + e.duration_seconds; }, 0);
+      const amount = Math.round(entries.reduce(function (a, e) { return a + (e.amount || 0); }, 0) * 100) / 100;
+      const from = entries.reduce(function (a, e) { return e.start < a ? e.start : a; }, first.start);
+      const to = entries.reduce(function (a, e) { return e.end > a ? e.end : a; }, first.end);
+      const rows = el('ul', { class: 'hr-group-rows', id: 'hr-task-' + (++taskSeq) }, entries.map(row));
+      const count = el('button', { type: 'button', class: 'hr-count', 'aria-controls': rows.id, text: String(entries.length) });
+      const li = el('li', { class: 'hr-group' });
+
+      /**
+       * Shows or hides the entries of the task.
+       * @param {boolean} open
+       * @returns {void}
+       */
+      function set(open) {
+        if (open) openTasks.add(id);
+        else openTasks.delete(id);
+        rows.hidden = !open;
+        li.classList.toggle('hr-group-open', open);
+        const label = entries.length + ' entries of this task. ' + (open ? 'Hide them' : 'Show them');
+        count.setAttribute('aria-expanded', String(open));
+        count.setAttribute('aria-label', label);
+        count.setAttribute('title', label);
+      }
+
+      const head = el('div', { class: 'hr-row hr-row-group' }, [
+        count,
+        el('div', { class: 'hr-what' }, [
+          el('span', { class: first.description ? '' : 'muted', text: first.description || '(no description)' }),
+          el('small', {}, [
+            el('span', { class: 'hr-dot', style: 'background:' + (first.project_color || 'var(--border-strong)') }),
+            first.project || 'No project', first.billable ? ' · billable' : '', first.tags.length ? ' · ' + first.tags.map(function (t) { return '#' + t; }).join(' ') : '',
+          ]),
+        ]),
+        el('span', { class: 'hr-when muted', title: 'From the first start to the last end', text: hhmm(from) + ' – ' + hhmm(to) }),
+        el('strong', { class: 'hr-dur', title: 'Time of the ' + entries.length + ' entries together', text: clock(seconds) }),
+        amount
+          ? el('span', { class: 'hr-amt', title: 'Billable amount of the ' + entries.length + ' entries together', text: money(amount, first.currency) })
+          : el('span', { class: 'hr-amt hr-amt-none', title: first.billable ? 'Billable, but there is no hourly rate' : 'Not billable', text: '–' }),
+        CAN_WRITE && el('button', { type: 'button', class: 'hr-play', title: 'Continue this task', 'aria-label': 'Continue', onclick: safe(function () { return continueEntry(first); }) }, [el('span', { class: 'hr-tri' })]),
+      ]);
+      // The whole row opens it, except its own buttons.
+      head.addEventListener('click', function (ev) {
+        const target = /** @type {HTMLElement} */ (ev.target);
+        if (target.closest('button') && !target.closest('.hr-count')) return;
+        set(!openTasks.has(id));
+      });
+      set(openTasks.has(id));
+      li.append(head, rows);
+      return li;
+    }
+
+    /**
+     * Starts the timer again with what an entry had.
+     * @param {object} e Entry.
+     * @returns {Promise<void>}
+     */
+    async function continueEntry(e) {
+      await api('/timer/start', 'POST', { description: e.description, project_id: e.project_id || 0, tags: e.tags, billable: e.billable });
+      await load();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    /**
+     * Reads everything again after an entry changed, and opens the task that
+     * entry is part of now.
+     * @param {number} id The entry.
+     * @returns {Promise<void>}
+     */
+    async function reload(id) {
+      reveal = id;
+      try {
+        await load();
+      } finally {
+        reveal = 0;
+      }
     }
 
     /**
@@ -820,7 +947,7 @@
       li.setAttribute('aria-busy', 'true');
       try {
         await api('/entries/' + e.id, 'PATCH', body);
-        await load();
+        await reload(e.id);
       } finally {
         li.removeAttribute('aria-busy');
       }
@@ -909,11 +1036,7 @@
         el('span', { class: 'hr-times' }, [fromIn, el('span', { class: 'muted', text: '–' }), toIn]),
         durIn,
         amountCell(e),
-        el('button', { type: 'button', class: 'hr-play', title: 'Continue this entry', 'aria-label': 'Continue', onclick: safe(async function () {
-          await api('/timer/start', 'POST', { description: e.description, project_id: e.project_id || 0, tags: e.tags, billable: e.billable });
-          await load();
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }) }, [el('span', { class: 'hr-tri' })]),
+        el('button', { type: 'button', class: 'hr-play', title: 'Continue this entry', 'aria-label': 'Continue', onclick: safe(function () { return continueEntry(e); }) }, [el('span', { class: 'hr-tri' })]),
         el('span', { class: 'hr-pick' }, [
           el('button', { type: 'button', class: 'hr-icon hr-more', title: 'More actions', 'aria-label': 'More actions', 'aria-haspopup': 'true', 'aria-expanded': 'false', onclick: function (ev) {
             const anchor = /** @type {HTMLElement} */ (ev.currentTarget);
@@ -923,7 +1046,8 @@
                 el('button', { type: 'button', class: 'hr-menu-item', 'data-busy': 'Duplicating…', text: 'Duplicate', onclick: safe(async function () {
                   await api('/entries', 'POST', { description: e.description, project_id: e.project_id || 0, tags: e.tags, billable: e.billable, start: e.start, end: e.end });
                   close();
-                  await load();
+                  // The copy is the same task on the same day: the two become one row, shown open.
+                  await reload(e.id);
                 }) }),
                 el('button', { type: 'button', class: 'hr-menu-item hr-menu-danger', 'data-busy': 'Deleting…', text: 'Delete', onclick: safe(async function () {
                   if (!confirm('Delete this entry? This cannot be undone.')) return;
