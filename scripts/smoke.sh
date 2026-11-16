@@ -41,6 +41,12 @@ has() { # has <path> <jar> <text>: "yes" if the page contains the text, "no" oth
   # whenever the text comes early in a page that is still arriving.
   if curl -s -b "$2" "$BASE$1" | grep -cF "$3" >/dev/null; then echo yes; else echo no; fi
 }
+found() { # found <text> <html>: "yes" if the text is in a page already fetched, "no" otherwise
+  if [[ "$2" == *"$1"* ]]; then echo yes; else echo no; fi
+}
+found_re() { # found_re <regex> <html>: the same, for an extended regular expression
+  if grep -qE -- "$1" <<<"$2"; then echo yes; else echo no; fi
+}
 sql() { npx wrangler d1 execute "$DB" --local -c "$CFG" --json --command "$1" 2>/dev/null \
         | python3 -c 'import sys,json;print(json.dumps(json.load(sys.stdin)[0]["results"]))'; }
 sql_err() { npx wrangler d1 execute "$DB" --local -c "$CFG" --command "$1" 2>&1 | sed $'s/\033\\[[0-9;]*m//g'; }
@@ -238,7 +244,7 @@ check "resending verification answers the same for a nonexistent one"  "ok=ok_ve
 # all, and the anti-bot protection only applied to those using the form. This
 # check only runs where a key is configured; without it the hook has nothing
 # to validate.
-if curl -s "$BASE/signup" | grep -q 'cf-turnstile'; then
+if [[ "$(curl -s "$BASE/signup")" == *cf-turnstile* ]]; then
   check "direct sign-up requires Turnstile"            "400"  "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/auth/sign-up/email" -H "Origin: $BASE" -H 'Content-Type: application/json' -d '{"name":"X","email":"robo@exemplo.com","password":"senha-longa-o-suficiente"}')"
   check "and no account was created by it"             "[]"   "$(sql "SELECT id FROM user WHERE email='robo@exemplo.com'")"
 fi
@@ -246,13 +252,18 @@ fi
 # Usage analytics exist only where a Tag Manager container is configured, and
 # the pages say which case they are in. Even with a container, the HTML itself
 # never carries the third-party script: the loader waits for the person's yes.
-if curl -s "$BASE/login" | grep -q 'clockfolio-consent'; then
-  check "with analytics, the privacy page explains them"      "yes" "$(curl -s "$BASE/privacy" | grep -q 'id="analytics"' && echo yes || echo no)"
-  check "and stops promising there are no trackers"           "no"  "$(curl -s "$BASE/privacy" | grep -q 'no trackers' && echo yes || echo no)"
-  check "and no page ships the Tag Manager script directly"   "no"  "$(curl -s "$BASE/login" "$BASE/privacy" | grep -qE '<script[^>]+src="https://www.googletagmanager' && echo yes || echo no)"
+# The pages are read into variables first. A `curl | grep -q` stops reading at
+# the first match, curl dies on the closed pipe and, with pipefail, a text that
+# IS there reads as missing every now and then.
+LOGIN_PAGE="$(curl -s "$BASE/login")"
+PRIVACY_PAGE="$(curl -s "$BASE/privacy")"
+if [[ "$LOGIN_PAGE" == *clockfolio-consent* ]]; then
+  check "with analytics, the privacy page explains them"      "yes" "$(found 'id="analytics"' "$PRIVACY_PAGE")"
+  check "and stops promising there are no trackers"           "no"  "$(found 'no trackers' "$PRIVACY_PAGE")"
+  check "and no page ships the Tag Manager script directly"   "no"  "$(found_re '<script[^>]+src="https://www.googletagmanager' "$LOGIN_PAGE$PRIVACY_PAGE")"
 else
-  check "without analytics, no page mentions Tag Manager"     "no"  "$(curl -s "$BASE/login" "$BASE/privacy" | grep -qi 'googletagmanager' && echo yes || echo no)"
-  check "and the privacy page keeps the no-trackers promise"  "yes" "$(curl -s "$BASE/privacy" | grep -q 'No ads, no trackers' && echo yes || echo no)"
+  check "without analytics, no page mentions Tag Manager"     "no"  "$(found 'googletagmanager' "$LOGIN_PAGE$PRIVACY_PAGE")"
+  check "and the privacy page keeps the no-trackers promise"  "yes" "$(found 'No ads, no trackers' "$PRIVACY_PAGE")"
 fi
 
 sql "UPDATE user SET emailVerified = 1 WHERE email = 'leitor@exemplo.com'" >/dev/null
@@ -424,7 +435,7 @@ echo; echo "$(c 1 'Social login')"
 # checks the correct behavior for the environment it is running in. It looks
 # for the FORM, not for the route's name: the analytics script mentions the
 # route too, and would make a deploy without keys look like one with them.
-if curl -s "$BASE/login" | grep -q 'action="/api/social"'; then
+if [[ "$(curl -s "$BASE/login")" == *'action="/api/social"'* ]]; then
   check "Google starts the OAuth flow"                 "accounts.google.com"    "$(curl -s -o /dev/null -D - -X POST "$BASE/api/social" -H "Origin: $BASE" --data-urlencode provider=google | grep -i '^location:')"
   check "and the state/PKCE cookie goes along"         "set-cookie"             "$(curl -s -o /dev/null -D - -X POST "$BASE/api/social" -H "Origin: $BASE" --data-urlencode provider=google | grep -io '^set-cookie' | head -1)"
 else
