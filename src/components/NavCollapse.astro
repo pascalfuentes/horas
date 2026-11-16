@@ -7,9 +7,10 @@
  * then jumps. Any element with `data-nav-toggle` switches it.
  *
  * On a phone there is no sidebar: the bar keeps the name and a button, and the
- * destinations wait in a list that the button (`data-menu-toggle`) opens. The
- * list closes on Escape, on a click or tap outside it and when the page comes
- * back from the browser history. `data-menu` is set here, before the first
+ * destinations wait in a list that the button (`data-menu-toggle`) opens. Open,
+ * the list takes the whole screen and is the only thing that scrolls. It closes
+ * with the same button, on Escape, when the window grows wide and when the page
+ * comes back from the browser history. `data-menu` is set here, before the first
  * paint; without JavaScript it is never set and the destinations simply stay
  * on the page, as a strip under the name.
  */
@@ -69,21 +70,33 @@
       return root.getAttribute("data-menu") === "open";
     }
 
+    /** How far the page was scrolled when the phone menu opened. */
+    var scrollBefore = 0;
+
     /**
      * Opens or closes the phone menu and tells its button what it does now.
+     * Open, the menu covers the screen, so the page behind it is put out of
+     * reach of the keyboard and of screen readers until the menu closes.
      * @param {boolean} open
      * @param {boolean} [refocus] Whether the focus goes back to the button.
      * @returns {void}
      */
     function setMenu(open, refocus) {
+      var was = menuOpen();
+      if (open && !was) scrollBefore = window.scrollY;
       root.setAttribute("data-menu", open ? "open" : "closed");
+      var page = document.querySelector("main.content");
+      if (page) page.inert = open;
+      // The bar leaves the page while the menu covers it: put the page back where it was.
+      if (!open && was) window.scrollTo(0, scrollBefore);
       var buttons = document.querySelectorAll("[data-menu-toggle]");
       for (var i = 0; i < buttons.length; i++) {
         var label = open ? "Close menu" : "Open menu";
         buttons[i].setAttribute("aria-expanded", String(open));
         buttons[i].setAttribute("aria-label", label);
         buttons[i].setAttribute("title", label);
-        if (refocus && i === 0) buttons[i].focus();
+        // Without moving the page: the button may sit half above the screen's edge.
+        if (refocus && i === 0) buttons[i].focus({ preventScroll: true });
       }
     }
 
@@ -95,8 +108,20 @@
         setMenu(!menuOpen());
         return;
       }
-      if (menuOpen() && !target.closest("#nav-menu")) setMenu(false);
+      if (menuOpen() && !target.closest(".sidenav")) setMenu(false);
     });
+    // The menu exists only on a phone: a window that grows wide gets its page back.
+    var wide = window.matchMedia("(min-width: 861px)");
+    /**
+     * Closes the phone menu when the screen stops being a phone's.
+     * @param {MediaQueryListEvent} ev
+     * @returns {void}
+     */
+    function onWide(ev) {
+      if (ev.matches && menuOpen()) setMenu(false);
+    }
+    if (wide.addEventListener) wide.addEventListener("change", onWide);
+    else if (wide.addListener) wide.addListener(onWide);
     document.addEventListener("keydown", function (ev) {
       if (ev.key !== "Escape" || !menuOpen()) return;
       // The workspace list inside the menu closes first; the next Escape closes the menu.
