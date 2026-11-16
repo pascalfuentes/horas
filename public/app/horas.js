@@ -668,6 +668,12 @@
     /** The periods the list can open with, in days. */
     const PERIODS = [7, 30];
     const PERIOD_KEY = 'horas-time-days';
+    /** The third choice of the selector: the list starts on a day picked by hand. */
+    const SINCE = 'since';
+    /** How far back that day can be: 90 days, today included. */
+    const MAX_DAYS = 90;
+    /** What "Load more" adds while the list starts on a picked day. */
+    const SINCE_STEP = 30;
     /** The period chosen in the selector: how the list opens and how much "Load more" adds. */
     let period = PERIODS[0];
     try {
@@ -686,14 +692,40 @@
     const projSlot = el('div', { class: 'hr-proj' });
     const bill = /** @type {HTMLInputElement} */ (el('input', { type: 'checkbox', id: 'hr-bill' }));
     const clockEl = el('button', { type: 'button', class: 'hr-clock', text: '0:00:00', title: 'Fix the start time', onclick: function () { editStart(); } });
-    const more = el('button', { type: 'button', class: 'btn-ghost hr-load-more', text: 'Load ' + period + ' more days', onclick: safe(async function () { windowDays += period; await load(); }) });
-    const periodIn = /** @type {HTMLSelectElement} */ (el('select', { 'aria-label': 'Period of the list' }, PERIODS.map(function (n) { return el('option', { value: String(n), text: 'Last ' + n + ' days' }); })));
+    const more = el('button', { type: 'button', class: 'btn-ghost hr-load-more', text: 'Load ' + period + ' more days', onclick: safe(async function () { windowDays += periodIn.value === SINCE ? SINCE_STEP : period; await load(); }) });
+    const periodIn = /** @type {HTMLSelectElement} */ (el('select', { 'aria-label': 'Period of the list' }, PERIODS.map(function (n) { return el('option', { value: String(n), text: 'Last ' + n + ' days' }); }).concat([el('option', { value: SINCE, text: 'Since a date…' })])));
     periodIn.value = String(period);
+    // The day the list starts on, shown only with the third choice. Nothing older than MAX_DAYS can be picked.
+    const sinceIn = /** @type {HTMLInputElement} */ (el('input', { type: 'date', 'aria-label': 'First day of the list', min: dayKey(day(1 - MAX_DAYS)), max: dayKey(day(0)) }));
+    const sinceSlot = el('span', { class: 'hr-since' }, [sinceIn]);
+    sinceSlot.hidden = true;
     periodIn.addEventListener('change', safe(async function () {
+      const byDate = periodIn.value === SINCE;
+      sinceSlot.hidden = !byDate;
+      if (byDate) {
+        // Nothing changes until a day is picked: the field starts on the first day the list shows now.
+        const shown = Math.min(windowDays, MAX_DAYS);
+        sinceIn.value = dayKey(day(1 - shown));
+        more.textContent = 'Load ' + SINCE_STEP + ' more days';
+        // The calendar opens by itself, once the list of the selector has closed.
+        setTimeout(function () { const open = sinceSlot.querySelector('button'); if (open) open.click(); }, 0);
+        if (shown !== windowDays) { windowDays = shown; await load(); }
+        return;
+      }
       period = Number(periodIn.value);
       windowDays = period;
       try { localStorage.setItem(PERIOD_KEY, String(period)); } catch (e) { /* private mode: the choice lasts until the page closes */ }
       more.textContent = 'Load ' + period + ' more days';
+      await load();
+    }));
+    sinceIn.addEventListener('change', safe(async function () {
+      const picked = sinceIn.value.split('-').map(Number);
+      if (picked.length !== 3 || !picked[0]) return;
+      // From that day to today, both included, and never more than MAX_DAYS.
+      const days = Math.round((day(0).getTime() - new Date(picked[0], picked[1] - 1, picked[2]).getTime()) / 86400000) + 1;
+      windowDays = Math.max(1, Math.min(MAX_DAYS, days));
+      // A day outside the limits (typed, or set by a script) becomes the nearest one inside them.
+      if (windowDays !== days) sinceIn.value = dayKey(day(1 - windowDays));
       await load();
     }));
     const btn = el('button', { type: 'button', class: 'hr-go', text: 'Start' });
@@ -1151,6 +1183,7 @@
         totals,
         el('div', { class: 'hr-sub-actions' }, [
           periodIn,
+          sinceSlot,
           CAN_WRITE && el('button', { type: 'button', class: 'btn-ghost btn-sm', text: '+ Manual entry', onclick: function () { openDialog(); } }),
         ]),
       ]),

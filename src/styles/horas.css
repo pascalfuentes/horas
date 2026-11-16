@@ -26,8 +26,10 @@ button.hr-go.hr-stop, button.hr-go.hr-stop:hover { background: var(--stop); }
 .hr-sub { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 24px; flex-wrap: wrap; }
 .hr-totals { display: flex; gap: 12px; flex-wrap: wrap; margin: 0; }
 /* On the right of the totals: how far back the list goes, and the manual entry. */
-.hr-sub-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.hr-sub-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-left: auto; }
 .hr-sub-actions .sel button.sel-btn { padding: 7px 12px; font-size: 0.875rem; }
+/* The first day of the list, when it is picked by hand: the same size as the selector beside it. */
+.hr-sub-actions .dp button.dp-btn { gap: 8px; padding: 7px 12px; font-size: 0.875rem; }
 .hr-more-wrap { text-align: center; margin: 0 0 24px; }
 button.hr-link { background: none; border-color: transparent; color: var(--text); }
 button.hr-link:hover { background: var(--surface-2); }
@@ -327,6 +329,7 @@ input[type="file"]::file-selector-button { font: inherit; font-weight: 500; marg
   .hr-bar { position: static; }
   button.hr-clock { flex: 1; text-align: left; }
   .hr-when { display: none; }
+  .hr-sub-actions { margin-left: 0; }
   .hr-row-edit { flex-wrap: wrap; }
   .hr-row-edit .hr-what { flex: 1 1 100%; }
   /* A task: the number and the description on one line, the totals under them. */
