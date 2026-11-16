@@ -195,6 +195,12 @@ With the id set:
   amount or an e-mail;
 - the signed-in area carries `data-hj-suppress`, so a session-recording tool
   replaces its text and images before anything leaves the browser.
+- while the tools run, the tab title is plain ("Time · Clockfolio"): they read
+  it with every event, and it would otherwise carry the workspace, a project
+  or the description of the running timer;
+- nothing loads on the password reset page, on an invite page, or on the page
+  that follows them: their addresses are secrets, and the tools read both the
+  address and the referrer.
 
 In the container, point the analytics tag at `page_path_clean` instead of the
 real address if you do not want workspace names in your reports.

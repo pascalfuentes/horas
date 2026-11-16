@@ -47,6 +47,15 @@
   }
 
   /**
+   * Whether the tab title must stay free of the person's data, because usage
+   * analytics are running and read it with every event.
+   * @returns {boolean}
+   */
+  function plainTitles() {
+    return Boolean(window.clockfolioAnalytics && window.clockfolioAnalytics.active());
+  }
+
+  /**
    * Tells the usage analytics that a change went through: the NAME of the
    * action ("timer_start", "entries_create"), never what was in it. Does
    * nothing where analytics are off or were not accepted.
@@ -694,7 +703,11 @@
       const tick = function () {
         const s = r ? (Date.now() - Date.parse(r.start)) / 1000 : 0;
         clockEl.textContent = clock(s);
-        document.title = r ? clock(s) + ' · ' + (r.description || 'Timer') : root.dataset.title || document.title;
+        // With usage analytics running the title stays plain: those tools read it.
+        const plain = plainTitles();
+        document.title = r
+          ? clock(s) + ' · ' + (plain ? 'Timer' : r.description || 'Timer')
+          : plain ? window.clockfolioAnalytics.pageTitle() : root.dataset.title || document.title;
       };
       tick();
       if (r) ticker = window.setInterval(tick, 1000);
@@ -1856,7 +1869,7 @@
       timeNote.textContent = 'Your time on this project: ' + human(p.total_seconds) + ' in ' + p.entries + (p.entries === 1 ? ' entry' : ' entries') + ', ' + p.billable_entries + ' billable';
       paintApply();
       paintBudget();
-      document.title = p.name + ' · Projects';
+      if (!plainTitles()) document.title = p.name + ' · Projects';
     }
     archiveBtn.addEventListener('click', safe(async function () {
       p = await api('/projects/' + id, 'PATCH', { archived: !p.archived });

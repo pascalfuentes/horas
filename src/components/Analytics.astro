@@ -15,6 +15,17 @@
  *   public page, and event NAMES ("timer_start"). Never a description, a
  *   client, an amount or an email.
  *
+ * - The tab title is the one thing these tools read by themselves, in every
+ *   event, and inside the app it carries the workspace, a project or what the
+ *   running timer is about. So while analytics are on the title is plain
+ *   ("Time · Clockfolio"), set here before anything loads, and `horas.js` asks
+ *   `active()` before writing a richer one.
+ *
+ * - Two pages have an address that is itself a secret: the password reset
+ *   (its token) and an invite (its id). The tools read the address and the
+ *   address the visitor came from, so they never load on those pages nor on
+ *   the page that follows them.
+ *
  * `window.clockfolioAnalytics.track(name)` is the one door for events, and it
  * does nothing without consent.
  */
@@ -83,12 +94,58 @@ const config = analytics(Astro.locals.env ?? env);
         }
 
         /**
+         * Whether an address is itself a secret (a reset token, an invite id).
+         * @param {string} pathname
+         * @returns {boolean}
+         */
+        function secretPath(pathname) {
+          return /^\/(reset-password|invite)(\/|$)/.test(pathname);
+        }
+
+        /**
+         * Whether the tools may load on this page: not where the address is a
+         * secret, and not right after such a page, whose address they would
+         * read as the referrer.
+         * @returns {boolean}
+         */
+        function allowedHere() {
+          if (secretPath(location.pathname)) return false;
+          try {
+            var from = document.referrer ? new URL(document.referrer) : null;
+            if (from && from.host === location.host && secretPath(from.pathname)) return false;
+          } catch (e) {
+            /* an odd referrer is not a reason to load */
+            return false;
+          }
+          return true;
+        }
+
+        /**
+         * A tab title that says where the person is and nothing about their
+         * data: "Time · Clockfolio" instead of the workspace, the project or
+         * the entry being timed. Public pages keep the title they have.
+         * @returns {string}
+         */
+        function plainTitle() {
+          if (area() !== "app") return document.title;
+          var parts = cleanPath()
+            .split("/")
+            .filter(function (part) {
+              return part && part.charAt(0) !== ":" && part !== "w";
+            });
+          var last = parts.length ? parts[parts.length - 1] : "workspace";
+          return last.charAt(0).toUpperCase() + last.slice(1).replace(/-/g, " ") + " · " + appName;
+        }
+
+        /**
          * Loads Tag Manager. Only ever called after a yes.
          * @returns {void}
          */
         function load() {
-          if (loaded) return;
+          if (loaded || !allowedHere()) return;
           loaded = true;
+          // Before anything third-party exists on the page.
+          document.title = plainTitle();
           gtag("consent", "default", {
             ad_storage: "denied",
             ad_user_data: "denied",
@@ -236,7 +293,16 @@ const config = analytics(Astro.locals.env ?? env);
           if (pending && area() === "app") track("login");
         }
 
-        window.clockfolioAnalytics = { track: track, open: show, choice: choice };
+        window.clockfolioAnalytics = {
+          track: track,
+          open: show,
+          choice: choice,
+          /** @returns {boolean} Whether the measurement tools are running on this page. */
+          active: function () {
+            return loaded;
+          },
+          pageTitle: plainTitle,
+        };
 
         if (choice() === "granted") load();
 
