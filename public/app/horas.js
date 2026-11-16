@@ -42,7 +42,25 @@
     }
     const data = await res.json().catch(function () { return null; });
     if (!res.ok) throw new Error((data && data.error) || 'Something went wrong (' + res.status + ').');
+    usage(method, path);
     return data;
+  }
+
+  /**
+   * Tells the usage analytics that a change went through: the NAME of the
+   * action ("timer_start", "entries_create"), never what was in it. Does
+   * nothing where analytics are off or were not accepted.
+   * @param {string} [method]
+   * @param {string} path
+   * @returns {void}
+   */
+  function usage(method, path) {
+    const verbs = { POST: 'create', PATCH: 'update', PUT: 'update', DELETE: 'delete' };
+    if (!verbs[method] || !window.clockfolioAnalytics) return;
+    // Record numbers and the query string stay out: they point at someone's data.
+    const parts = path.split('?')[0].split('/').filter(function (part) { return part && !/^\d+$/.test(part); });
+    if (!parts.length) return;
+    window.clockfolioAnalytics.track(parts.length > 1 ? parts.join('_') : parts[0] + '_' + verbs[method]);
   }
 
   /**

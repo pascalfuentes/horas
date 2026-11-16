@@ -21,7 +21,14 @@
   "vars": {
     "OPERATOR_NAME": "",
     "OPERATOR_CONTACT": "",
-    "PUBLIC_TURNSTILE_SITE_KEY": ""
+    "PUBLIC_TURNSTILE_SITE_KEY": "",
+    // Usage analytics, off by default. With a Google Tag Manager container id
+    // ("GTM-XXXXXXX") the site asks each visitor for consent and loads the
+    // container only after a yes; the landing page and the privacy policy
+    // stop promising "no trackers". Name what the container runs, separated
+    // by commas (for example "Google Analytics, Hotjar"): the policy prints it.
+    "PUBLIC_GTM_ID": "",
+    "PUBLIC_ANALYTICS_TOOLS": ""
   },
 
   "d1_databases": [

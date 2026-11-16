@@ -1,6 +1,7 @@
 ---
 import HeadIcons from "~/components/HeadIcons.astro";
 import BusyForms from "~/components/BusyForms.astro";
+import Analytics from "~/components/Analytics.astro";
 import Theme from "~/components/Theme.astro";
 import Alert from "~/components/Alert.astro";
 import Logo from "~/components/Logo.astro";
@@ -37,6 +38,7 @@ const params = Astro.url.searchParams;
     <HeadIcons />
     <title>{title}</title>
     <Theme />
+    <Analytics />
     <BusyForms />
   </head>
   <body>

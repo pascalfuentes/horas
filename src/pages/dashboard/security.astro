@@ -2,6 +2,7 @@
 import Dashboard from "~/layouts/Dashboard.astro";
 import { formatDateTime } from "~/lib/format";
 import { REQUIRE_2FA_FOR_ADMINS } from "~/config";
+import { analytics } from "~/lib/env";
 
 export const prerender = false;
 
@@ -9,6 +10,8 @@ const user = Astro.locals.user!;
 const current = Astro.locals.session!;
 
 const twoFactorActive = Boolean((user as { twoFactorEnabled?: boolean }).twoFactorEnabled);
+/** Usage analytics exist only on a deploy with a Tag Manager container. */
+const measured = Boolean(analytics(Astro.locals.env));
 const enforced = REQUIRE_2FA_FOR_ADMINS && user.role === "admin";
 
 const sessions = await Astro.locals.auth.api.listSessions({ headers: Astro.request.headers });
@@ -99,6 +102,11 @@ const sorted = [...sessions].sort((a, b) => b.createdAt.getTime() - a.createdAt.
     <span class="muted">
       The <a href="/privacy">privacy policy</a> explains what we store and why.
       Here you exercise the two rights it promises.
+      {measured && (
+        <>
+          {" "}You can also <a href="/privacy#analytics" data-consent-open>review your choice about usage analytics</a>.
+        </>
+      )}
     </span>
 
     <div class="row">

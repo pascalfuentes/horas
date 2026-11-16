@@ -1,6 +1,7 @@
 ---
 import HeadIcons from "~/components/HeadIcons.astro";
 import BusyForms from "~/components/BusyForms.astro";
+import Analytics from "~/components/Analytics.astro";
 import Theme from "~/components/Theme.astro";
 import NavCollapse from "~/components/NavCollapse.astro";
 import WorkspacePicker from "~/components/WorkspacePicker.astro";
@@ -110,6 +111,7 @@ const groups = [
     <HeadIcons />
     <title>{title}</title>
     <Theme />
+    <Analytics />
     <NavCollapse />
     <WorkspacePicker />
     <BusyForms />
@@ -117,7 +119,10 @@ const groups = [
     <script is:inline src="/app/datepicker.js" defer></script>
   </head>
   <body>
-    <div class="app">
+    {/* `data-hj-suppress`: a session-recording tool (Hotjar) replaces every text
+        and image in here before anything leaves the browser. People's
+        entries, clients and amounts are not ours to record. */}
+    <div class="app" data-hj-suppress>
       <nav class="sidenav" aria-label="Main navigation">
         <div class="nav-top">
           <a class="brand" href="/dashboard" title={APP_NAME}><Logo /><span class="nav-label">{APP_NAME}</span></a>

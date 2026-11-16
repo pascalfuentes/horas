@@ -243,6 +243,18 @@ if curl -s "$BASE/signup" | grep -q 'cf-turnstile'; then
   check "and no account was created by it"             "[]"   "$(sql "SELECT id FROM user WHERE email='robo@exemplo.com'")"
 fi
 
+# Usage analytics exist only where a Tag Manager container is configured, and
+# the pages say which case they are in. Even with a container, the HTML itself
+# never carries the third-party script: the loader waits for the person's yes.
+if curl -s "$BASE/login" | grep -q 'clockfolio-consent'; then
+  check "with analytics, the privacy page explains them"      "yes" "$(curl -s "$BASE/privacy" | grep -q 'id="analytics"' && echo yes || echo no)"
+  check "and stops promising there are no trackers"           "no"  "$(curl -s "$BASE/privacy" | grep -q 'no trackers' && echo yes || echo no)"
+  check "and no page ships the Tag Manager script directly"   "no"  "$(curl -s "$BASE/login" "$BASE/privacy" | grep -qE '<script[^>]+src="https://www.googletagmanager' && echo yes || echo no)"
+else
+  check "without analytics, no page mentions Tag Manager"     "no"  "$(curl -s "$BASE/login" "$BASE/privacy" | grep -qi 'googletagmanager' && echo yes || echo no)"
+  check "and the privacy page keeps the no-trackers promise"  "yes" "$(curl -s "$BASE/privacy" | grep -q 'No ads, no trackers' && echo yes || echo no)"
+fi
+
 sql "UPDATE user SET emailVerified = 1 WHERE email = 'leitor@exemplo.com'" >/dev/null
 reset_rate_limit
 check "once verified, login goes through"              "/dashboard"           "$(post "$VIEWER" /api/login email=leitor@exemplo.com password=outra-senha-bem-longa)"
@@ -409,12 +421,14 @@ check "forgot-password: real e-mail answers the same"  "ok=ok_reset"    "$(post 
 
 echo; echo "$(c 1 'Social login')"
 # The providers only exist when the key pair is configured, so the suite
-# checks the correct behavior for the environment it is running in.
-if curl -s "$BASE/login" | grep -q 'api/social'; then
+# checks the correct behavior for the environment it is running in. It looks
+# for the FORM, not for the route's name: the analytics script mentions the
+# route too, and would make a deploy without keys look like one with them.
+if curl -s "$BASE/login" | grep -q 'action="/api/social"'; then
   check "Google starts the OAuth flow"                 "accounts.google.com"    "$(curl -s -o /dev/null -D - -X POST "$BASE/api/social" -H "Origin: $BASE" --data-urlencode provider=google | grep -i '^location:')"
   check "and the state/PKCE cookie goes along"         "set-cookie"             "$(curl -s -o /dev/null -D - -X POST "$BASE/api/social" -H "Origin: $BASE" --data-urlencode provider=google | grep -io '^set-cookie' | head -1)"
 else
-  check "without keys, the social buttons do not show up"  "0"                      "$(curl -s "$BASE/login" | grep -c 'api/social')"
+  check "without keys, the social buttons do not show up"  "0"                      "$(curl -s "$BASE/login" | grep -c 'action="/api/social"')"
   check "without keys, the social route refuses"       "e=social_unavailable"  "$(post - /api/social provider=google)"
 fi
 check "unknown provider is refused"                    "e=social_unavailable"  "$(post - /api/social provider=facebook)"

@@ -1,0 +1,273 @@
+---
+/**
+ * Usage analytics behind consent, placed in every page's <head>.
+ *
+ * Renders nothing unless this deploy has a Google Tag Manager container
+ * (`PUBLIC_GTM_ID`). With one:
+ *
+ * - Nothing from a third party loads before the person says yes. The choice
+ *   lives in localStorage; until there is one, a notice asks. "Decline" is as
+ *   easy as "Accept", and any element with `data-consent-open` asks again.
+ * - After a yes, Tag Manager loads and decides which tools run. Advertising
+ *   consent stays denied either way: this is measurement, not ads.
+ * - What the page hands over is deliberately poor: the address with the
+ *   workspace and the record numbers taken out, whether it is the app or a
+ *   public page, and event NAMES ("timer_start"). Never a description, a
+ *   client, an amount or an email.
+ *
+ * `window.clockfolioAnalytics.track(name)` is the one door for events, and it
+ * does nothing without consent.
+ */
+import { APP_NAME } from "~/config";
+import { analytics, env } from "~/lib/env";
+
+const config = analytics(Astro.locals.env ?? env);
+---
+
+{
+  config && (
+    <script is:inline define:vars={{ gtmId: config.id, appName: APP_NAME }}>
+      (function () {
+        var KEY = "clockfolio-consent";
+        var LOGIN = "clockfolio-login";
+        var loaded = false;
+        window.dataLayer = window.dataLayer || [];
+
+        /**
+         * Pushes to the data layer the way Google's own snippet does: Tag
+         * Manager reads consent commands from the `arguments` object, not from
+         * a plain array.
+         * @returns {void}
+         */
+        function gtag() {
+          window.dataLayer.push(arguments);
+        }
+
+        /** @returns {"granted"|"denied"|null} The saved choice, if there is one. */
+        function choice() {
+          try {
+            var value = localStorage.getItem(KEY);
+            return value === "granted" || value === "denied" ? value : null;
+          } catch (e) {
+            return null;
+          }
+        }
+
+        /**
+         * Saves the choice.
+         * @param {"granted"|"denied"} value
+         * @returns {void}
+         */
+        function remember(value) {
+          try {
+            localStorage.setItem(KEY, value);
+          } catch (e) {
+            /* private mode: the choice lasts for this page only */
+          }
+        }
+
+        /** @returns {"app"|"public"} Which side of the login this page is on. */
+        function area() {
+          return /^\/(w\/|dashboard|workspaces)/.test(location.pathname) ? "app" : "public";
+        }
+
+        /**
+         * The address without what identifies a workspace, an invite or a record.
+         * @returns {string}
+         */
+        function cleanPath() {
+          return location.pathname
+            .replace(/^\/w\/[^/]+/, "/w/:workspace")
+            .replace(/^\/invite\/[^/]+/, "/invite/:id")
+            .replace(/\/\d+(?=\/|$)/g, "/:id");
+        }
+
+        /**
+         * Loads Tag Manager. Only ever called after a yes.
+         * @returns {void}
+         */
+        function load() {
+          if (loaded) return;
+          loaded = true;
+          gtag("consent", "default", {
+            ad_storage: "denied",
+            ad_user_data: "denied",
+            ad_personalization: "denied",
+            analytics_storage: "granted",
+          });
+          window.dataLayer.push({ page_area: area(), page_path_clean: cleanPath() });
+          window.dataLayer.push({ "gtm.start": new Date().getTime(), event: "gtm.js" });
+          var script = document.createElement("script");
+          script.async = true;
+          script.src = "https://www.googletagmanager.com/gtm.js?id=" + encodeURIComponent(gtmId);
+          document.head.appendChild(script);
+        }
+
+        /**
+         * Removes the measurement cookies a previous yes left in this browser.
+         * @returns {void}
+         */
+        function forget() {
+          var labels = location.hostname.split(".");
+          var cookies = document.cookie ? document.cookie.split(";") : [];
+          for (var i = 0; i < cookies.length; i++) {
+            var name = cookies[i].split("=")[0].trim();
+            if (!/^(_ga|_gid|_gat|_gcl|_hj)/.test(name)) continue;
+            document.cookie = name + "=; Max-Age=0; path=/";
+            // The tools set them on the registrable domain, so try each parent.
+            for (var j = 0; j < labels.length - 1; j++) {
+              document.cookie = name + "=; Max-Age=0; path=/; domain=." + labels.slice(j).join(".");
+            }
+          }
+        }
+
+        /**
+         * Sends one event, by NAME. Does nothing without consent.
+         * @param {string} name For example "timer_start".
+         * @param {Object<string, string|number|boolean>} [params] Never personal data.
+         * @returns {void}
+         */
+        function track(name, params) {
+          if (choice() !== "granted") return;
+          var entry = { event: String(name) };
+          for (var key in params || {}) {
+            if (Object.prototype.hasOwnProperty.call(params, key)) entry[key] = params[key];
+          }
+          window.dataLayer.push(entry);
+        }
+
+        /**
+         * Takes the notice off the page.
+         * @returns {void}
+         */
+        function hide() {
+          var box = document.getElementById("consent");
+          if (box) box.remove();
+        }
+
+        /**
+         * Applies an answer to the notice.
+         * @param {"granted"|"denied"} value
+         * @returns {void}
+         */
+        function decide(value) {
+          remember(value);
+          hide();
+          if (value === "granted") {
+            load();
+            return;
+          }
+          forget();
+          // The tools are already running on this page: only a fresh load stops them.
+          if (loaded) location.reload();
+        }
+
+        /**
+         * Builds a button of the notice.
+         * @param {string} label
+         * @param {string} className
+         * @param {"granted"|"denied"} value
+         * @returns {HTMLButtonElement}
+         */
+        function button(label, className, value) {
+          var node = document.createElement("button");
+          node.type = "button";
+          node.className = className;
+          node.textContent = label;
+          node.addEventListener("click", function () {
+            decide(value);
+          });
+          return node;
+        }
+
+        /**
+         * Shows the notice that asks for the choice.
+         * @returns {void}
+         */
+        function show() {
+          if (!document.body || document.getElementById("consent")) return;
+          var box = document.createElement("div");
+          box.id = "consent";
+          box.className = "consent";
+          box.setAttribute("role", "region");
+          box.setAttribute("aria-label", "Usage analytics");
+
+          var text = document.createElement("p");
+          text.appendChild(
+            document.createTextNode(
+              "May we measure how " +
+                appName +
+                " is used? Analytics load only if you accept, and the content of your entries is not sent. ",
+            ),
+          );
+          var link = document.createElement("a");
+          link.href = "/privacy#analytics";
+          link.textContent = "How it works";
+          text.appendChild(link);
+
+          var actions = document.createElement("div");
+          actions.className = "consent-actions";
+          actions.appendChild(button("Accept", "btn btn-sm", "granted"));
+          actions.appendChild(button("Decline", "btn-ghost btn-sm", "denied"));
+
+          box.appendChild(text);
+          box.appendChild(actions);
+          document.body.appendChild(box);
+        }
+
+        /**
+         * Events only a page load can tell: an account created, a sign-in completed.
+         * @returns {void}
+         */
+        function milestones() {
+          var query = new URLSearchParams(location.search);
+          if (location.pathname === "/verify-email" && query.get("ok") === "ok_signup") track("sign_up");
+
+          var pending = false;
+          try {
+            pending = sessionStorage.getItem(LOGIN) === "1";
+            // Back on the login page with an error: that attempt did not get in.
+            if (pending && (area() === "app" || (location.pathname === "/login" && query.get("e")))) {
+              sessionStorage.removeItem(LOGIN);
+            }
+          } catch (e) {
+            /* no session storage: the sign-in is simply not counted */
+          }
+          if (pending && area() === "app") track("login");
+        }
+
+        window.clockfolioAnalytics = { track: track, open: show, choice: choice };
+
+        if (choice() === "granted") load();
+
+        document.addEventListener("DOMContentLoaded", function () {
+          if (!choice()) show();
+          milestones();
+        });
+
+        document.addEventListener("click", function (ev) {
+          var target = ev.target;
+          if (!target || !target.closest || !target.closest("[data-consent-open]")) return;
+          ev.preventDefault();
+          show();
+        });
+
+        // A sign-in ends on another page, so the form only leaves a note for it.
+        document.addEventListener(
+          "submit",
+          function (ev) {
+            var form = ev.target;
+            var action = form && form.getAttribute ? form.getAttribute("action") || "" : "";
+            if (action !== "/api/login" && action !== "/api/social") return;
+            try {
+              sessionStorage.setItem(LOGIN, "1");
+            } catch (e) {
+              /* see milestones() */
+            }
+          },
+          true,
+        );
+      })();
+    </script>
+  )
+}

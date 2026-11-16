@@ -1,9 +1,10 @@
 ---
 import HeadIcons from "~/components/HeadIcons.astro";
 import Logo from "~/components/Logo.astro";
+import Analytics from "~/components/Analytics.astro";
 import Theme from "~/components/Theme.astro";
 import { APP_NAME, INVITE_TTL_DAYS, operator } from "~/config";
-import { socialProviders, turnstileSecret } from "~/lib/env";
+import { analytics, socialProviders, turnstileSecret } from "~/lib/env";
 import "~/styles/global.css";
 
 export const prerender = false;
@@ -27,7 +28,7 @@ const env = Astro.locals.env;
 const OPERATOR = operator(env);
 /** Without `OPERATOR_NAME` the fallback is the product name, which would read "Clockfolio runs Clockfolio". */
 const named = OPERATOR.name !== APP_NAME;
-const updated = "November 13, 2026";
+const updated = "November 16, 2026";
 const signedIn = Boolean(Astro.locals.user);
 
 const SOCIAL_NAMES = { google: "Google", github: "GitHub" } as const;
@@ -35,10 +36,15 @@ const social = socialProviders(env).map((p) => SOCIAL_NAMES[p]);
 const socialList = social.join(" or ") || "a social login";
 const sendsEmail = Boolean(env.RESEND_API_KEY);
 const botCheck = Boolean(turnstileSecret(env));
+/** Usage analytics exist only on a deploy with a Tag Manager container; the text follows. */
+const stats = analytics(env);
+const statsTools = stats?.tools.length ? stats.tools.join(" and ") : "the measurement tools chosen by the operator";
 
 /** The promises that fit in one line each. Every one is backed by a section below. */
 const short = [
-  ["No ads, no trackers", "We do not sell data, and there is no advertising or analytics script on the site."],
+  stats
+    ? ["No ads, analytics by consent", "We do not sell data and there is no advertising. Usage analytics run only if you accept them."]
+    : ["No ads, no trackers", "We do not sell data, and there is no advertising or analytics script on the site."],
   ["Your hours are yours", "Download everything as a file whenever you want. Other members of a workspace do not see your entries."],
   ["You delete it yourself", "Deleting your account is a button under Security, not a request you have to send by email."],
   ["Locked down", "Passwords and API tokens are stored only as hashes, and the 2FA secret is encrypted."],
@@ -49,6 +55,7 @@ const sections = [
   ["account", "Your account"],
   ["work", "Your time tracking"],
   ["browser", "In your browser"],
+  ...(stats ? [["analytics", "Usage analytics"]] : []),
   ["ai", "Connecting an AI or a script"],
   ["retention", "For how long"],
   ["sharing", "Who we share it with"],
@@ -89,6 +96,7 @@ const workRows = [
     <HeadIcons />
     <title>Privacy Policy — {APP_NAME}</title>
     <Theme />
+    <Analytics />
   </head>
   <body>
     <header class="pp-nav">
@@ -186,16 +194,53 @@ const workRows = [
             <ul>
               <li>
                 <strong>Cookies</strong>: only the ones that keep you signed in and that complete a
-                sign-in (two-step verification, or coming back from {socialList}). There are no
-                advertising or third-party tracking cookies.
+                sign-in (two-step verification, or coming back from {socialList}).{" "}
+                {stats
+                  ? "There are no advertising cookies. Analytics cookies exist only if you accept them, as described below."
+                  : "There are no advertising or third-party tracking cookies."}
               </li>
               <li>
                 <strong>Preferences</strong>: the light or dark theme, the collapsed menu and the order
                 of the project list are saved in your browser's local storage. They never leave your device.
               </li>
-              <li><strong>Fonts and scripts</strong> are served by this site itself, not by a third party.</li>
+              <li>
+                <strong>Fonts and scripts</strong> are served by this site itself, not by a third party
+                {stats ? ". The one exception is the usage analytics, and only after you accept them." : "."}
+              </li>
             </ul>
           </section>
+
+          {stats && (
+            <section class="card" id="analytics">
+              <h2>Usage analytics</h2>
+              <p>
+                Only if you accept the notice. Until then nothing described here is loaded, and declining
+                changes nothing in how {APP_NAME} works.
+              </p>
+              <ul>
+                <li>
+                  <strong>What runs</strong>: Google Tag Manager, which loads {statsTools}. These tools set
+                  their own cookies and receive your IP address, your browser and device, and the address
+                  of each page you open, which includes the short name of your workspace.
+                </li>
+                <li>
+                  <strong>What the app tells them</strong>: the name of an action, such as "timer started"
+                  or "project created", and whether a page belongs to the app or to the public site. Never
+                  the description of an entry, a project, a client, an amount or your email.
+                </li>
+                <li>
+                  <strong>Session recording</strong>: inside the app, every text and image is replaced in
+                  your browser before a recording is sent, so a recording shows where people click, not
+                  what they track. What you type in a form is not recorded.
+                </li>
+                <li>
+                  <strong>Changing your mind</strong>:{" "}
+                  <a href="#analytics" data-consent-open>review your choice</a> whenever you want.
+                  Declining removes the analytics cookies from this browser.
+                </li>
+              </ul>
+            </section>
+          )}
 
           <section class="card" id="ai">
             <h2>Connecting an AI or a script</h2>
@@ -249,6 +294,12 @@ const workRows = [
                 <li>
                   <strong>{social.join(" and ")}</strong>, only if you choose to sign in with
                   {social.length > 1 ? " one of them" : " it"}: the provider learns that you signed in to {APP_NAME}.
+                </li>
+              )}
+              {stats && (
+                <li>
+                  <strong>Google Tag Manager</strong>, together with {statsTools}, only if you accept the
+                  usage analytics: they receive what the section on usage analytics describes.
                 </li>
               )}
               {botCheck && (

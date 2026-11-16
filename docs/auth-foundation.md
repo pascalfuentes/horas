@@ -166,6 +166,42 @@ npm run cf -- secret delete TURNSTILE_SECRET_KEY
 The widget disappears and the verification is skipped, on both sides at the
 same time. The rate limit stays in place.
 
+### Usage analytics (optional, behind consent)
+
+Off by default: the site ships no third-party script and says "no trackers" on
+the landing page and in the privacy policy. To measure usage, put a Google Tag
+Manager container id in `vars` in `wrangler.local.jsonc`:
+
+```jsonc
+"PUBLIC_GTM_ID": "GTM-XXXXXXX",
+"PUBLIC_ANALYTICS_TOOLS": "Google Analytics, Hotjar"
+```
+
+`PUBLIC_ANALYTICS_TOOLS` names what you configured INSIDE the container; the
+privacy policy prints it, because the code cannot see it.
+
+With the id set:
+
+- every page asks for consent once, and the container loads only after a yes;
+  "Decline" is as easy as "Accept" and the choice can be reviewed from the
+  privacy policy, the landing footer and the Security page;
+- the landing page and the privacy policy stop promising "no trackers" and
+  explain what runs;
+- advertising consent stays denied; only `analytics_storage` is granted;
+- the app pushes event NAMES to `dataLayer` (`sign_up`, `login`,
+  `timer_start`, `timer_stop`, `entries_create`, `projects_update`…), plus
+  `page_area` (`app` or `public`) and `page_path_clean` (the address without
+  the workspace and the record numbers). Never a description, a client, an
+  amount or an e-mail;
+- the signed-in area carries `data-hj-suppress`, so a session-recording tool
+  replaces its text and images before anything leaves the browser.
+
+In the container, point the analytics tag at `page_path_clean` instead of the
+real address if you do not want workspace names in your reports.
+
+**To turn it off**, empty `PUBLIC_GTM_ID` and deploy. Add `PUBLIC_GTM_ID=""`
+to `.dev.vars` so your local sessions are never measured.
+
 ## Putting your application inside
 
 The **Notes** module exists for this: it is the reference example of a

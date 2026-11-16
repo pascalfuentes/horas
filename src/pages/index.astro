@@ -1,9 +1,11 @@
 ---
 import HeadIcons from "~/components/HeadIcons.astro";
 import BusyForms from "~/components/BusyForms.astro";
+import Analytics from "~/components/Analytics.astro";
 import Theme from "~/components/Theme.astro";
 import Logo from "~/components/Logo.astro";
 import { APP_NAME, operator } from "~/config";
+import { analytics } from "~/lib/env";
 import { countPlatformAdmins } from "~/lib/platform";
 import "~/styles/global.css";
 
@@ -17,6 +19,9 @@ if (Astro.locals.user) return Astro.redirect("/dashboard");
 if ((await countPlatformAdmins(Astro.locals.env)) === 0) return Astro.redirect("/setup");
 
 const author = operator(Astro.locals.env).name;
+// The page cannot promise "no trackers" on a deploy that measures usage.
+const stats = analytics(Astro.locals.env);
+const promise = stats ? "No ads. Analytics only if you agree." : "No ads, no trackers.";
 const description =
   "A free time tracker that talks to your AI. Start timers, log hours and ask for reports through Claude or any MCP client.";
 
@@ -26,7 +31,7 @@ const features = [
   ["Reports and CSV", "See where the week went, by day, project, client or tag — and export whenever you need."],
   ["Workspaces and invites", "A space of your own or shared with the team, with a role per person."],
   ["Protected account", "Log in with email and password, Google or GitHub, two-step verification and per-device sessions."],
-  ["Your data is yours", "Download everything or delete your account whenever you want. No ads, no trackers."],
+  ["Your data is yours", `Download everything or delete your account whenever you want. ${promise}`],
 ];
 
 const tools = ["get_status", "start_timer", "stop_timer", "add_entry", "summary_report", "list_entries", "list_projects", "list_tags"];
@@ -44,6 +49,7 @@ const tools = ["get_status", "start_timer", "stop_timer", "add_entry", "summary_
     <HeadIcons />
     <title>{APP_NAME} — the time tracker that talks to your AI</title>
     <Theme />
+    <Analytics />
     <BusyForms />
   </head>
   <body class="lp">
@@ -119,14 +125,17 @@ const tools = ["get_status", "start_timer", "stop_timer", "add_entry", "summary_
 
       <section class="lp-final">
         <h2>Start tracking your time today.</h2>
-        <p>Free. No ads, no trackers.</p>
+        <p>Free. {promise}</p>
         <a class="btn btn-dark" href="/signup">Create account</a>
       </section>
     </main>
 
     <footer class="lp-foot">
       <span>Made by {author} · Astro, Cloudflare Workers and D1</span>
-      <a href="/privacy">Privacy</a>
+      <span class="lp-foot-links">
+        {stats && <a href="/privacy#analytics" data-consent-open>Cookie settings</a>}
+        <a href="/privacy">Privacy</a>
+      </span>
     </footer>
   </body>
 </html>
@@ -185,6 +194,7 @@ const tools = ["get_status", "start_timer", "stop_timer", "add_entry", "summary_
   .lp-final p { font-size: 1.125rem; margin: 0 0 4px; }
   .lp-final .btn-dark { background: #1b1624; color: #fdfbf8; }
   .lp-foot { padding: 8px clamp(20px, 5vw, 72px) 20px; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 0.875rem; color: var(--text-muted); }
+  .lp-foot-links { display: inline-flex; gap: 20px; flex-wrap: wrap; }
 
   @media (max-width: 900px) {
     .lp { padding: 12px; gap: 12px; }

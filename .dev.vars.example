@@ -18,3 +18,7 @@ EMAIL_FROM="Horas <no-reply@exemplo.com>"
 # Cloudflare Turnstile (optional). Without the keys, the widget is skipped.
 PUBLIC_TURNSTILE_SITE_KEY=""
 TURNSTILE_SECRET_KEY=""
+
+# Usage analytics (optional). Keep it empty here so that a container id set in
+# wrangler.local.jsonc for production does not measure your local sessions.
+PUBLIC_GTM_ID=""

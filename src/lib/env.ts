@@ -21,6 +21,10 @@ export type AppEnv = Env & {
   // Shown in the privacy policy. Public, so they live in `vars`.
   OPERATOR_NAME?: string;
   OPERATOR_CONTACT?: string;
+  // Usage analytics (optional). Public: the container id is rendered in the
+  // HTML, and the tool names are printed in the privacy policy.
+  PUBLIC_GTM_ID?: string;
+  PUBLIC_ANALYTICS_TOOLS?: string;
 };
 
 /**
@@ -37,6 +41,29 @@ export function turnstileSecret(value: AppEnv): string | undefined {
   return value.PUBLIC_TURNSTILE_SITE_KEY && value.TURNSTILE_SECRET_KEY
     ? value.TURNSTILE_SECRET_KEY
     : undefined;
+}
+
+/**
+ * Usage analytics, when this deploy has a Google Tag Manager container.
+ *
+ * Returns nothing for a missing or malformed id, and every piece asks here:
+ * the loader with its consent notice, the landing page and the privacy
+ * policy. So a deploy without the id ships no third-party script and says so,
+ * and a deploy with it says what runs. Nothing half enabled.
+ *
+ * `tools` is what the operator configured INSIDE the container (for example
+ * "Google Analytics, Hotjar"). The code cannot see that, so the operator
+ * declares it and the privacy policy prints it.
+ */
+export function analytics(value: AppEnv): { id: string; tools: string[] } | null {
+  const id = (value.PUBLIC_GTM_ID ?? "").trim();
+  if (!/^GTM-[A-Z0-9]{4,12}$/.test(id)) return null;
+
+  const tools = (value.PUBLIC_ANALYTICS_TOOLS ?? "")
+    .split(",")
+    .map((tool) => tool.trim())
+    .filter(Boolean);
+  return { id, tools };
 }
 
 /** Social providers actually configured in this environment. */

@@ -122,6 +122,10 @@ Then open `/setup` once to create the superadmin (they are required to enable
    `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET` as secrets. Each button only
    appears when the pair exists.
 
+Usage analytics are optional and off by default; with a Google Tag Manager
+container they run only after each visitor's consent. See the auth foundation
+document.
+
 For automatic deploys on every push, connect the repository in **Workers & Pages →
 Create → Import a repository** (Workers Builds), with `npm run build` as the
 build and `npx wrangler deploy` as the deploy.

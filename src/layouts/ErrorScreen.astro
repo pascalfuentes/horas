@@ -4,6 +4,7 @@
  * The status code is drawn large, and every zero in it is the brand stopwatch.
  */
 import HeadIcons from "~/components/HeadIcons.astro";
+import Analytics from "~/components/Analytics.astro";
 import Theme from "~/components/Theme.astro";
 import Logo from "~/components/Logo.astro";
 import { APP_NAME } from "~/config";
@@ -30,6 +31,7 @@ const { code, title, heading, lead } = Astro.props;
     <HeadIcons />
     <title>{title}</title>
     <Theme />
+    <Analytics />
   </head>
   <body>
     <main class="err-shell">
