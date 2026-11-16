@@ -35,7 +35,10 @@ button.hr-load-more { box-shadow: var(--shadow-button); padding: 11px 32px; }
 .hr-day > header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .hr-day ul { list-style: none; margin: 0; padding: 0; }
 .hr-row { display: flex; align-items: center; gap: 16px; padding: 12px 0; }
-.hr-row + .hr-row { border-top: 1px solid var(--border); }
+/* Every other row of a day, the first one included, sits on a band of the page
+   colour, so the eye can follow a row across the card. The band is as wide as
+   the hover layer and is drawn behind it. */
+.hr-row:nth-child(odd)::after { content: ""; position: absolute; inset: 0 -14px; z-index: -2; border-radius: var(--radius); background: var(--bg); pointer-events: none; }
 /* Hover: the row lifts off the card — a soft shadow, a hairline and a sun-yellow
    edge. Drawn on a pseudo-element behind the content, so nothing moves and the
    menus that open from a row still sit above the rows below it. */
