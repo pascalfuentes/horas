@@ -144,15 +144,13 @@ const invitableRoles = WORKSPACE_ROLES.filter((r) => r !== "owner");
                         <div class="row-actions">
                           <form method="post" action={`/api/w/${ws.workspaceSlug}/invites`} class="inline-form">
                             <input type="hidden" name="action" value="resend" />
-                            <input type="hidden" name="email" value={c.email} />
-                            <input type="hidden" name="role" value={c.role ?? "viewer"} />
+                            <input type="hidden" name="id" value={c.id} />
                             <button class="btn-ghost btn-sm" type="submit">Resend</button>
                           </form>
                           {status === "pending" && (
                             <form method="post" action={`/api/w/${ws.workspaceSlug}/invites`} class="inline-form">
                               <input type="hidden" name="action" value="cancel" />
                               <input type="hidden" name="id" value={c.id} />
-                              <input type="hidden" name="email" value={c.email} />
                               <button class="btn-danger btn-sm" type="submit">Cancel</button>
                             </form>
                           )}

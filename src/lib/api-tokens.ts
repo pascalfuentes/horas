@@ -85,6 +85,25 @@ export async function revokeToken(env: AppEnv, input: { id: string; userId: stri
   return (r.meta.changes ?? 0) > 0;
 }
 
+/**
+ * Deletes every token a person has for one workspace. Called when the person
+ * stops being a member of it.
+ *
+ * A token without a membership already opens nothing (see `authenticateToken`).
+ * But the row stayed, and the day the same person was invited back the old
+ * token started working again by itself, in the hands of whoever still had it.
+ *
+ * @param env The Worker's bindings.
+ * @param owner The person and the workspace.
+ * @returns How many tokens were deleted.
+ */
+export async function revokeMemberTokens(env: AppEnv, owner: { userId: string; workspaceId: string }): Promise<number> {
+  const r = await env.DB.prepare(`DELETE FROM "api_token" WHERE "userId" = ?1 AND "workspaceId" = ?2`)
+    .bind(owner.userId, owner.workspaceId)
+    .run();
+  return r.meta.changes ?? 0;
+}
+
 /** Extracts the token from `Authorization: Bearer …`. */
 export function tokenFromHeader(request: Request): string | null {
   const m = (request.headers.get("authorization") ?? "").match(/^Bearer\s+(\S+)$/i);

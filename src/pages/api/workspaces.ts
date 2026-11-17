@@ -2,8 +2,8 @@ import type { APIRoute } from "astro";
 
 import { AUDIT, audit } from "~/lib/audit";
 import { actor, denyAccount } from "~/lib/guards";
-import { fail, ok, str } from "~/lib/http";
-import { createWorkspace } from "~/lib/workspaces";
+import { fail, nameCarriesLink, ok, str } from "~/lib/http";
+import { MAX_OWNED_WORKSPACES, countOwnedWorkspaces, createWorkspace } from "~/lib/workspaces";
 
 export const prerender = false;
 
@@ -15,13 +15,20 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const denied = denyAccount(locals);
   if (denied) return denied;
 
-  const name = str(await request.formData(), "name");
+  const name = str(await request.formData(), "name").slice(0, 60);
   if (!name) return fail("/workspaces", "fields");
+  if (nameCarriesLink(name, "workspace")) return fail("/workspaces", "invalid_name");
 
   const me = actor(locals);
 
+  // Creating a workspace is free and each one can send invitations, so a
+  // person does not get to open them without end.
+  if ((await countOwnedWorkspaces(locals.env, me.id)) >= MAX_OWNED_WORKSPACES) {
+    return fail("/workspaces", "workspace_limit");
+  }
+
   try {
-    const ws = await createWorkspace(locals.env, { name: name.slice(0, 60), ownerId: me.id });
+    const ws = await createWorkspace(locals.env, { name, ownerId: me.id });
 
     await audit(locals.env, {
       action: AUDIT.WORKSPACE_CREATED,
@@ -32,7 +39,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       request,
     });
 
-    return ok(`/w/${ws.slug}`, "ok_workspace_created");
+    return ok(`/w/${encodeURIComponent(ws.slug)}`, "ok_workspace_created");
   } catch (error) {
     console.error("create workspace:", error);
     return fail("/workspaces", "error");

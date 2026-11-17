@@ -66,6 +66,24 @@ export async function listInvites(env: AppEnv, workspaceId: string): Promise<Wor
     .all();
 }
 
+/**
+ * One invite of this workspace, by id. An id from another workspace finds
+ * nothing: what an endpoint does to an invite is decided by the row, never by
+ * what the form says about it.
+ *
+ * @param env The Worker's bindings.
+ * @param workspaceId The workspace in the address.
+ * @param id The invite's id.
+ * @returns The invite's address, role and status, or `undefined`.
+ */
+export async function inviteById(env: AppEnv, workspaceId: string, id: string) {
+  return getDb(env)
+    .select({ id: orgInvitation.id, email: orgInvitation.email, role: orgInvitation.role, status: orgInvitation.status })
+    .from(orgInvitation)
+    .where(and(eq(orgInvitation.id, id), eq(orgInvitation.organizationId, workspaceId)))
+    .get();
+}
+
 /** A pending and still valid invite is neither "expired" nor "canceled". */
 export function isPending(c: WorkspaceInvite): boolean {
   return c.status === "pending" && c.expiresAt.getTime() > Date.now();

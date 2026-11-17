@@ -5,7 +5,7 @@ import { AUDIT, audit } from "~/lib/audit";
 import { callAuth } from "~/lib/auth";
 import { actor, deny, currentWorkspace } from "~/lib/guards";
 import { codeFromAuthError, fail, handleAuthResponse, isEmail, ok, str } from "~/lib/http";
-import { isAlreadyMember, hasPendingInvite } from "~/lib/members";
+import { inviteById, isAlreadyMember, hasPendingInvite } from "~/lib/members";
 import { PERMISSIONS } from "~/lib/permissions";
 
 export const prerender = false;
@@ -58,8 +58,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return ok(PAGE, "ok_invite_sent");
     }
 
+    // From here on the action is about an invite that exists. Which address
+    // and which role it is for come from the row of THIS workspace, not from
+    // the form: a form field is whatever the sender typed into it.
     const id = str(form, "id");
     if (!id) return fail(PAGE, "fields");
+    const invite = await inviteById(locals.env, ws.workspaceId, id);
+    if (!invite) return fail(PAGE, "invite_expired");
 
     if (action === "cancel") {
       const res = await callAuth(locals.auth, request, "/organization/cancel-invitation", {
@@ -71,7 +76,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         action: AUDIT.MEMBER_INVITE_CANCELLED,
         actorId: me.id,
         actorEmail: me.email,
-        targetEmail: str(form, "email") || null,
+        targetEmail: invite.email,
         workspaceId: ws.workspaceId,
         request,
       });
@@ -79,9 +84,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
 
     if (action === "resend") {
-      const email = str(form, "email").toLowerCase();
-      const role = (str(form, "role") || "viewer") as WorkspaceRole;
-      if (!isEmail(email)) return fail(PAGE, "invalid_email");
+      const email = invite.email.toLowerCase();
+      const role = (invite.role ?? "viewer") as WorkspaceRole;
+      // The same rules as a first invite. Taking the role from the form here
+      // was a way around "nobody invites to owner".
+      if (!(WORKSPACE_ROLES as readonly string[]).includes(role) || role === "owner") {
+        return fail(PAGE, "invalid_role");
+      }
+      if (await isAlreadyMember(locals.env, ws.workspaceId, email)) return fail(PAGE, "already_member");
 
       // `cancelPendingInvitationsOnReInvite` is on: the previous invite is
       // cancelled and a new one goes out, with a fresh expiry.

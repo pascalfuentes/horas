@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 
 import { WORKSPACE_ROLES, type WorkspaceRole } from "~/db/schema";
+import { revokeMemberTokens } from "~/lib/api-tokens";
 import { AUDIT, audit } from "~/lib/audit";
 import { callAuth } from "~/lib/auth";
 import { isLastOwnerError } from "~/lib/errors";
@@ -34,6 +35,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         organizationId: ws.workspaceId,
       });
       if (!res.ok) return handleAuthResponse(res, "/workspaces", PAGE);
+      await revokeMemberTokens(locals.env, { userId: me.id, workspaceId: ws.workspaceId });
 
       await audit(locals.env, {
         action: AUDIT.MEMBER_LEFT,
@@ -89,6 +91,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         organizationId: ws.workspaceId,
       });
       if (!res.ok) return handleAuthResponse(res, PAGE, PAGE);
+      await revokeMemberTokens(locals.env, { userId: target.userId, workspaceId: ws.workspaceId });
 
       await audit(locals.env, {
         action: AUDIT.MEMBER_REMOVED,

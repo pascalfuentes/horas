@@ -54,17 +54,30 @@ export const GET: APIRoute = async ({ locals }) => {
     .from(account)
     .where(eq(account.userId, me.id));
 
-  const actions = await db
-    .select({
-      when: auditLog.createdAt,
-      action: auditLog.action,
-      target: auditLog.targetEmail,
-      details: auditLog.details,
-      ip: auditLog.ip,
-    })
-    .from(auditLog)
-    .where(or(eq(auditLog.actorId, me.id), eq(auditLog.targetId, me.id)))
-    .orderBy(desc(auditLog.createdAt));
+  // The IP of a row belongs to whoever performed the action. When the person
+  // was only the TARGET (an administrator disabled them, an owner changed
+  // their role), that IP is somebody else's personal data, and this file is
+  // about the person who asked for it. Same rule as when an account is
+  // deleted (`deleteUser.afterDelete`, in auth.ts): the IP is theirs when
+  // they are the actor, or when the row has no actor at all.
+  const actions = (
+    await db
+      .select({
+        when: auditLog.createdAt,
+        action: auditLog.action,
+        target: auditLog.targetEmail,
+        details: auditLog.details,
+        ip: auditLog.ip,
+        actorId: auditLog.actorId,
+        actorEmail: auditLog.actorEmail,
+      })
+      .from(auditLog)
+      .where(or(eq(auditLog.actorId, me.id), eq(auditLog.targetId, me.id)))
+      .orderBy(desc(auditLog.createdAt))
+  ).map(({ actorId, actorEmail, ip, ...row }) => ({
+    ...row,
+    ip: actorId === me.id || (actorId === null && actorEmail === null) ? ip : null,
+  }));
 
   // Memberships: which workspaces the person is part of and with what role.
   const memberships = (await userWorkspaces(locals.env, me.id)).map((w) => ({

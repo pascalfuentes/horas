@@ -1,7 +1,9 @@
 import type { APIRoute } from "astro";
+import { waitUntil } from "cloudflare:workers";
 
 import { createToken, revokeToken } from "~/lib/api-tokens";
 import { AUDIT, audit } from "~/lib/audit";
+import { emailLayout, sendEmail } from "~/lib/email";
 import { actor, deny, currentWorkspace } from "~/lib/guards";
 import { jsonError } from "~/lib/horas-api";
 import { PERMISSIONS } from "~/lib/permissions";
@@ -50,6 +52,10 @@ export const POST: APIRoute = async ({ request, locals, url }) => {
       details: { tokenId: created.id, name: name.slice(0, 60) },
       request,
     });
+    // A token is a second key to the account: it keeps working after the
+    // password changes and after every session is ended. So its owner hears
+    // about each new one, at an address that whoever created it cannot hide.
+    waitUntil(notifyTokenCreated(locals.env, me.email, ws.workspaceName, ws.workspaceSlug));
     return json(created, 201);
   }
 
@@ -69,3 +75,35 @@ export const POST: APIRoute = async ({ request, locals, url }) => {
 
   return jsonError("Invalid action.", 400);
 };
+
+/**
+ * Tells a person that a token was created in their name.
+ *
+ * @param env The Worker's bindings.
+ * @param email The person's address.
+ * @param workspaceName The workspace the token opens.
+ * @param workspaceSlug Its address, for the link to the page that lists the tokens.
+ * @returns Nothing; a failed send only reaches the log.
+ */
+async function notifyTokenCreated(
+  env: App.Locals["env"],
+  email: string,
+  workspaceName: string,
+  workspaceSlug: string,
+): Promise<void> {
+  const escaped = workspaceName.replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
+  );
+  const { html, text } = emailLayout(
+    "A new API token was created",
+    [
+      `A personal token for the API and for MCP was just created on your account, for the workspace <strong>${escaped}</strong>.`,
+      "If this was you, there is nothing to do.",
+      "<strong>If it wasn't, revoke the token on the page below and change your password.</strong> A token keeps working after a password change until it is revoked.",
+    ],
+    { label: "Review my tokens", url: `${env.BETTER_AUTH_URL}/w/${encodeURIComponent(workspaceSlug)}/integrations` },
+  );
+  await sendEmail(env, { to: email, subject: "A new API token was created", html, text }).catch((error) =>
+    console.error("token notice:", error),
+  );
+}

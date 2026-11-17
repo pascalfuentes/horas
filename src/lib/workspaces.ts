@@ -220,3 +220,20 @@ export async function workspacesWhereSoleOwner(
 
   return rows.results ?? [];
 }
+
+/** Workspaces one person may own. The one born with the account counts. */
+export const MAX_OWNED_WORKSPACES = 20;
+
+/**
+ * How many workspaces a person owns.
+ *
+ * @param env The Worker's bindings.
+ * @param userId The person.
+ * @returns The number of workspaces where their role is `owner`.
+ */
+export async function countOwnedWorkspaces(env: AppEnv, userId: string): Promise<number> {
+  const row = await env.DB.prepare(`SELECT COUNT(*) AS n FROM "member" WHERE "userId" = ?1 AND "role" = 'owner'`)
+    .bind(userId)
+    .first<{ n: number }>();
+  return Number(row?.n ?? 0);
+}

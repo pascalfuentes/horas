@@ -19,11 +19,21 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const form = await request.formData();
   const action = str(form, "action");
   const userId = str(form, "userId");
-  const targetEmail = str(form, "email") || null;
   const me = actor(locals);
   const headers = request.headers;
 
   if (!userId) return fail(PAGE, "fields");
+
+  // The trail names the account that was acted on. Read from the account
+  // itself: the form used to send the address along, and whatever it said
+  // went into the record.
+  const target = await getDb(locals.env)
+    .select({ email: userTable.email })
+    .from(userTable)
+    .where(eq(userTable.id, userId))
+    .get();
+  if (!target) return fail(PAGE, "fields");
+  const targetEmail = target.email;
 
   const record = (action: (typeof AUDIT)[keyof typeof AUDIT], details?: Record<string, unknown>) =>
     audit(locals.env, {

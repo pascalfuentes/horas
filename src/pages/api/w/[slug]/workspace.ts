@@ -3,7 +3,7 @@ import type { APIRoute } from "astro";
 import { AUDIT, audit } from "~/lib/audit";
 import { callAuth } from "~/lib/auth";
 import { actor, deny, currentWorkspace } from "~/lib/guards";
-import { codeFromAuthError, fail, handleAuthResponse, ok, str } from "~/lib/http";
+import { codeFromAuthError, fail, handleAuthResponse, nameCarriesLink, ok, str } from "~/lib/http";
 import { PERMISSIONS } from "~/lib/permissions";
 import { deleteWorkspace } from "~/lib/workspaces";
 
@@ -21,14 +21,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
       const denied = deny(locals, PERMISSIONS.WORKSPACE_WRITE);
       if (denied) return denied;
 
-      const name = str(form, "name");
+      const name = str(form, "name").slice(0, 60);
       if (!name) return fail(PAGE, "fields");
+      if (nameCarriesLink(name, "workspace")) return fail(PAGE, "invalid_name");
 
       // Only the name changes; the slug stays. Changing the slug would break
       // every link already shared for this workspace, including those in emails.
       const res = await callAuth(locals.auth, request, "/organization/update", {
         organizationId: ws.workspaceId,
-        data: { name: name.slice(0, 60) },
+        data: { name },
       });
       if (!res.ok) return handleAuthResponse(res, PAGE, PAGE);
 

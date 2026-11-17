@@ -8,6 +8,7 @@
  */
 
 import type { ImportError, Parsed } from "~/lib/horas-import";
+import { withinLimit } from "~/lib/throttle";
 
 // Project colors from the design system (project/sky, coral, sun, mint, violet, rose).
 const COLORS = ["#5dcdf1", "#fd976d", "#fdd46b", "#4cc98c", "#9b8afb", "#f0705f"];
@@ -16,6 +17,17 @@ export const DEFAULT_TZ = "America/Sao_Paulo";
 
 /** Projects a workspace may have; shared by manual creation and import. */
 const MAX_PROJECTS = 500;
+
+/**
+ * Entries one person may create in ten minutes, one at a time (a started
+ * timer or a manual entry; an import has its own limit of rows). Far above
+ * what a person or an assistant filling in a month does, and it turns a
+ * runaway script or a stolen token into a trickle instead of a flood.
+ */
+const ENTRIES_PER_WINDOW = { max: 600, windowSeconds: 600 };
+
+/** Entries a workspace may hold. Checked when importing, which is how it would fill up. */
+const MAX_ENTRIES = 200_000;
 
 /** Error with an HTTP status, used for 400/404/409 responses. */
 export class HorasError extends Error {
@@ -526,10 +538,21 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     return getEntry(running.id);
   }
 
+  /**
+   * Counts one more entry created by this person and refuses when they are
+   * creating them faster than any use of the product would.
+   */
+  async function paceNewEntry(): Promise<void> {
+    if (!(await withinLimit({ DB: db }, `entries:${uid}`, ENTRIES_PER_WINDOW))) {
+      throw new HorasError("Too many entries in a short time. Wait a few minutes and try again.", 429);
+    }
+  }
+
   /** Starts a timer. If one is already running, it is stopped first. */
   async function startTimer(input: EntryInput = {}): Promise<{ entry: Entry; stopped: Entry | null }> {
     const start = input.start ? toIso(input.start, "start", tz) : nowIso();
     if (Date.parse(start) > Date.now() + 60000) throw new HorasError("A timer cannot start in the future.");
+    await paceNewEntry();
     const projectId = (await resolveProject(input)) ?? null;
     const running = await getRunning();
     const stopped = running ? await stopTimer({ end: start > running.start ? start : undefined }) : null;
@@ -565,6 +588,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     }
     if (!start || !end) throw new HorasError("Provide start and end, or duration_minutes.");
     if (end <= start) throw new HorasError("The end must be after the start.");
+    await paceNewEntry();
     const projectId = (await resolveProject(input)) ?? null;
     const meta = await run(
       `INSERT INTO "time_entry" ("workspaceId", "userId", "description", "projectId", "tags", "billable", "start", "end", "createdAt")
@@ -861,6 +885,10 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     }
     if (existingProjects.length + wanted.size > MAX_PROJECTS) {
       throw new HorasError(`This import would exceed the limit of ${MAX_PROJECTS} projects per workspace.`);
+    }
+    const held = await first<{ n: number }>('SELECT COUNT(*) AS n FROM "time_entry" WHERE "workspaceId" = ?1', ws);
+    if ((held?.n ?? 0) + fresh.length > MAX_ENTRIES) {
+      throw new HorasError(`This import would exceed the limit of ${MAX_ENTRIES.toLocaleString("en-US")} entries per workspace.`);
     }
 
     const result = {

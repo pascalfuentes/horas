@@ -1,3 +1,4 @@
+import { count, eq } from "drizzle-orm";
 import type { APIRoute } from "astro";
 
 import { note } from "~/db/schema";
@@ -7,6 +8,9 @@ import { fail, ok, str } from "~/lib/http";
 import { PERMISSIONS } from "~/lib/permissions";
 
 export const prerender = false;
+
+/** Notes a workspace may hold. Each is up to 4,000 characters of someone's text. */
+const MAX_NOTES = 2000;
 
 /**
  * DEMO MODULE.
@@ -25,8 +29,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const body = str(form, "body");
   if (!title) return fail(`/w/${ws.workspaceSlug}/notes`, "fields");
 
+  const db = getDb(locals.env);
+  const existing = await db.select({ n: count() }).from(note).where(eq(note.workspaceId, ws.workspaceId)).get();
+  if (Number(existing?.n ?? 0) >= MAX_NOTES) return fail(`/w/${ws.workspaceSlug}/notes`, "note_limit");
+
   const now = new Date();
-  await getDb(locals.env).insert(note).values({
+  await db.insert(note).values({
     id: crypto.randomUUID(),
     title: title.slice(0, 160),
     body: body.slice(0, 4000),
