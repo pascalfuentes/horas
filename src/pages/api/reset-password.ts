@@ -1,7 +1,8 @@
 import type { APIRoute } from "astro";
 
 import { callAuth } from "~/lib/auth";
-import { fail, handleAuthResponse, ok, str } from "~/lib/http";
+import { PASSWORD_MAX, PASSWORD_MIN, fail, handleAuthResponse, ok, str } from "~/lib/http";
+import { isCommonPassword } from "~/lib/passwords";
 
 export const prerender = false;
 
@@ -13,8 +14,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const back = `/reset-password?token=${encodeURIComponent(token)}`;
 
   if (!token) return fail("/forgot-password", "invalid_invite");
-  if (password.length < 10) return fail(back, "password_short");
+  if (password.length < PASSWORD_MIN) return fail(back, "password_short");
+  if (password.length > PASSWORD_MAX) return fail(back, "password_long");
   if (password !== confirm) return fail(back, "password_mismatch");
+  if (isCommonPassword(password)) return fail(back, "password_common");
 
   const res = await callAuth(locals.auth, request, "/reset-password", {
     newPassword: password,

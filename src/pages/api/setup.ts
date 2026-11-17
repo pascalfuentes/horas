@@ -3,7 +3,18 @@ import type { APIRoute } from "astro";
 import { AUDIT, audit } from "~/lib/audit";
 import { callAuth, getDb } from "~/lib/auth";
 import { user as userTable } from "~/db/schema";
-import { codeFromAuthError, fail, handleAuthResponse, isEmail, str } from "~/lib/http";
+import {
+  NAME_MAX,
+  PASSWORD_MAX,
+  PASSWORD_MIN,
+  codeFromAuthError,
+  fail,
+  handleAuthResponse,
+  isEmail,
+  nameCarriesLink,
+  str,
+} from "~/lib/http";
+import { isCommonPassword } from "~/lib/passwords";
 import { countPlatformAdmins, userByEmail } from "~/lib/platform";
 import { timingSafeEqual } from "~/lib/tokens";
 import { eq } from "drizzle-orm";
@@ -30,13 +41,16 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
   if ((await countPlatformAdmins(env)) > 0) return fail("/login", "no_permission");
 
-  const name = str(form, "name");
+  const name = str(form, "name").slice(0, NAME_MAX);
   const email = str(form, "email").toLowerCase();
   const password = str(form, "password");
 
   if (!name || !isEmail(email)) return fail("/setup", "fields");
-  if (password.length < 10) return fail("/setup", "password_short");
+  if (nameCarriesLink(name)) return fail("/setup", "invalid_name");
+  if (password.length < PASSWORD_MIN) return fail("/setup", "password_short");
+  if (password.length > PASSWORD_MAX) return fail("/setup", "password_long");
   if (password !== str(form, "confirm")) return fail("/setup", "password_mismatch");
+  if (isCommonPassword(password, [email, name])) return fail("/setup", "password_common");
 
   const db = getDb(env);
   const existing = await userByEmail(env, email);

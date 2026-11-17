@@ -3,7 +3,8 @@ import type { APIRoute } from "astro";
 import { AUDIT, audit } from "~/lib/audit";
 import { callAuth } from "~/lib/auth";
 import { actor, denyAccount } from "~/lib/guards";
-import { codeFromAuthError, fail, handleAuthResponse, str } from "~/lib/http";
+import { PASSWORD_MAX, PASSWORD_MIN, codeFromAuthError, fail, handleAuthResponse, str } from "~/lib/http";
+import { isCommonPassword } from "~/lib/passwords";
 
 export const prerender = false;
 
@@ -19,10 +20,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const confirm = str(form, "confirm");
 
   if (!currentPassword || !newPassword) return fail(PAGE, "fields");
-  if (newPassword.length < 10) return fail(PAGE, "password_short");
+  if (newPassword.length < PASSWORD_MIN) return fail(PAGE, "password_short");
+  if (newPassword.length > PASSWORD_MAX) return fail(PAGE, "password_long");
   if (newPassword !== confirm) return fail(PAGE, "password_mismatch");
 
   const me = actor(locals);
+  if (isCommonPassword(newPassword, [me.email, locals.user?.name ?? ""])) return fail(PAGE, "password_common");
 
   try {
     const res = await callAuth(locals.auth, request, "/change-password", {

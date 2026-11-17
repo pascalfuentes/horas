@@ -11,13 +11,15 @@ import {
   defaultStatements as defaultStatementsWorkspace,
   ownerAc,
 } from "better-auth/plugins/organization/access";
+import { waitUntil } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 
 import { APP_NAME, INVITE_TTL_DAYS } from "~/config";
 import { schema } from "~/db/schema";
 import { assertEnv, socialProviders, turnstileSecret, type AppEnv } from "~/lib/env";
 import { emailLayout, sendEmail } from "~/lib/email";
-import { verifyTurnstile } from "~/lib/http";
+import { PASSWORD_MAX, PASSWORD_MIN, verifyTurnstile } from "~/lib/http";
+import { isCommonPassword } from "~/lib/passwords";
 import { createWorkspace } from "~/lib/workspaces";
 
 /**
@@ -134,8 +136,8 @@ function build(env: AppEnv) {
       // mandatory email verification, right below.
       disableSignUp: false,
       autoSignIn: true,
-      minPasswordLength: 10,
-      maxPasswordLength: 200,
+      minPasswordLength: PASSWORD_MIN,
+      maxPasswordLength: PASSWORD_MAX,
       // Non-negotiable with open signup: without this, anyone could create an
       // account with another person's email and get access in their name.
       requireEmailVerification: true,
@@ -249,6 +251,20 @@ function build(env: AppEnv) {
         // Behind Cloudflare, the real IP comes in this header.
         ipAddressHeaders: ["cf-connecting-ip", "x-forwarded-for"],
       },
+      // E-mails leave AFTER the answer, not before it. Waiting for the mail
+      // provider made "forgot my password" take several times longer for an
+      // address that has an account than for one that does not, and that
+      // difference is an account checker with a stopwatch.
+      backgroundTasks: {
+        handler: (task) => {
+          try {
+            waitUntil(task);
+          } catch {
+            // Outside a request there is nothing to keep alive: just let it run.
+            task.catch(() => {});
+          }
+        },
+      },
     },
 
     rateLimit: {
@@ -265,6 +281,11 @@ function build(env: AppEnv) {
         "/reset-password": { window: 600, max: 5 },
         "/change-password": { window: 600, max: 5 },
         "/change-email": { window: 600, max: 3 },
+        // Both of these send an e-mail to an address the sender chose. At the
+        // general limit that is sixty messages a minute into a stranger's
+        // inbox, with the site's own name on them.
+        "/send-verification-email": { window: 600, max: 3 },
+        "/organization/invite-member": { window: 600, max: 20 },
       },
     },
 
@@ -352,6 +373,23 @@ function build(env: AppEnv) {
     // ------------------------------------------------------------------
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
+        // A password that is the first anyone would try, on every path that
+        // sets one. Before Turnstile: a refused password should not also
+        // spend the person's challenge.
+        const fields = (ctx.body ?? {}) as Record<string, unknown>;
+        const chosen =
+          ctx.path === "/sign-up/email"
+            ? fields.password
+            : ctx.path === "/reset-password" || ctx.path === "/change-password"
+              ? fields.newPassword
+              : undefined;
+        if (typeof chosen === "string") {
+          const related = [fields.email, fields.name].filter((v): v is string => typeof v === "string");
+          if (isCommonPassword(chosen, related)) {
+            throw new APIError("BAD_REQUEST", { message: "PASSWORD_TOO_COMMON" });
+          }
+        }
+
         if (ctx.path !== "/sign-up/email") return;
         const secret = turnstileSecret(env);
         if (!secret) return; // no Turnstile configured, nothing to check
