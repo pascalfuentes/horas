@@ -239,15 +239,29 @@ check "already registered e-mail answers the SAME as a new one"  "ok=ok_signup" 
 check "and no duplicate account was created"           '"n": 1'               "$(sql "SELECT COUNT(*) AS n FROM user WHERE email='leitor@exemplo.com'")"
 check "resending verification answers the same for a nonexistent one"  "ok=ok_verification_resent" "$(post - /api/resend-verification email=ninguem@exemplo.com)"
 
-# Turnstile is validated at the ENDPOINT, not only on our page: a direct POST
-# to /api/auth/sign-up/email used to create an account with no challenge at
-# all, and the anti-bot protection only applied to those using the form. This
-# check only runs where a key is configured; without it the hook has nothing
-# to validate.
-if [[ "$(curl -s "$BASE/signup")" == *cf-turnstile* ]]; then
-  check "direct sign-up requires Turnstile"            "400"  "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/auth/sign-up/email" -H "Origin: $BASE" -H 'Content-Type: application/json' -d '{"name":"X","email":"robo@exemplo.com","password":"senha-longa-o-suficiente"}')"
-  check "and no account was created by it"             "[]"   "$(sql "SELECT id FROM user WHERE email='robo@exemplo.com'")"
-fi
+# Better Auth's own routes are closed to the outside: the forms post to the
+# application's endpoints, which call the library from inside. A direct POST to
+# /api/auth/sign-up/email used to create an account without going through the
+# form (and, before the Turnstile hook, without any challenge); now the route
+# does not exist. Only the links of the e-mails and the return from a social
+# provider stay open.
+raw() { curl -s -o /dev/null -w '%{http_code}' -X "$1" "$BASE/api/auth$2" -H "Origin: $BASE" -H 'Content-Type: application/json' ${3:+-d "$3"}; }
+check "the raw sign-up route does not exist"           "404"  "$(raw POST /sign-up/email '{"name":"X","email":"robo@exemplo.com","password":"senha-longa-o-suficiente"}')"
+check "and no account was created by it"               "[]"   "$(sql "SELECT id FROM user WHERE email='robo@exemplo.com'")"
+check "the raw sign-in route does not exist"           "404"  "$(raw POST /sign-in/email '{"email":"leitor@exemplo.com","password":"qualquer-coisa-longa"}')"
+check "nor the raw workspace and admin routes"         "404 404 404" "$(raw POST /organization/create '{"name":"x","slug":"../x"}') $(raw GET '/organization/check-slug?slug=x') $(raw GET /admin/list-users)"
+check "the link of a confirmation e-mail still answers" "302" "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/auth/verify-email?token=not-a-token&callbackURL=/login")"
+
+# Every check of what was typed happens for both kinds of address. One that
+# only a new address went through (a password that is too long) answered
+# differently for an address that has an account, which told the two apart.
+LONG_PASSWORD="$(python3 -c 'print("z9-" * 80)')"
+check "a password that is too long is refused"         "e=password_long"     "$(post - /api/signup name=Novo email=novo-longo@exemplo.com "password=$LONG_PASSWORD" "confirm=$LONG_PASSWORD")"
+check "with the SAME answer for an address that has an account"  "e=password_long" "$(post - /api/signup name=Novo email=leitor@exemplo.com "password=$LONG_PASSWORD" "confirm=$LONG_PASSWORD")"
+check "a password everybody tries first is refused"    "e=password_common"   "$(post - /api/signup name=Novo email=novo-fraco@exemplo.com password=password123 confirm=password123)"
+check "and so is the person's own address with digits"  "e=password_common"  "$(post - /api/signup name=Novo email=mariazinha@exemplo.com password=mariazinha2026 confirm=mariazinha2026)"
+check "a name cannot carry a link"                     "e=invalid_name"      "$(post - /api/signup 'name=Visit www.evil.example' email=novo-link@exemplo.com password=uma-senha-bem-longa confirm=uma-senha-bem-longa)"
+check "and none of those created an account"           "[]"                  "$(sql "SELECT id FROM user WHERE email LIKE 'novo-%' OR email='mariazinha@exemplo.com'")"
 
 # Usage analytics exist only where a Tag Manager container is configured, and
 # the pages say which case they are in. Even with a container, the HTML itself
@@ -380,6 +394,18 @@ check "but an unknown query param does not hitch a ride"  "/w/$WS/time?ok="     
 post "$ADMIN" "/api/w/$WS/invites" action=invite email=ninguem@exemplo.com role=viewer >/dev/null
 check "an invitation addressed to ANOTHER person does not leak"  "no"                    "$(has /dashboard/profile "$VIEWER" "waiting")"
 
+
+# Resending and cancelling act on the invitation the id names, with the address
+# and the role it has in the database. The Resend button used to send no id at
+# all (so it always failed), and the endpoint took the role from the form,
+# which was a way around "nobody invites to owner".
+INVITE_RESEND="$(invite_id ninguem@exemplo.com)"
+check "the Resend button names the invitation"         "yes"                   "$(has "/w/$WS/members" "$ADMIN" "name=\"id\" value=\"$INVITE_RESEND\"")"
+check "resending by id works"                          "ok=ok_invite_sent"     "$(post "$ADMIN" "/api/w/$WS/invites" action=resend "id=$(invite_id ninguem@exemplo.com)" role=owner email=outra-pessoa@exemplo.com)"
+check "the role in the form changed nothing"           '"role": "viewer"'      "$(sql "SELECT role FROM org_invitation WHERE email='ninguem@exemplo.com' AND status='pending'")"
+check "nor did the address in the form"                "[]"                    "$(sql "SELECT id FROM org_invitation WHERE email='outra-pessoa@exemplo.com'")"
+check "an invitation from nowhere is refused"          "e=invite_expired"      "$(post "$ADMIN" "/api/w/$WS/invites" action=cancel id=nao-existe)"
+
 echo; echo "$(c 1 'Member management')"
 ID_VIEWER="$(member_id leitor@exemplo.com "$WS")"
 ID_ADMIN="$(member_id admin@exemplo.com "$WS")"
@@ -395,8 +421,15 @@ check "the recipient became owner"                     '"role": "owner"'       "
 check "the one who transferred became admin"           '"role": "admin"'       "$(role_of admin@exemplo.com "$WS")"
 check "and the workspace still has a single owner"     '"n": 1'                "$(sql "SELECT COUNT(*) AS n FROM member m JOIN organization o ON o.id=m.organizationId WHERE o.slug='$WS' AND m.role='owner'")"
 
+# A personal token belongs to one membership. It used to stay in the table
+# after the person left, and came back to life if they were invited again.
+TOKEN_SMOKE="$(curl -s -b "$ADMIN" -X POST "$BASE/api/w/$WS/tokens" -H "Origin: $BASE" -H 'Content-Type: application/json' -d '{"action":"create","name":"smoke"}' | python3 -c 'import sys,json;print(json.load(sys.stdin).get("token",""))')"
+check "a member creates a personal token"              '"n": 1'                "$(sql "SELECT COUNT(*) AS n FROM api_token WHERE userId='$ADMIN_ID'")"
+check "the token API answers a DELETE with no Content-Type"  "404"             "$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$BASE/api/v1/entries/999999" -H "Authorization: Bearer $TOKEN_SMOKE")"
 check "now the former owner can leave"                 "ok=ok_left"            "$(post "$ADMIN" "/api/w/$WS/members" action=leave)"
 check "and loses access immediately"                   "404"                   "$(get "/w/$WS" "$ADMIN")"
+check "and their token for it is gone"                 '"n": 0'                "$(sql "SELECT COUNT(*) AS n FROM api_token WHERE userId='$ADMIN_ID'")"
+check "so it opens nothing any more"                   "401"                   "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/v1/status" -H "Authorization: Bearer $TOKEN_SMOKE")"
 
 # The sole owner of their own personal workspace cannot leave: it would be
 # orphaned. The trigger guarantees this, not the application.
@@ -432,6 +465,32 @@ check "a local request is never sent away"             "stays"            "$(els
 check "and nothing is while the site address is local" "stays"            "$(elsewhere https://app.example/login http://localhost:4321)"
 check "this server answers where it was called"        "200"              "$(get /privacy)"
 
+
+echo; echo "$(c 1 'HTTPS, headers and where a request comes from')"
+# Same as above: the rule only acts on a site that has HTTPS, so it is
+# exercised on the function the middleware calls.
+over_http() { # over_http <request URL> <site address> [X-Forwarded-Proto]: "to https" or "stays"
+  node -e "import('./src/lib/address.ts').then(m => console.log(m.overPlainHttp(new URL(process.argv[1]), new Headers(process.argv[3] ? { 'x-forwarded-proto': process.argv[3] } : {}), process.argv[2]) ? 'to https' : 'stays'))" "$1" "$2" "${3:-}"
+}
+check "plain HTTP at a site with HTTPS is sent to HTTPS"  "to https"       "$(over_http http://app.example/login https://app.example)"
+check "a request that came over HTTPS stays"           "stays"            "$(over_http https://app.example/login https://app.example)"
+check "a proxy saying the visitor used HTTPS is believed"  "stays"        "$(over_http http://app.example/login https://app.example https)"
+check "and nothing local is ever sent anywhere"        "stays"            "$(over_http http://localhost:4321/login https://app.example)"
+
+HEADERS_PAGE="$(curl -s -o /dev/null -D - "$BASE/login" | tr 'A-Z' 'a-z')"
+check "a page cannot be put inside a frame"            "x-frame-options: deny"            "$HEADERS_PAGE"
+check "by either of the two ways of saying it"         "frame-ancestors 'none'"           "$HEADERS_PAGE"
+check "and is read as the type it declares"            "x-content-type-options: nosniff"  "$HEADERS_PAGE"
+check "a static file carries the same"                 "x-content-type-options: nosniff"  "$(curl -s -o /dev/null -D - "$BASE/favicon.svg" | tr 'A-Z' 'a-z')"
+check "a page drawn for a signed-in person is not cached"  "cache-control: no-store"      "$(curl -s -o /dev/null -D - -b "$ADMIN" "$BASE/dashboard/profile" | tr 'A-Z' 'a-z')"
+
+# The origin check is the application's own now (see src/middleware.ts): every
+# request that changes something, whatever its content type, except on the
+# routes called with a personal token.
+check "a POST from nowhere is refused, JSON included"  "403"              "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/login" -H 'Content-Type: application/json' -d '{}')"
+check "and so is one from another site"                "403"              "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/login" -H 'Origin: https://evil.example' --data-urlencode email=a@b.co)"
+check "the token API does not ask a program for an origin"  "401"         "$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$BASE/api/v1/entries/1" -H 'Authorization: Bearer hrs_made_up')"
+
 echo; echo "$(c 1 'Credentials and anti-enumeration')"
 npx wrangler d1 execute "$DB" --local -c "$CFG" --command 'DELETE FROM "rateLimit";' >/dev/null 2>&1
 check "new password works"                             "/dashboard"     "$(post - /api/login email=leitor@exemplo.com password=senha-nova-do-leitor)"
@@ -439,6 +498,11 @@ check "old password no longer works"                   "e=credentials"  "$(post 
 check "nonexistent e-mail gives the SAME message"      "e=credentials"  "$(post - /api/login email=ninguem@exemplo.com password=qualquer-coisa-longa)"
 check "forgot-password: nonexistent answers success"   "ok=ok_reset"    "$(post - /api/forgot-password email=ninguem@exemplo.com)"
 check "forgot-password: real e-mail answers the same"  "ok=ok_reset"    "$(post - /api/forgot-password email=admin@exemplo.com)"
+# `next` is where the login sends the person afterwards. A backslash counts
+# as a slash for a browser, so `/\host` is another site.
+check "the login never sends anyone to another site"   "next=%2Fdashboard&" "$(post - /api/login email=leitor@exemplo.com 'next=/\evil.example')"
+check "nor to an endpoint"                             "next=%2Fdashboard&" "$(post - /api/login email=leitor@exemplo.com next=/api/logout)"
+check "a page of the site is kept"                     "next=%2Fw%2Fa%2Ftime&" "$(post - /api/login email=leitor@exemplo.com next=/w/a/time)"
 
 echo; echo "$(c 1 'Social login')"
 # The providers only exist when the key pair is configured, so the suite
@@ -525,7 +589,11 @@ check "the only owner of a shared workspace is blocked"    "e=last_owner" "$(pos
 sql "DELETE FROM member WHERE id='m_extra'" >/dev/null
 
 check "deleting with the wrong confirmation e-mail"    "e=confirm_email" "$(post "$LGPD" /api/account/delete confirmation=errado@exemplo.com password=senha-final-do-leitor)"
+# The workspaces go before the account, so the password is checked before
+# anything is touched: a wrong one used to wipe them and leave the account.
+OWNED="$(sql "SELECT COUNT(*) AS n FROM member WHERE userId='$(id_of leitor@exemplo.com)' AND role='owner'")"
 check "deleting with the wrong password"               "e=current_password"       "$(post "$LGPD" /api/account/delete confirmation=leitor@exemplo.com password=chute-errado)"
+check "and the wrong password destroyed nothing"       "$OWNED"                   "$(sql "SELECT COUNT(*) AS n FROM member WHERE userId='$(id_of leitor@exemplo.com)' AND role='owner'")"
 check "deleting with everything right"                 "ok=ok_account_deleted" "$(post "$LGPD" /api/account/delete confirmation=leitor@exemplo.com password=senha-final-do-leitor)"
 check "the account is gone from the database"          "[]"                  "$(sql "SELECT id FROM user WHERE email='leitor@exemplo.com'")"
 check "the audit trail became dissociated"             "account removed"      "$(sql "SELECT actorEmail FROM audit_log WHERE actorEmail='[account removed]' LIMIT 1")"
