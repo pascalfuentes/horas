@@ -14,8 +14,12 @@ export default defineConfig({
     persistState: true,
   }),
   security: {
-    // Validates the origin on POST/PUT/PATCH/DELETE coming from forms.
-    checkOrigin: true,
+    // Off on purpose, and replaced: `src/middleware.ts` checks the origin of
+    // every request that changes something, whatever its content type. The
+    // built-in check runs before any of the app's code and also refuses a
+    // DELETE or a POST without `Content-Type` on the token API, where there is
+    // no cookie to protect and no page to send an origin.
+    checkOrigin: false,
   },
   devToolbar: { enabled: false },
 });

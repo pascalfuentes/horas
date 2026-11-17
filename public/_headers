@@ -1,0 +1,8 @@
+# Static files (scripts, styles, icons) are answered by Cloudflare before the
+# Worker runs, so the headers set in src/middleware.ts never reach them. These
+# are the ones that matter for a file: it is what its type says, and nobody
+# frames it.
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin

@@ -1,7 +1,8 @@
+import type { APIContext, MiddlewareNext } from "astro";
 import { defineMiddleware } from "astro:middleware";
 
 import { REQUIRE_2FA_FOR_ADMINS } from "~/config";
-import { elsewhere } from "~/lib/address";
+import { elsewhere, overPlainHttp, servedOverHttps } from "~/lib/address";
 import { createAuth } from "~/lib/auth";
 import { env } from "~/lib/env";
 import { canAdministerPlatform } from "~/lib/permissions";
@@ -61,18 +62,150 @@ const LOOKS_LIKE_FILE = /\.[a-z0-9]{1,8}$/i;
 /** `/w/<slug>/…` and `/api/w/<slug>/…` — the slug is what authorizes. */
 const WORKSPACE_ROUTE = /^\/(?:api\/)?w\/([^/]+)/;
 
+/** Methods that only read. Every other one changes something. */
+const READ_ONLY = new Set(["GET", "HEAD", "OPTIONS"]);
+
+/**
+ * Headers every answer of the Worker carries, whatever the page.
+ *
+ * The content policy here is the part that cannot break a page: who may frame
+ * the site (nobody: a framed dashboard is how a click meant for another page
+ * presses "Delete" here), where `<base>` may point and no plugins. A policy
+ * for scripts is a separate piece of work, because the pages use inline
+ * scripts and, with analytics on, Tag Manager loads whatever its container
+ * says.
+ */
+const SECURITY_HEADERS: Record<string, string> = {
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Content-Security-Policy": "frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+};
+
+/** One year. Without `includeSubDomains`: the site answers for its own host only. */
+const HSTS = "max-age=31536000";
+
+/**
+ * Token API and MCP server: authentication is the personal token, checked
+ * inside the handler itself (`authenticateToken`). There is no cookie or
+ * session there.
+ *
+ * @param path The path of the request.
+ * @returns `true` for a route that is called by programs, with a token.
+ */
+function isTokenRoute(path: string): boolean {
+  return path.startsWith("/api/v1/") || path === "/mcp" || path.startsWith("/mcp/");
+}
+
+/**
+ * The outer layer: what is decided before any page or session is looked at,
+ * and what is added to every answer on the way out.
+ */
 export const onRequest = defineMiddleware(async (context, next) => {
+  const path = context.url.pathname;
+  const tokenRoute = isTokenRoute(path);
+
+  const response = await before(context, tokenRoute) ?? (await gate(context, next));
+  return withSecurityHeaders(response, context);
+});
+
+/**
+ * Refusals that depend only on how the request arrived.
+ *
+ * @param context The request.
+ * @param tokenRoute Whether it is a route called with a personal token.
+ * @returns The answer, or `null` to carry on.
+ */
+async function before(context: APIContext, tokenRoute: boolean): Promise<Response | null> {
+  // Plain HTTP at a site that has HTTPS. A page goes to the same address over
+  // HTTPS. A token route is refused instead: a program that POSTs does not
+  // follow a redirect, and answering would teach it that sending the token in
+  // the clear works.
+  if (overPlainHttp(context.url, context.request.headers, env.BETTER_AUTH_URL)) {
+    if (tokenRoute) {
+      return new Response(JSON.stringify({ error: "Use HTTPS." }), {
+        status: 403,
+        headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+    const secure = new URL(context.url);
+    secure.protocol = "https:";
+    return new Response(null, {
+      status: 308,
+      headers: { Location: secure.toString(), "Cache-Control": "no-store" },
+    });
+  }
+
+  // A request that changes something has to come from a page of this site.
+  // The browser says where a request was made from in `Origin`, and a page of
+  // another site cannot forge it.
+  //
+  // This replaces Astro's own check (`security.checkOrigin`), which is off in
+  // astro.config.mjs for one reason: it runs before any of this code, on every
+  // route, and it refuses a DELETE or a POST that has no `Content-Type`. That
+  // is exactly what a program sends to the token API, where there is no cookie
+  // to protect and no `Origin` to send. Here the token routes are left out and
+  // every other route is checked whatever its content type, which is stricter
+  // than what it replaces.
+  if (!tokenRoute && !READ_ONLY.has(context.request.method)) {
+    if (context.request.headers.get("origin") !== context.url.origin) {
+      return new Response("Cross-site requests are forbidden", { status: 403 });
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Adds the security headers to an answer.
+ *
+ * @param response The answer about to leave.
+ * @param context The request it answers.
+ * @returns The same answer with the headers, or a copy when its headers are locked.
+ */
+function withSecurityHeaders(response: Response, context: APIContext): Response {
+  let out = response;
+  try {
+    out.headers.set("X-Content-Type-Options", SECURITY_HEADERS["X-Content-Type-Options"]);
+  } catch {
+    // An answer handed over from `fetch` has locked headers.
+    out = new Response(response.body, response);
+  }
+
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+    if (!out.headers.has(name) || name === "X-Content-Type-Options") out.headers.set(name, value);
+  }
+  if (servedOverHttps(context.url, env.BETTER_AUTH_URL)) {
+    out.headers.set("Strict-Transport-Security", HSTS);
+  }
+
+  // A page drawn for a signed-in person holds their data: it must not stay in
+  // a shared cache, nor come back from the browser's own after they sign out.
+  const html = (out.headers.get("content-type") ?? "").includes("text/html");
+  if (html && context.locals.user && !out.headers.has("cache-control")) {
+    out.headers.set("Cache-Control", "no-store");
+  }
+  return out;
+}
+
+/**
+ * The gate: one address, who is signed in, which workspace, which role.
+ *
+ * @param context The request.
+ * @param next Hands the request to the page or endpoint.
+ * @returns The answer.
+ */
+async function gate(context: APIContext, next: MiddlewareNext): Promise<Response> {
   context.locals.env = env;
   context.locals.auth = createAuth(env);
   context.locals.membership = null;
 
   const path = context.url.pathname;
 
-  // Token API and MCP server: authentication is the personal token, checked
-  // inside the handler itself (`authenticateToken`). There is no cookie or
-  // session here — going through the gate below would only yield a redirect to
-  // the login.
-  const tokenRoute = path.startsWith("/api/v1/") || path === "/mcp" || path.startsWith("/mcp/");
+  // Going through the session gate below would only yield a redirect to the
+  // login for a route that has no cookie at all.
+  const tokenRoute = isTokenRoute(path);
 
   // One address. A request that arrived at another one (the `*.workers.dev`
   // address next to a custom domain, a domain the site used to have) goes to
@@ -99,7 +232,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
   }
 
-  // Better Auth's own routes handle their own authorization.
+  // Better Auth's own routes. Only a handful is reachable from outside, and
+  // the route file is what decides which (`src/pages/api/auth/[...all].ts`).
   if (path.startsWith("/api/auth/")) return next();
 
   if (tokenRoute) return next();
@@ -201,4 +335,4 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   return next();
-});
+}
