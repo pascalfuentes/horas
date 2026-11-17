@@ -529,6 +529,8 @@ Left out on purpose, for you to add when you need it:
 | `npm run check` | typecheck (`astro check`) |
 | `npm run build` | production build |
 | `npm run deploy` | build + deploy |
+| `npm run ci:build` | for a build service: writes `wrangler.local.jsonc` from the variable `WRANGLER_LOCAL_JSONC`, then builds |
+| `npm run ci:config -- --print` | prints this machine's config as the one-line value for that variable |
 | `npm run db:local` | migrations on the local D1 |
 | `npm run db:remote` | migrations in production (refuses if the id is the template's) |
 | `npm run db:sql -- "SELECT …"` | quick query on the local database |

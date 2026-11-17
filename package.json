@@ -10,6 +10,8 @@
     "build": "astro build",
     "preview": "astro build && node scripts/cf.mjs dev",
     "deploy": "astro build && node scripts/cf.mjs deploy",
+    "ci:config": "node scripts/ci-config.mjs",
+    "ci:build": "node scripts/ci-config.mjs && astro build",
     "check": "astro check",
     "smoke": "./scripts/smoke.sh",
     "db:local": "node scripts/d1.mjs",

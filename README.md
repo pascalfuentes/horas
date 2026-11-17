@@ -126,9 +126,36 @@ Usage analytics are optional and off by default; with a Google Tag Manager
 container they run only after each visitor's consent. See the auth foundation
 document.
 
-For automatic deploys on every push, connect the repository in **Workers & Pages →
-Create → Import a repository** (Workers Builds), with `npm run build` as the
-build and `npx wrangler deploy` as the deploy.
+### Automatic deploys (optional)
+
+Cloudflare can publish every push to `main` (Workers Builds: the Worker's
+**Settings → Build → Connect** a Git repository). The build starts from a clean
+clone, which only has the template `wrangler.jsonc`, so it needs this deploy's
+config handed to it:
+
+1. On the machine that deploys today, print the config as one line:
+
+   ```bash
+   npm run ci:config -- --print
+   ```
+
+2. In the Worker's build settings, store that line in a build variable named
+   `WRANGLER_LOCAL_JSONC` (encrypted), with `npm run ci:build` as the build
+   command and `npx wrangler deploy` as the deploy command.
+
+`ci:build` writes `wrangler.local.jsonc` from the variable and then builds. It
+fails, and nothing is published, when the variable is missing or still has the
+template database id.
+
+Three things change once this is on:
+
+- **A push to `main` is a deploy.** Run `npm run smoke` before pushing.
+- **Migrations stay manual.** The token Cloudflare creates for builds cannot
+  write to D1: run `npm run db:remote` before pushing a commit that needs a new
+  migration.
+- **The config lives in two places.** After changing `wrangler.local.jsonc`
+  (a new var, another id), print it again and update the build variable, or the
+  next push publishes the old values.
 
 ## Where things are
 
