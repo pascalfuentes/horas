@@ -189,10 +189,24 @@ With the id set:
   explain what runs;
 - advertising consent stays denied; only `analytics_storage` is granted;
 - the app pushes event NAMES to `dataLayer` (`sign_up`, `login`,
-  `timer_start`, `timer_stop`, `entries_create`, `projects_update`…), plus
-  `page_area` (`app` or `public`) and `page_path_clean` (the address without
-  the workspace and the record numbers). Never a description, a client, an
-  amount or an e-mail;
+  `timer_start`, `timer_stop`, `entries_create`, `projects_update`,
+  `import_create`, `export_create`, `backup_create`, `tokens_create`,
+  `tokens_delete`…), plus `page_area` (`app` or `public`) and
+  `page_path_clean` (the address without the workspace and the record
+  numbers). Never a description, a client, an amount or an e-mail. A new name
+  has to end in `_create`, `_update` or `_delete`, or the container's trigger
+  has to learn it;
+- `sign_up` and `login` usually happen while the notice is still open, so
+  those two wait in the browser's `localStorage` (`clockfolio-pending`) for up
+  to an hour and are reported on the person's yes; a no erases them. Nothing
+  else waits. `sign_up` is counted on the page that follows the sign-up form
+  and, for Google and GitHub, on the first arrival of an account that is
+  minutes old. The form answers the same for an address that already has an
+  account, so the count can run a little above the accounts created: the
+  `user` table is the exact figure;
+- the workspace created with an account gets a neutral slug (`personal`,
+  `personal-k3fd`), because the address of every page carries the slug and the
+  tools read the address by themselves. Its NAME is still "Ana's workspace";
 - the signed-in area carries `data-hj-suppress`, so a session-recording tool
   replaces its text and images before anything leaves the browser.
 - while the tools run, the tab title is plain ("Time · Clockfolio"): they read

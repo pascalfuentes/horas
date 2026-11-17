@@ -437,6 +437,7 @@ function build(env: AppEnv) {
             try {
               const ws = await createWorkspace(env, {
                 name: personalWorkspaceName(newUser.name, newUser.email),
+                slug: PERSONAL_WORKSPACE_SLUG,
                 ownerId: newUser.id,
               });
 
@@ -522,6 +523,18 @@ export async function callAuth(
     }),
   );
 }
+
+/**
+ * Short name (the `/w/<slug>` of the address) of the workspace that is born
+ * with the account: "personal", or "personal-k3fd" once that one is taken.
+ *
+ * It used to come from the workspace name, which put the person's first name,
+ * or the start of their e-mail address, in the address of every page they
+ * opened. The address is what the usage analytics read by themselves, and the
+ * privacy policy promises they never receive an e-mail. The NAME below is
+ * still the person's: it is shown on screen and never leaves the app.
+ */
+const PERSONAL_WORKSPACE_SLUG = "personal";
 
 /**
  * Name of the workspace that is born with the account. Uses the first name when

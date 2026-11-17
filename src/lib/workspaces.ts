@@ -35,13 +35,18 @@ export function makeSlug(name: string): string {
  *
  * `organization.slug` is UNIQUE: if the clean slug already exists, it tries
  * with a random suffix instead of blowing up.
+ *
+ * The slug comes from the name unless the caller gives one. It is part of
+ * every address inside the workspace, and addresses are read by whoever
+ * measures the site (see `Analytics.astro`), so a name that is a person's own
+ * should not become the slug.
  */
 export async function createWorkspace(
   env: AppEnv,
-  input: { name: string; ownerId: string },
+  input: { name: string; ownerId: string; slug?: string },
 ): Promise<{ id: string; name: string; slug: string }> {
   const db = getDb(env);
-  const base = makeSlug(input.name);
+  const base = makeSlug(input.slug ?? input.name);
 
   for (let attempt = 0; attempt < 5; attempt++) {
     const slug = attempt === 0 ? base : `${base}-${suffix()}`;
