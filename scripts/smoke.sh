@@ -481,7 +481,15 @@ HEADERS_PAGE="$(curl -s -o /dev/null -D - "$BASE/login" | tr 'A-Z' 'a-z')"
 check "a page cannot be put inside a frame"            "x-frame-options: deny"            "$HEADERS_PAGE"
 check "by either of the two ways of saying it"         "frame-ancestors 'none'"           "$HEADERS_PAGE"
 check "and is read as the type it declares"            "x-content-type-options: nosniff"  "$HEADERS_PAGE"
-check "a static file carries the same"                 "x-content-type-options: nosniff"  "$(curl -s -o /dev/null -D - "$BASE/favicon.svg" | tr 'A-Z' 'a-z')"
+# A static file is answered by Cloudflare's assets handler, which reads
+# public/_headers. `astro dev` (what the CI starts) serves static files through
+# Vite and never reads that file, so there the header cannot be asked of the
+# server: the suite checks the rule the deploy will read instead.
+if [[ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/@vite/client")" == "200" ]]; then
+  check "a static file gets the same from public/_headers"  "x-content-type-options: nosniff"  "$(tr 'A-Z' 'a-z' < public/_headers)"
+else
+  check "a static file carries the same"               "x-content-type-options: nosniff"  "$(curl -s -o /dev/null -D - "$BASE/favicon.svg" | tr 'A-Z' 'a-z')"
+fi
 check "a page drawn for a signed-in person is not cached"  "cache-control: no-store"      "$(curl -s -o /dev/null -D - -b "$ADMIN" "$BASE/dashboard/profile" | tr 'A-Z' 'a-z')"
 
 # The origin check is the application's own now (see src/middleware.ts): every
