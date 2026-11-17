@@ -5,7 +5,7 @@ import Analytics from "~/components/Analytics.astro";
 import Theme from "~/components/Theme.astro";
 import Logo from "~/components/Logo.astro";
 import { APP_NAME, operator } from "~/config";
-import { analytics } from "~/lib/env";
+import { analytics, socialProviders } from "~/lib/env";
 import { countPlatformAdmins } from "~/lib/platform";
 import "~/styles/global.css";
 
@@ -22,8 +22,34 @@ const author = operator(Astro.locals.env).name;
 // The page cannot promise "no trackers" on a deploy that measures usage.
 const stats = analytics(Astro.locals.env);
 const promise = stats ? "No ads. Analytics only if you agree." : "No ads, no trackers.";
-const description =
-  "A free time tracker that talks to your AI. Start timers, log hours and ask for reports through Claude or any MCP client.";
+const description = `${APP_NAME} is a free time tracking app: start a timer, log your hours by project and client, and see reports of your time and of what to invoice. An AI assistant can operate it for you through MCP.`;
+const headline = `${APP_NAME} — a free time tracker for your projects and clients`;
+
+// A sign-in provider reviews this page before it shows the app's name on its
+// consent screen. So the page says, in plain words and without a login, what
+// the app is for, what it asks the provider for and why, and what the AI part
+// is: a reader in a hurry should not have to guess any of the three.
+const SOCIAL_NAMES = { google: "Google", github: "GitHub" } as const;
+const social = socialProviders(Astro.locals.env).map((p) => SOCIAL_NAMES[p]).join(" or ");
+
+const plain = [
+  [
+    "A time tracking app",
+    `${APP_NAME} records the hours you work. You start a timer or type the hours in, sort them by project and client, and get reports of your time and of how much to invoice. That is all it does.`,
+  ],
+  ...(social
+    ? [
+        [
+          `Signing in with ${social}`,
+          `You can create an account with an email and a password, or sign in with ${social}. ${APP_NAME} asks the provider only for your name, email address and profile picture, to create your account and to recognize you when you come back. It asks for no access to your mail, files, calendar or contacts, and it uses what it receives for nothing else: no advertising, no profiling, no AI.`,
+        ],
+      ]
+    : []),
+  [
+    "What the AI connection is",
+    `${APP_NAME} has no AI of its own and generates no text, image, audio or video. If you want, you connect an assistant you already use, with a personal token. It can then start and stop your timer, add entries and read your reports: the same things you do in the app.`,
+  ],
+];
 
 const features = [
   ["One-click timer", "Start, stop and pick up where you left off. The clock keeps running in the browser tab and syncs across devices."],
@@ -43,11 +69,11 @@ const tools = ["get_status", "start_timer", "stop_timer", "add_entry", "summary_
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
-    <meta property="og:title" content={`${APP_NAME} — the time tracker that talks to your AI`} />
+    <meta property="og:title" content={headline} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
     <HeadIcons />
-    <title>{APP_NAME} — the time tracker that talks to your AI</title>
+    <title>{headline}</title>
     <Theme />
     <Analytics />
     <BusyForms />
@@ -57,8 +83,9 @@ const tools = ["get_status", "start_timer", "stop_timer", "add_entry", "summary_
       <header class="lp-nav">
         <a class="brand" href="/"><Logo />{APP_NAME}</a>
         <nav>
-          <a href="#mcp">MCP</a>
+          <a href="#about">About</a>
           <a href="#features">Features</a>
+          <a href="#mcp">MCP</a>
           <a href="/login">Log in</a>
           <a class="btn btn-coral" href="/signup">Create account</a>
         </nav>
@@ -66,12 +93,13 @@ const tools = ["get_status", "start_timer", "stop_timer", "add_entry", "summary_
 
       <section class="lp-hero">
         <div class="lp-copy">
-          <span class="badge badge-sun">Free · built to work with AI</span>
+          <span class="badge badge-sun">Free time tracker · works with AI assistants</span>
           <h1>The time tracker you don't need to open.</h1>
           <svg class="lp-squiggle" viewBox="0 0 342 16" aria-hidden="true"><path d="M2 10C60 2 130 14 200 6C250 1 300 9 340 5" /></svg>
           <p class="lp-lead">
-            {APP_NAME} is a simple time tracker with a built-in MCP server. Tell Claude
-            “I just started the site review” and the timer is already running.
+            {APP_NAME} is a time tracking app with a timer, projects, billing and reports. It also
+            has a built-in MCP server: tell Claude “I just started the site review” and the timer
+            is already running.
           </p>
           <div class="lp-cta">
             <a class="btn" href="/signup">Start for free</a>
@@ -94,6 +122,18 @@ const tools = ["get_status", "start_timer", "stop_timer", "add_entry", "summary_
     </div>
 
     <main>
+      <section class="lp-section lp-about" id="about">
+        <h2>What {APP_NAME} is, in plain words.</h2>
+        <div class="lp-plain">
+          {plain.map(([title, text]) => (
+            <div>
+              <h3>{title}</h3>
+              <p>{text}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section class="lp-section" id="features">
         <h2>Everything a time tracker needs. Nothing more.</h2>
         <div class="lp-grid">
@@ -134,7 +174,7 @@ const tools = ["get_status", "start_timer", "stop_timer", "add_entry", "summary_
       <span>Made by {author} · Astro, Cloudflare Workers and D1</span>
       <span class="lp-foot-links">
         {stats && <a href="/privacy#analytics" data-consent-open>Cookie settings</a>}
-        <a href="/privacy">Privacy</a>
+        <a href="/privacy">Privacy policy</a>
       </span>
     </footer>
   </body>
@@ -175,6 +215,11 @@ const tools = ["get_status", "start_timer", "stop_timer", "add_entry", "summary_
   .lp-section { padding: clamp(40px, 5vw, 64px) clamp(20px, 5vw, 72px); }
   .lp-section > h2, .lp-mcp h2, .lp-final h2 { font-size: clamp(2rem, 4vw, 3rem); line-height: 1.12; letter-spacing: -0.025em; text-wrap: balance; }
   .lp-section > h2 { max-width: 18ch; margin-bottom: 32px; }
+  /* Plain statements, not cards: this block is read, the cards below are scanned. */
+  .lp-about { padding-bottom: 0; }
+  .lp-plain { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: clamp(24px, 3vw, 48px); }
+  .lp-plain h3 { font-size: 1.375rem; margin-bottom: 10px; }
+  .lp-plain p { margin: 0; color: var(--text-muted); line-height: 1.6; }
   .lp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
   .lp-feat { border-radius: var(--radius-xl); padding: 32px; }
   .lp-feat-0 { background: var(--accent-subtle); }
