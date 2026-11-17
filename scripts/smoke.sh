@@ -518,6 +518,24 @@ else
 fi
 check "unknown provider is refused"                    "e=social_unavailable"  "$(post - /api/social provider=facebook)"
 
+# The second factor after a social sign-in. The library only asks for the code
+# after a password sign-in, so an account with two-step verification on could
+# be entered through its Google or GitHub login without the code. A real return
+# from a provider cannot be produced on this machine (their addresses are fixed
+# inside the library), so the library itself is run with the network faked, with
+# the same change the app applies (see scripts/social-2fa-check.mjs).
+SOCIAL_2FA="$(node scripts/social-2fa-check.mjs 2>/dev/null)"
+check "a social sign-in does not let in an account with 2FA"  "ok coming back from the provider opens NO session" "$SOCIAL_2FA"
+check "it sends the person to the code page"           "ok the person is sent to the code page"   "$SOCIAL_2FA"
+check "remembering where they were going"              "ok which remembers where they were going" "$SOCIAL_2FA"
+check "a wrong code opens nothing"                     "ok a wrong code still opens nothing"       "$SOCIAL_2FA"
+check "and the right one opens the session"            "ok the right code opens the session"       "$SOCIAL_2FA"
+check "an account without 2FA signs in as before"      "ok an account without two-step verification goes straight in" "$SOCIAL_2FA"
+check "and nothing else in that run failed"            "social-2fa: all ok"                        "$SOCIAL_2FA"
+# The return from a provider is still a route that exists; with nothing in it,
+# the library says what is missing instead of the app answering "not found".
+check "the return route still answers"                 "302"                   "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/auth/callback/google")"
+
 echo; echo "$(c 1 'Security controls')"
 
 # --- full password recovery cycle ---

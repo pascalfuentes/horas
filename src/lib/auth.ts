@@ -20,6 +20,7 @@ import { assertEnv, socialProviders, turnstileSecret, type AppEnv } from "~/lib/
 import { emailLayout, sendEmail } from "~/lib/email";
 import { PASSWORD_MAX, PASSWORD_MIN, verifyTurnstile } from "~/lib/http";
 import { isCommonPassword } from "~/lib/passwords";
+import { askAfterSocialSignIn } from "~/lib/second-factor";
 import { createWorkspace } from "~/lib/workspaces";
 
 /**
@@ -332,17 +333,23 @@ function build(env: AppEnv) {
         },
       }),
 
-      twoFactorPlugin({
-        // The name shown in the person's authenticator app.
-        issuer: APP_NAME,
-        // Enabling generates the secret but does NOT turn 2FA on — only the
-        // first confirmed code does. That way, abandoning setup halfway
-        // (misread QR, dead phone battery) locks no one out.
-        skipVerificationOnEnable: false,
-        // A TOTP code has six digits: that is 1,000,000 possibilities, which
-        // is few for someone who can try at will. Locks after five.
-        accountLockout: { enabled: true, maxFailedAttempts: 5, durationSeconds: 900 },
-      }),
+      // The plugin by itself only asks for the code after a PASSWORD sign-in:
+      // coming back from Google or GitHub opened the session on the spot. The
+      // wrapper makes the plugin's own step run after a social sign-in too
+      // (see src/lib/second-factor.ts).
+      askAfterSocialSignIn(
+        twoFactorPlugin({
+          // The name shown in the person's authenticator app.
+          issuer: APP_NAME,
+          // Enabling generates the secret but does NOT turn 2FA on — only the
+          // first confirmed code does. That way, abandoning setup halfway
+          // (misread QR, dead phone battery) locks no one out.
+          skipVerificationOnEnable: false,
+          // A TOTP code has six digits: that is 1,000,000 possibilities, which
+          // is few for someone who can try at will. Locks after five.
+          accountLockout: { enabled: true, maxFailedAttempts: 5, durationSeconds: 900 },
+        }),
+      ),
       adminPlugin({
         ac,
         roles,

@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 
-import { fail } from "~/lib/http";
+import { fail, safeNext } from "~/lib/http";
+import { secondFactorStep } from "~/lib/second-factor";
 
 export const prerender = false;
 
@@ -83,7 +84,17 @@ export const GET: APIRoute = async ({ request, locals, url }) => {
     }
   }
 
-  return locals.auth.handler(request);
+  const response = await locals.auth.handler(request);
+
+  // The return from a social provider, for an account with two-step
+  // verification: the library has not opened a session, only left the cookie
+  // the code page finishes the sign-in with. The person goes there.
+  if (url.pathname.startsWith("/api/auth/callback/")) {
+    const step = await secondFactorStep(response, url.origin, (value) => safeNext(value));
+    if (step) return step;
+  }
+
+  return response;
 };
 
 /** Every other method. Nothing the application needs is reached this way. */
