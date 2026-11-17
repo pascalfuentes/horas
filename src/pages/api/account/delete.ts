@@ -1,11 +1,13 @@
 import type { APIRoute } from "astro";
 
 import { AUDIT, audit } from "~/lib/audit";
-import { callAuth } from "~/lib/auth";
 import { isLastAdminError } from "~/lib/errors";
 import { deleteWorkspace, workspacesWhereSoleOwner } from "~/lib/workspaces";
 import { actor, denyAccount } from "~/lib/guards";
-import { fail, handleAuthResponse, ok, str } from "~/lib/http";
+import { codeFromAuthError, fail, handleAuthResponse, ok, str } from "~/lib/http";
+import { canAdministerPlatform } from "~/lib/permissions";
+import { countPlatformAdmins } from "~/lib/platform";
+import { withinLimit } from "~/lib/throttle";
 
 export const prerender = false;
 
@@ -18,6 +20,12 @@ const PAGE = "/dashboard/security";
  * The database trigger still holds: the last active administrator cannot
  * delete themselves, and the message explains why instead of showing a raw
  * error.
+ *
+ * Everything that can refuse the deletion is asked BEFORE anything is
+ * destroyed. The workspaces have to go before the account (see below), so a
+ * password checked only at the last step meant that a wrong password, or a
+ * session someone else was sitting in front of, wiped the person's workspaces
+ * and left the account standing.
  */
 export const POST: APIRoute = async ({ request, locals }) => {
   const denied = denyAccount(locals);
@@ -52,6 +60,28 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return fail(PAGE, "last_owner");
   }
 
+  // ------------------------------------------------------------------
+  // The password, before anything else is touched
+  //
+  // Counted per person, not per address: whoever is guessing here already
+  // holds a session, and this is the one question that session cannot answer.
+  // ------------------------------------------------------------------
+  if (!(await withinLimit(locals.env, `delete-account:${me.id}`, { max: 5, windowSeconds: 600 }))) {
+    return fail(PAGE, "rate_limit");
+  }
+  try {
+    await locals.auth.api.verifyPassword({ body: { password }, headers: request.headers });
+  } catch (error) {
+    const code = codeFromAuthError(error);
+    return fail(PAGE, code === "credentials" ? "current_password" : code);
+  }
+
+  // The trigger would refuse this at the very end, with the workspaces already
+  // gone. Asked here, it is only a message.
+  if (canAdministerPlatform(me.role) && (await countPlatformAdmins(locals.env)) <= 1) {
+    return fail(PAGE, "last_admin");
+  }
+
   // Recorded BEFORE: after deleting there is no actor left to record.
   await audit(locals.env, {
     action: AUDIT.SELF_ACCOUNT_DELETED,
@@ -70,7 +100,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
       await deleteWorkspace(locals.env, ws.id);
     }
 
-    const res = await callAuth(locals.auth, request, "/delete-user", { password });
+    // Straight to the endpoint, not through the HTTP handler: the password was
+    // already counted and checked above, and the handler's rate limiter could
+    // still say "too many requests" at this point, with the workspaces gone.
+    const res = await locals.auth.api.deleteUser({
+      body: { password },
+      headers: request.headers,
+      asResponse: true,
+    });
     if (!res.ok) {
       return handleAuthResponse(res, PAGE, PAGE, (c) => (c === "credentials" ? "current_password" : c));
     }
