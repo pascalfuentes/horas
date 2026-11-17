@@ -14,7 +14,9 @@ const mine = await userWorkspaces(Astro.locals.env, Astro.locals.user!.id);
 const last = Astro.locals.session?.activeOrganizationId;
 
 const slug = mine.find((w) => w.workspaceId === last)?.workspaceSlug ?? mine[0]?.workspaceSlug;
-const destination = slug ? `/w/${slug}/time` : "/workspaces";
+// Encoded: the slug comes from the database, and a path built from data must
+// not be able to climb out of `/w/` with a `..` or a slash inside it.
+const destination = slug ? `/w/${encodeURIComponent(slug)}/time` : "/workspaces";
 
 // The notice has to survive the hop. Whoever accepts an invite passes through
 // here on the way to the new workspace, and without this the confirmation got

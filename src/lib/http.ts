@@ -7,6 +7,12 @@ export const MESSAGES: Record<string, string> = {
   fields: "Fill in all required fields.",
   credentials: "Incorrect email or password.",
   password_short: "Password must be at least 10 characters.",
+  password_long: "Password must be at most 200 characters.",
+  password_common: "This password is too easy to guess. Choose another one.",
+  invalid_name: "Use a name without links or addresses.",
+  other_account: "This confirmation link belongs to another account. Sign out and open the link again.",
+  workspace_limit: "You have reached the limit of workspaces you can own. Delete one you no longer use.",
+  note_limit: "This workspace has reached its limit of notes.",
   password_mismatch: "Passwords don't match.",
   current_password: "Current password is incorrect.",
   invalid_email: "Enter a valid email.",
@@ -112,8 +118,60 @@ export function ok(path: string, code?: keyof typeof MESSAGES | string): Respons
   return new Response(null, { status: 303, headers: { Location: url } });
 }
 
+/**
+ * Whether a value has the shape of an e-mail address: one `@`, no spaces, and
+ * a domain with a dot that has something before it and two characters or more
+ * after it.
+ *
+ * Written by hand, in one pass. The pattern this replaces said the same thing
+ * and took time that grew with the square of the length: forty thousand
+ * characters held a request for most of a second, on forms anyone can reach
+ * without signing in.
+ *
+ * @param value What was typed.
+ * @returns `true` when it can be an address.
+ */
 export function isEmail(value: unknown): value is string {
-  return typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value.trim());
+  if (typeof value !== "string") return false;
+  const text = value.trim();
+  // 254 is the longest address a mail server accepts.
+  if (text.length < 6 || text.length > EMAIL_MAX) return false;
+  if (/\s/.test(text)) return false;
+
+  const at = text.indexOf("@");
+  if (at < 1 || at !== text.lastIndexOf("@")) return false;
+
+  // A dot with at least one character before it and two after it.
+  const domain = text.slice(at + 1);
+  return domain.slice(1, -2).includes(".");
+}
+
+/** The longest e-mail address a mail server accepts. */
+export const EMAIL_MAX = 254;
+
+/** Limits of what a person may call themselves and of the phone they give. */
+export const NAME_MAX = 80;
+export const PHONE_MAX = 32;
+
+/** Limits of a password. The same numbers are in `auth.ts`. */
+export const PASSWORD_MIN = 10;
+export const PASSWORD_MAX = 200;
+
+/**
+ * Whether a name carries something a mail program would turn into a link.
+ *
+ * Names travel in the e-mails the site sends on a person's behalf ("So-and-so
+ * invited you to the workspace Such"). A name is the one place where a
+ * stranger chooses words that arrive with the site's own sender and layout, so
+ * it must not be able to say "go to this address".
+ *
+ * @param value The name.
+ * @param kind A person's name is stricter: it has no use for `@` or a slash.
+ * @returns `true` when the name should be refused.
+ */
+export function nameCarriesLink(value: string, kind: "person" | "workspace" = "person"): boolean {
+  if (/:\/\/|www\./i.test(value)) return true;
+  return kind === "person" && /[\/\\@]/.test(value);
 }
 
 export function str(form: FormData, key: string): string {
@@ -202,6 +260,8 @@ function mapAuthCode(input: string, status?: number): string {
   if (raw.includes("TOO_MANY") || raw.includes("RATE")) return "rate_limit";
   if (raw.includes("INVALID_EMAIL_OR_PASSWORD") || raw.includes("INVALID_PASSWORD")) return "credentials";
   if (raw.includes("PASSWORD_TOO_SHORT")) return "password_short";
+  if (raw.includes("PASSWORD_TOO_LONG")) return "password_long";
+  if (raw.includes("PASSWORD_TOO_COMMON")) return "password_common";
   if (raw.includes("USER_ALREADY_EXISTS") || raw.includes("EXISTING")) return "user_exists";
   if (raw.includes("BANNED")) return "credentials";
   if (raw.includes("NOT_THE_RECIPIENT")) return "not_recipient";
@@ -221,10 +281,34 @@ function mapAuthCode(input: string, status?: number): string {
 }
 
 /**
- * Prevents open redirects: only accepts a relative path within the application
- * itself. `//evil.com` and `https://evil.com` are discarded.
+ * Prevents open redirects: only accepts a path within the application itself.
+ *
+ * Starting with one slash is not enough. A browser reads `//host` and
+ * `/\host` as another site (a backslash counts as a slash), and it drops tabs
+ * and line breaks from an address before reading it, so `/<tab>/host` is
+ * `//host` too. Those are refused by what they contain, and then the value is
+ * parsed the way a browser would, against an address that does not exist: if
+ * the result is anywhere else, it was not a path.
+ *
+ * An endpoint is refused as well. After signing in a person lands on a page;
+ * `/api/...` there would turn the login into a way of making someone call an
+ * endpoint with a fresh session.
+ *
+ * @param value The `next` that came with the request.
+ * @param fallback Where to go when it cannot be trusted.
+ * @returns A path of this site, with its query and fragment.
  */
 export function safeNext(value: string, fallback = "/dashboard"): string {
-  if (!value.startsWith("/") || value.startsWith("//")) return fallback;
-  return value;
+  if (!value.startsWith("/") || value.startsWith("//") || value.length > 2000) return fallback;
+  if (/[\\\u0000-\u001f\u007f]/.test(value)) return fallback;
+
+  const base = "http://path.invalid";
+  try {
+    const parsed = new URL(value, base);
+    if (parsed.origin !== base) return fallback;
+    if (parsed.pathname === "/api" || parsed.pathname.startsWith("/api/")) return fallback;
+    return parsed.pathname + parsed.search + parsed.hash;
+  } catch {
+    return fallback;
+  }
 }
