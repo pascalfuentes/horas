@@ -125,7 +125,14 @@ export async function handleHoras(
     }
 
     if (resource === "projects") {
-      if (!id && method === "GET") return json(await store.listProjects({ includeArchived: q.get("archived") === "1" }));
+      if (!id && method === "GET") {
+        const includeArchived = q.get("archived") === "1";
+        // `?totals=0` leaves out the sums of the entries. Those sums read every
+        // entry of the workspace, and a picker or a filter has no use for them.
+        const plain = q.get("totals") === "0" || q.get("totals") === "false";
+        return json(plain ? await store.listProjectInfo({ includeArchived }) : await store.listProjects({ includeArchived }));
+      }
+      if (id && method === "GET") return json(await store.getProject(id));
       if (!id && method === "POST") return json(await store.createProject(await readBody(request)), 201);
       if (id && method === "PATCH") return json(await store.updateProject(id, await readBody(request)));
       if (id && method === "DELETE") return json(await store.deleteProject(id));

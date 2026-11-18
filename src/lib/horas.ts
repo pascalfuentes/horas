@@ -66,6 +66,9 @@ export type Project = {
   billable_entries: number;
 };
 
+/** A project without the sums of its entries: all a picker or a filter needs. */
+export type ProjectInfo = Omit<Project, "spent_amount" | "spent_hours" | "total_seconds" | "entries" | "billable_entries">;
+
 /** An amount of money in one currency. A period can add up to several. */
 export type Amount = { currency: string; amount: number };
 
@@ -268,6 +271,18 @@ function shapeEntry(row: EntryRow | null, settings: Settings): Entry | null {
   };
 }
 
+/** How many of a person's latest tagged entries the tag list counts. */
+const TAGGED_ENTRIES = 3000;
+
+/** Rows read by one query from which it is logged as heavy. */
+const HEAVY_READ = 5000;
+
+/** FNV-1a over a string, continuing from `hash`: a cheap mark of "the same rows as before". */
+function fnv(hash: number, value: string): number {
+  for (let i = 0; i < value.length; i++) hash = Math.imul(hash ^ value.charCodeAt(i), 16777619);
+  return hash >>> 0;
+}
+
 const ENTRY_SELECT = `
   SELECT e.*, p."name" AS project_name, p."color" AS project_color, p."client" AS project_client, p."hourlyRate" AS project_rate, p."currency" AS project_currency
   FROM "time_entry" e LEFT JOIN "time_project" p ON p."id" = e."projectId"`;
@@ -282,7 +297,15 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
   const { workspaceId: ws, userId: uid } = ctx;
   const tz = isValidTz(ctx.tz) ? ctx.tz : DEFAULT_TZ;
 
-  const all = async <T>(sql: string, ...args: unknown[]) => (await db.prepare(sql).bind(...args).all<T>()).results ?? [];
+  const all = async <T>(sql: string, ...args: unknown[]) => {
+    const res = await db.prepare(sql).bind(...args).all<T>();
+    // D1 bills and limits by rows READ, not rows returned. A query that walks
+    // through thousands of rows to answer is worth knowing about before the
+    // daily quota does the telling (the log shows up in Workers observability).
+    const rows = res.meta?.rows_read ?? 0;
+    if (rows >= HEAVY_READ) console.warn(`horas: ${rows} rows read by: ${sql.replace(/\s+/g, " ").trim().slice(0, 120)}`);
+    return res.results ?? [];
+  };
   const first = <T>(sql: string, ...args: unknown[]) => db.prepare(sql).bind(...args).first<T>();
   const run = async (sql: string, ...args: unknown[]) => (await db.prepare(sql).bind(...args).run()).meta;
   const nowIso = () => new Date().toISOString();
@@ -327,12 +350,44 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
   
   /* ----- Projects (of the workspace; totals only cover this person's hours) ----- */
 
-  async function listProjects({ includeArchived = false }: { includeArchived?: boolean } = {}): Promise<Project[]> {
-    const rows = await all<{ id: number; name: string; client: string; color: string; archived: number; billable: number; hourlyRate: number | null; currency: string | null; budgetAmount: number | null; budgetHours: number | null; total: number; entries: number; billableEntries: number; allSeconds: number; allBillableSeconds: number }>(
-      // The entries are added up ONCE, per project, and only then joined to the
-      // projects. Joining first made the database go through the entries again
-      // for every project (rows read = projects x entries).
-      `SELECT p.*,
+  type ProjectRow = { id: number; name: string; client: string; color: string; archived: number; billable: number; hourlyRate: number | null; currency: string | null; budgetAmount: number | null; budgetHours: number | null };
+  type ProjectTotalsRow = ProjectRow & { total: number; entries: number; billableEntries: number; allSeconds: number; allBillableSeconds: number };
+
+  const projectInfo = (r: ProjectRow): ProjectInfo => ({
+    id: r.id,
+    name: r.name,
+    client: r.client,
+    color: r.color,
+    archived: !!r.archived,
+    billable: !!r.billable,
+    hourly_rate: r.hourlyRate,
+    currency: r.currency,
+    budget_amount: r.budgetAmount,
+    budget_hours: r.budgetHours,
+  });
+
+  const projectWithTotals = (r: ProjectTotalsRow, defaultRate: number): Project => ({
+    ...projectInfo(r),
+    spent_amount: cents((r.allBillableSeconds / 3600) * (r.hourlyRate ?? defaultRate)),
+    spent_hours: Math.round((r.allSeconds / 3600) * 100) / 100,
+    total_seconds: Math.round(r.total),
+    entries: r.entries,
+    billable_entries: r.billableEntries,
+  });
+
+  /**
+   * Projects joined to the sums of their entries. The entries are added up
+   * ONCE, per project, and only then joined: joining first made the database
+   * go through the entries again for every project (rows read = projects x
+   * entries). `one` narrows the sums to a single project (bound as ?3), so the
+   * database reads that project's entries and no others.
+   *
+   * Even so, the list of all projects reads every entry of the workspace that
+   * has a project. It is for the screens that show those sums; everything else
+   * uses `listProjectInfo`.
+   */
+  const projectTotalsSql = (one: boolean, where: string) => `
+       SELECT p.*,
               COALESCE(e."total", 0) AS total,
               COALESCE(e."entries", 0) AS entries,
               COALESCE(e."billableEntries", 0) AS billableEntries,
@@ -347,38 +402,50 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
                   SUM((julianday(COALESCE(t."end", 'now')) - julianday(t."start")) * 86400) AS allSeconds,
                   SUM(CASE WHEN t."billable" = 1 THEN (julianday(COALESCE(t."end", 'now')) - julianday(t."start")) * 86400 END) AS allBillableSeconds
              FROM "time_entry" t
-            WHERE t."workspaceId" = ?1 AND t."projectId" IS NOT NULL
+            WHERE t."workspaceId" = ?1 AND ${one ? 't."projectId" = ?3' : 't."projectId" IS NOT NULL'}
             GROUP BY t."projectId"
          ) e ON e.projectId = p."id"
-        WHERE p."workspaceId" = ?1 ${includeArchived ? "" : 'AND p."archived" = 0'}
-        ORDER BY p."archived", p."name"`,
+        WHERE p."workspaceId" = ?1 ${where}`;
+
+  /** Every project with the sums of its entries. Reads all the entries of the workspace: see `projectTotalsSql`. */
+  async function listProjects({ includeArchived = false }: { includeArchived?: boolean } = {}): Promise<Project[]> {
+    const rows = await all<ProjectTotalsRow>(
+      `${projectTotalsSql(false, includeArchived ? "" : 'AND p."archived" = 0')} ORDER BY p."archived", p."name"`,
       ws,
       uid,
     );
     const { default_rate: defaultRate } = await getSettings();
-    return rows.map((r) => ({
-      id: r.id,
-      name: r.name,
-      client: r.client,
-      color: r.color,
-      archived: !!r.archived,
-      billable: !!r.billable,
-      hourly_rate: r.hourlyRate,
-      currency: r.currency,
-      budget_amount: r.budgetAmount,
-      budget_hours: r.budgetHours,
-      spent_amount: cents((r.allBillableSeconds / 3600) * (r.hourlyRate ?? defaultRate)),
-      spent_hours: Math.round((r.allSeconds / 3600) * 100) / 100,
-      total_seconds: Math.round(r.total),
-      entries: r.entries,
-      billable_entries: r.billableEntries,
-    }));
+    return rows.map((r) => projectWithTotals(r, defaultRate));
   }
 
+  /** The projects themselves, without touching the entries: for pickers, filters and backups. */
+  async function listProjectInfo({ includeArchived = false }: { includeArchived?: boolean } = {}): Promise<ProjectInfo[]> {
+    const rows = await all<ProjectRow>(
+      `SELECT * FROM "time_project" WHERE "workspaceId" = ?1 ${includeArchived ? "" : 'AND "archived" = 0'} ORDER BY "archived", "name"`,
+      ws,
+    );
+    return rows.map(projectInfo);
+  }
+
+  /** A project id as a number, or a 404 for anything that cannot be one. */
+  function asProjectId(id: number | string): number {
+    const n = Number(id);
+    if (!Number.isSafeInteger(n) || n <= 0) throw new HorasError(`Project ${id} not found.`, 404);
+    return n;
+  }
+
+  /** One project with the sums of its own entries (the only entries read). */
   async function getProject(id: number | string): Promise<Project> {
-    const p = (await listProjects({ includeArchived: true })).find((x) => x.id === Number(id));
-    if (!p) throw new HorasError(`Project ${id} not found.`, 404);
-    return p;
+    const row = await first<ProjectTotalsRow>(projectTotalsSql(true, 'AND p."id" = ?3'), ws, uid, asProjectId(id));
+    if (!row) throw new HorasError(`Project ${id} not found.`, 404);
+    return projectWithTotals(row, (await getSettings()).default_rate);
+  }
+
+  /** One project without its sums: enough to check it exists or to edit it. */
+  async function getProjectInfo(id: number | string): Promise<ProjectInfo> {
+    const row = await first<ProjectRow>('SELECT * FROM "time_project" WHERE "id" = ?1 AND "workspaceId" = ?2', asProjectId(id), ws);
+    if (!row) throw new HorasError(`Project ${id} not found.`, 404);
+    return projectInfo(row);
   }
 
   /**
@@ -432,7 +499,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     id: number | string,
     patch: { name?: string; client?: string; color?: string; archived?: boolean; hourly_rate?: unknown; billable?: unknown; currency?: unknown; apply_to_entries?: unknown; budget_amount?: unknown; budget_hours?: unknown } = {},
   ): Promise<Project & { entries_updated?: number }> {
-    const cur = await getProject(id);
+    const cur = await getProjectInfo(id);
     const name = patch.name !== undefined ? text(patch.name, 80) : cur.name;
     if (!name) throw new HorasError("The project needs a name.");
     if (await first('SELECT 1 AS x FROM "time_project" WHERE "workspaceId" = ?1 AND "name" = ?2 AND "id" != ?3', ws, name, cur.id)) {
@@ -478,7 +545,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
 
   /** Deletes the project. The entries (of every member) remain, without a project. */
   async function deleteProject(id: number | string): Promise<{ deleted: true; id: number }> {
-    const cur = await getProject(id);
+    const cur = await getProjectInfo(id);
     await run('UPDATE "time_entry" SET "projectId" = NULL WHERE "projectId" = ?1 AND "workspaceId" = ?2', cur.id, ws);
     await run('DELETE FROM "time_project" WHERE "id" = ?1 AND "workspaceId" = ?2', cur.id, ws);
     return { deleted: true, id: cur.id };
@@ -492,7 +559,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
   async function resolveProject(ref: { project_id?: number | string | null; project?: string | null }): Promise<number | null | undefined> {
     if (ref.project_id !== undefined) {
       if (ref.project_id === null || ref.project_id === "" || Number(ref.project_id) === 0) return null;
-      return (await getProject(ref.project_id)).id;
+      return (await getProjectInfo(ref.project_id)).id;
     }
     if (ref.project === undefined) return undefined;
     const name = text(ref.project, 80);
@@ -670,10 +737,17 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     return rows.map((r) => shapeEntry(r, settings)!);
   }
 
-  /** Tags the person has already used in this workspace, most used first. */
+  /**
+   * Tags the person has already used in this workspace, most used first,
+   * counted over their latest tagged entries.
+   *
+   * The condition is written exactly like the one of the index
+   * `time_entry_tagged_idx`, which holds only the tagged entries: the answer
+   * comes from that index, without walking through the untagged ones.
+   */
   async function listTags(): Promise<Array<{ tag: string; entries: number }>> {
     const rows = await all<{ tags: string }>(
-      `SELECT "tags" FROM "time_entry" WHERE "workspaceId" = ?1 AND "userId" = ?2 AND "tags" != '[]' ORDER BY "start" DESC LIMIT 3000`,
+      `SELECT "tags" FROM "time_entry" WHERE "workspaceId" = ?1 AND "userId" = ?2 AND "tags" != '[]' ORDER BY "start" DESC LIMIT ${TAGGED_ENTRIES}`,
       ws,
       uid,
     );
@@ -757,20 +831,45 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     };
   }
 
-  /** Current status: running timer and totals for today and the week (Monday to Sunday). */
+  /**
+   * Current status: running timer and totals for today and the week (Monday
+   * to Sunday). The screen asks for this every minute, so it reads this week's
+   * entries and nothing else: no project, no join.
+   *
+   * `revision` only changes when one of this week's entries does (created,
+   * edited, removed, stopped). Whoever polls compares it with the last one and
+   * loads the rest again only when it differs.
+   */
   async function status() {
     const today = localDay(Date.now(), tz);
     const [y, m, d] = today.split("-").map(Number);
     const weekday = (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7;
     const monday = new Date(Date.UTC(y, m - 1, d - weekday)).toISOString().slice(0, 10);
-    const week = await summary({ from: monday });
+    const rows = await all<{ id: number; description: string; projectId: number | null; tags: string; billable: number; start: string; end: string | null }>(
+      `SELECT "id", "description", "projectId", "tags", "billable", "start", "end" FROM "time_entry"
+        WHERE "workspaceId" = ?1 AND "userId" = ?2 AND "start" >= ?3 ORDER BY "start", "id"`,
+      ws,
+      uid,
+      rangeBound(monday, false, tz),
+    );
+    const now = Date.now();
+    let weekSeconds = 0;
+    let todaySeconds = 0;
+    let mark = 2166136261;
+    for (const r of rows) {
+      const seconds = Math.max(0, Math.round(((r.end ? Date.parse(r.end) : now) - Date.parse(r.start)) / 1000));
+      weekSeconds += seconds;
+      if (localDay(r.start, tz) === today) todaySeconds += seconds;
+      mark = fnv(mark, `${r.id}|${r.start}|${r.end}|${r.projectId}|${r.billable}|${r.description}|${r.tags}\n`);
+    }
     return {
       now: nowIso(),
       timezone: tz,
       today,
       running: await getRunning(),
-      today_seconds: week.by_day.find((x) => x.day === today)?.seconds ?? 0,
-      week_seconds: week.total_seconds,
+      today_seconds: todaySeconds,
+      week_seconds: weekSeconds,
+      revision: `${rows.length}-${mark.toString(36)}`,
     };
   }
 
@@ -784,7 +883,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
   async function exportBackup() {
     const [settings, projects, rows] = await Promise.all([
       getSettings(),
-      listProjects({ includeArchived: true }),
+      listProjectInfo({ includeArchived: true }),
       all<{ description: string; project: string | null; tags: string; billable: number; start: string; end: string }>(
         `SELECT e."description", p."name" AS project, e."tags", e."billable", e."start", e."end"
            FROM "time_entry" e LEFT JOIN "time_project" p ON p."id" = e."projectId"
@@ -968,6 +1067,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     updateSettings,
     listTags,
     listProjects,
+    listProjectInfo,
     getProject,
     createProject,
     updateProject,

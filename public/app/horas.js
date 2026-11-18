@@ -41,7 +41,12 @@
       throw new Error('Session expired.');
     }
     const data = await res.json().catch(function () { return null; });
-    if (!res.ok) throw new Error((data && data.error) || 'Something went wrong (' + res.status + ').');
+    if (!res.ok) {
+      const failure = new Error((data && data.error) || 'Something went wrong (' + res.status + ').');
+      // The status goes along, for the callers that treat "not found" as an answer.
+      /** @type {any} */ (failure).status = res.status;
+      throw failure;
+    }
     usage(method, path);
     return data;
   }
@@ -1144,10 +1149,38 @@
       dlg.showModal();
     }
 
+    /**
+     * What `/status` says, reduced to one string: it only changes when the
+     * day, the timer or one of this week's entries does.
+     * @param {object|null} status Answer of `/status`.
+     * @returns {string}
+     */
+    function mark(status) {
+      if (!status) return '';
+      const r = status.running;
+      return [status.today, status.revision, r ? [r.id, r.start, r.description, r.project_id, r.billable, r.tags.join(',')].join('|') : ''].join('#');
+    }
+
+    /**
+     * The check that runs every minute and when the tab comes back: one small
+     * request. The screen is only loaded again when that answer shows that
+     * something changed somewhere else (another tab, the phone, the AI).
+     * Loading everything every minute read the person's whole history each
+     * time, and an open tab alone could use up the database's daily quota.
+     * @returns {Promise<void>}
+     */
+    async function sync() {
+      const status = await api('/status');
+      if (mark(status) !== mark(state.status)) { await load(); return; }
+      // Nothing changed: only the totals move on, while a timer runs.
+      state.status = status;
+      paintList();
+    }
+
     /** @returns {Promise<void>} */
     async function load() {
       const got = await Promise.all([
-        api('/projects'),
+        api('/projects?totals=0'),
         api('/status'),
         api('/entries?from=' + dayKey(day(1 - windowDays)) + '&limit=2000'),
         api('/tags'),
@@ -1193,8 +1226,8 @@
 
     await load();
     // Another tab, the phone or the AI may have changed the timer: resync on return.
-    document.addEventListener('visibilitychange', function () { if (!document.hidden) load().catch(function () {}); });
-    setInterval(function () { if (!document.hidden && !document.querySelector('dialog[open]')) load().catch(function () {}); }, 60000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden && !document.querySelector('dialog[open]')) sync().catch(function () {}); });
+    setInterval(function () { if (!document.hidden && !document.querySelector('dialog[open]')) sync().catch(function () {}); }, 60000);
   }
 
   /* ------------------------------------------------------------------ */
@@ -1222,7 +1255,7 @@
       description: { label: 'Description', key: 'by_description', name: function (g) { return g.project ? g.description + ' · ' + g.project : g.description; } },
     };
 
-    const got = await Promise.all([api('/projects?archived=1'), api('/tags')]);
+    const got = await Promise.all([api('/projects?archived=1&totals=0'), api('/tags')]);
     const projects = got[0];
     const tags = got[1].map(function (t) { return t.tag; });
     const clients = projects.map(function (p) { return p.client; }).filter(function (c, i, a) { return c && a.indexOf(c) === i; }).sort();
@@ -1965,9 +1998,15 @@
   async function viewProject() {
     const id = Number(root.dataset.project);
     const back = root.dataset.back || '';
-    const got = await Promise.all([api('/projects?archived=1'), api('/settings')]);
+    // This project with its sums (only its own entries are read), and the
+    // plain list of the others, for the client suggestions.
+    const got = await Promise.all([
+      api('/projects/' + id).catch(function (err) { if (err.status === 404) return null; throw err; }),
+      api('/settings'),
+      api('/projects?archived=1&totals=0'),
+    ]);
     const settings = got[1];
-    let p = got[0].filter(function (x) { return x.id === id; })[0];
+    let p = got[0];
     if (!p) {
       root.replaceChildren(el('p', { class: 'alert alert-error', text: 'This project does not exist, or was deleted.' }), el('a', { class: 'btn btn-ghost', href: back, text: 'All projects' }));
       return;
@@ -2057,7 +2096,7 @@
     paintState();
 
     root.replaceChildren.apply(root, [
-      el('datalist', { id: 'pj-clients' }, got[0].map(function (x) { return x.client; }).filter(function (c, i, a) { return c && a.indexOf(c) === i; }).map(function (c) { return el('option', { value: c }); })),
+      el('datalist', { id: 'pj-clients' }, got[2].map(function (x) { return x.client; }).filter(function (c, i, a) { return c && a.indexOf(c) === i; }).map(function (c) { return el('option', { value: c }); })),
       off ? el('p', { class: 'alert alert-info', text: 'Your role in this workspace is read-only.' }) : null,
       el('form', { onsubmit: safe(async function (ev) {
         ev.preventDefault();

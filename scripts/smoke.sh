@@ -426,6 +426,29 @@ check "and the workspace still has a single owner"     '"n": 1'                "
 TOKEN_SMOKE="$(curl -s -b "$ADMIN" -X POST "$BASE/api/w/$WS/tokens" -H "Origin: $BASE" -H 'Content-Type: application/json' -d '{"action":"create","name":"smoke"}' | python3 -c 'import sys,json;print(json.load(sys.stdin).get("token",""))')"
 check "a member creates a personal token"              '"n": 1'                "$(sql "SELECT COUNT(*) AS n FROM api_token WHERE userId='$ADMIN_ID'")"
 check "the token API answers a DELETE with no Content-Type"  "404"             "$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$BASE/api/v1/entries/999999" -H "Authorization: Bearer $TOKEN_SMOKE")"
+
+# The time API behind that token. The project list comes in two sizes on
+# purpose: the sums read every entry of the workspace (the database bills and
+# limits by rows read), so whoever only needs the projects themselves, a
+# picker or a filter, asks for the list without them. And the screen that
+# checks every minute compares one mark instead of loading everything again.
+tk() { curl -s "$BASE/api/v1$1" -H "Authorization: Bearer $TOKEN_SMOKE" ${2:+-X "$2"} ${3:+-H 'Content-Type: application/json' -d "$3"}; }
+field() { python3 -c 'import sys,json;print(json.load(sys.stdin).get(sys.argv[1],""))' "$1"; }
+PROJECT_ID="$(tk /projects POST '{"name":"Smoke project"}' | field id)"
+MARK_BEFORE="$(tk /status | field revision)"
+check "an entry goes on a project by its id"            '"project":"Smoke project"'  "$(tk /entries POST "{\"project_id\":$PROJECT_ID,\"duration_minutes\":30,\"tags\":[\"smoke-tag\"]}")"
+check "a project that does not exist is refused"        "404"                   "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/v1/entries" -H "Authorization: Bearer $TOKEN_SMOKE" -H 'Content-Type: application/json' -d '{"project_id":999999,"duration_minutes":5}')"
+MARK_AFTER="$(tk /status | field revision)"
+check "the status mark changes when an entry does"      "changed"               "$([[ -n "$MARK_AFTER" && "$MARK_AFTER" != "$MARK_BEFORE" ]] && echo changed || echo same)"
+check "and stays the same while nothing changes"        "same"                  "$([[ "$(tk /status | field revision)" == "$MARK_AFTER" ]] && echo same || echo changed)"
+check "the project list carries the sums of the entries"  '"total_seconds":1800'  "$(tk /projects)"
+PLAIN_LIST="$(tk '/projects?totals=0')"
+check "and comes without them when asked"               "plain"                 "$([[ "$PLAIN_LIST" == *'"name":"Smoke project"'* && "$PLAIN_LIST" != *total_seconds* ]] && echo plain || echo "with sums")"
+check "one project answers with its own sums"           '"entries":1'           "$(tk "/projects/$PROJECT_ID")"
+check "a timer starts on a project by its id"           '"project":"Smoke project"'  "$(tk /timer/start POST "{\"project_id\":$PROJECT_ID}")"
+check "and stops"                                       '"running":false'       "$(tk /timer/stop POST '{}')"
+check "the tag list has the tag that was used"          '"tag":"smoke-tag"'     "$(tk /tags)"
+
 check "now the former owner can leave"                 "ok=ok_left"            "$(post "$ADMIN" "/api/w/$WS/members" action=leave)"
 check "and loses access immediately"                   "404"                   "$(get "/w/$WS" "$ADMIN")"
 check "and their token for it is gone"                 '"n": 0'                "$(sql "SELECT COUNT(*) AS n FROM api_token WHERE userId='$ADMIN_ID'")"

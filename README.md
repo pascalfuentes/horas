@@ -74,12 +74,12 @@ curl https://YOUR-DOMAIN/api/v1/status -H "Authorization: Bearer hrs_…"
 
 | Method | Route | |
 |---|---|---|
-| GET | `/status` | running timer, totals for today and for the week |
+| GET | `/status` | running timer, totals for today and for the week, and `revision`, which only changes when one of this week's entries does (compare it before loading anything else again) |
 | POST | `/timer/start` · `/timer/stop` | optional body: `description`, `project`, `tags`, `billable`, `start`/`end` |
 | GET · POST | `/entries` | filters: `from`, `to`, `project`, `project_id`, `client`, `tag`, `billable`, `q`, `limit` |
 | GET · PATCH · DELETE | `/entries/:id` | |
-| GET · POST | `/projects` | `?archived=1` includes archived ones |
-| PATCH · DELETE | `/projects/:id` | |
+| GET · POST | `/projects` | `?archived=1` includes archived ones; `?totals=0` leaves out the sums of the entries (the list with sums reads every entry of the workspace: ask for it only where it is shown) |
+| GET · PATCH · DELETE | `/projects/:id` | one project, with the sums of its own entries |
 | GET | `/summary` | same filters as `/entries`; returns totals, amount and groups by project, client, tag, day and description |
 | GET | `/tags` | tags already used |
 | GET · PATCH | `/settings` | the workspace's `currency` and `default_rate` |
