@@ -26,6 +26,14 @@
  *   address the visitor came from, so they never load on those pages nor on
  *   the page that follows them.
  *
+ * - An account is created, and the first sign-in happens, while the notice is
+ *   usually still on screen. So those two are noted in this browser and
+ *   reported when the person says yes: at once on that page, or on the next
+ *   one where the tools may load. They wait for one hour at most, in
+ *   localStorage because the confirmation e-mail opens in another tab, and a
+ *   no erases them. Nothing else waits: an action taken without consent is
+ *   not reported later.
+ *
  * `window.clockfolioAnalytics.track(name)` is the one door for events, and it
  * does nothing without consent.
  */
@@ -33,15 +41,33 @@ import { APP_NAME } from "~/config";
 import { analytics, env } from "~/lib/env";
 
 const config = analytics(Astro.locals.env ?? env);
+
+/**
+ * How recent an account has to be for an arrival from Google or GitHub to
+ * count as a sign-up. The provider's return creates the account and lands in
+ * the app within seconds; an invite in between takes a little longer.
+ */
+const NEW_ACCOUNT_MS = 5 * 60 * 1000;
+const created = Astro.locals.user?.createdAt;
+const newAccount = created ? Date.now() - new Date(created).getTime() < NEW_ACCOUNT_MS : false;
 ---
 
 {
   config && (
-    <script is:inline define:vars={{ gtmId: config.id, appName: APP_NAME }}>
+    <script is:inline define:vars={{ gtmId: config.id, appName: APP_NAME, newAccount }}>
       (function () {
         var KEY = "clockfolio-consent";
         var LOGIN = "clockfolio-login";
+        var PENDING = "clockfolio-pending";
+        var SIGNED_UP = "clockfolio-signed-up";
+        /** The only events that may wait for the person's answer to the notice. */
+        var MILESTONES = ["sign_up", "login"];
+        /** For how long they wait. */
+        var PENDING_MS = 60 * 60 * 1000;
         var loaded = false;
+        /** The same list for this page alone, used when the browser refuses to store it. */
+        var unsent = {};
+        var memoryOnly = false;
         window.dataLayer = window.dataLayer || [];
 
         /**
@@ -194,6 +220,96 @@ const config = analytics(Astro.locals.env ?? env);
         }
 
         /**
+         * The sign-up and the sign-in not reported yet, with the time each one
+         * happened. Anything else, and anything older than an hour, is dropped.
+         * @returns {Object<string, number>}
+         */
+        function pending() {
+          var list = {};
+          if (memoryOnly) {
+            list = unsent;
+          } else {
+            try {
+              list = JSON.parse(localStorage.getItem(PENDING) || "{}") || {};
+            } catch (e) {
+              /* storage out of reach, or a value that is not a list: nothing is held */
+            }
+          }
+          var fresh = {};
+          for (var i = 0; i < MILESTONES.length; i++) {
+            var at = Number(list[MILESTONES[i]]);
+            if (at && Date.now() - at < PENDING_MS) fresh[MILESTONES[i]] = at;
+          }
+          return fresh;
+        }
+
+        /**
+         * Saves that list; an empty one leaves nothing behind.
+         * @param {Object<string, number>} list
+         * @returns {void}
+         */
+        function keep(list) {
+          unsent = list;
+          try {
+            if (Object.keys(list).length) localStorage.setItem(PENDING, JSON.stringify(list));
+            else localStorage.removeItem(PENDING);
+            memoryOnly = false;
+          } catch (e) {
+            // Private mode: the list lasts for this page only.
+            memoryOnly = true;
+          }
+        }
+
+        /**
+         * Reports what was held back, where that is allowed: after a yes and on
+         * a page where the tools are running. A no erases the list instead.
+         * @returns {void}
+         */
+        function flush() {
+          var answer = choice();
+          if (answer === "denied") {
+            keep({});
+            return;
+          }
+          if (answer !== "granted" || !loaded) return;
+          var list = pending();
+          keep({});
+          for (var name in list) {
+            if (Object.prototype.hasOwnProperty.call(list, name)) track(name);
+          }
+        }
+
+        /**
+         * Notes a sign-up or a sign-in. Reported at once where the tools are
+         * running; otherwise it waits for the person's answer.
+         * @param {"sign_up"|"login"} name
+         * @returns {void}
+         */
+        function milestone(name) {
+          if (choice() === "denied") return;
+          var list = pending();
+          if (!list[name]) list[name] = Date.now();
+          keep(list);
+          flush();
+        }
+
+        /**
+         * True the first time it is asked in this tab, so that reloading a
+         * page does not count the same thing twice.
+         * @param {string} key
+         * @returns {boolean}
+         */
+        function once(key) {
+          try {
+            if (sessionStorage.getItem(key)) return false;
+            sessionStorage.setItem(key, "1");
+          } catch (e) {
+            /* no session storage: a reload may count again */
+          }
+          return true;
+        }
+
+        /**
          * Takes the notice off the page.
          * @returns {void}
          */
@@ -212,8 +328,10 @@ const config = analytics(Astro.locals.env ?? env);
           hide();
           if (value === "granted") {
             load();
+            flush();
             return;
           }
+          flush();
           forget();
           // The tools are already running on this page: only a fresh load stops them.
           if (loaded) location.reload();
@@ -278,19 +396,25 @@ const config = analytics(Astro.locals.env ?? env);
          */
         function milestones() {
           var query = new URLSearchParams(location.search);
-          if (location.pathname === "/verify-email" && query.get("ok") === "ok_signup") track("sign_up");
+          if (location.pathname === "/verify-email" && query.get("ok") === "ok_signup" && once(SIGNED_UP)) {
+            milestone("sign_up");
+          }
 
-          var pending = false;
+          /** @type {string|null} How the sign-in under way started: "password" or "social". */
+          var how = null;
           try {
-            pending = sessionStorage.getItem(LOGIN) === "1";
+            how = sessionStorage.getItem(LOGIN);
             // Back on the login page with an error: that attempt did not get in.
-            if (pending && (area() === "app" || (location.pathname === "/login" && query.get("e")))) {
+            if (how && (area() === "app" || (location.pathname === "/login" && query.get("e")))) {
               sessionStorage.removeItem(LOGIN);
             }
           } catch (e) {
             /* no session storage: the sign-in is simply not counted */
           }
-          if (pending && area() === "app") track("login");
+          if (!how || area() !== "app") return;
+          // Google and GitHub create the account on the way in: there is no
+          // sign-up page to count it on, only an account that is minutes old.
+          milestone(how === "social" && newAccount ? "sign_up" : "login");
         }
 
         window.clockfolioAnalytics = {
@@ -309,6 +433,8 @@ const config = analytics(Astro.locals.env ?? env);
         document.addEventListener("DOMContentLoaded", function () {
           if (!choice()) show();
           milestones();
+          // Also what an earlier page, or another tab, left to be reported.
+          flush();
         });
 
         document.addEventListener("click", function (ev) {
@@ -326,7 +452,7 @@ const config = analytics(Astro.locals.env ?? env);
             var action = form && form.getAttribute ? form.getAttribute("action") || "" : "";
             if (action !== "/api/login" && action !== "/api/social") return;
             try {
-              sessionStorage.setItem(LOGIN, "1");
+              sessionStorage.setItem(LOGIN, action === "/api/social" ? "social" : "password");
             } catch (e) {
               /* see milestones() */
             }

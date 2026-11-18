@@ -300,7 +300,19 @@
     // Record numbers and the query string stay out: they point at someone's data.
     const parts = path.split('?')[0].split('/').filter(function (part) { return part && !/^\d+$/.test(part); });
     if (!parts.length) return;
-    window.clockfolioAnalytics.track(parts.length > 1 ? parts.join('_') : parts[0] + '_' + verbs[method]);
+    measure(parts.length > 1 ? parts.join('_') : parts[0] + '_' + verbs[method]);
+  }
+
+  /**
+   * Tells the usage analytics about an action `usage()` cannot name from the
+   * request: a file imported or downloaded, a token created. The same rule
+   * holds: the NAME, never what was in it. The names end in "_create" or
+   * "_delete" because that is what the Tag Manager trigger lets through.
+   * @param {string} name For example "import_create".
+   * @returns {void}
+   */
+  function measure(name) {
+    if (window.clockfolioAnalytics) window.clockfolioAnalytics.track(name);
   }
 
   /**
@@ -1917,6 +1929,7 @@
           const a = el('a', { href: URL.createObjectURL(await res.blob()), download: 'clockfolio-' + period.from() + '_' + period.to() + '.csv' });
           a.click();
           URL.revokeObjectURL(a.getAttribute('href'));
+          measure('export_create');
         }) }),
       ]),
       tabs,
@@ -2492,6 +2505,7 @@
       ev.preventDefault();
       const nameInput = /** @type {HTMLInputElement} */ (form.elements.namedItem('name'));
       const r = await api('', 'POST', { action: 'create', name: nameInput.value, timezone: TZ }, url);
+      measure('tokens_create');
       // Shows the token and fills the examples with it. It only exists on this screen, right now.
       document.querySelectorAll('[data-token]').forEach(function (n) { n.textContent = n.textContent.replace(/YOUR_TOKEN/g, r.token); });
       /** @type {HTMLElement} */ (reveal.querySelector('code')).textContent = r.token;
@@ -2511,6 +2525,7 @@
       b.addEventListener('click', safe(async function () {
         if (!confirm('Revoke this token? Anyone using it loses access immediately.')) return;
         await api('', 'POST', { action: 'revoke', id: b.getAttribute('data-revoke') }, url);
+        measure('tokens_delete');
         location.reload();
       }));
     });
@@ -2527,14 +2542,16 @@
    * Downloads a file from the workspace API.
    * @param {string} path Path after the base, e.g. "/backup.json".
    * @param {string} filename Name suggested for the saved file.
+   * @param {string} event Name told to the usage analytics, e.g. "backup_create".
    * @returns {Promise<void>}
    */
-  async function download(path, filename) {
+  async function download(path, filename, event) {
     const res = await fetch(BASE + path, { headers: { 'x-timezone': TZ }, credentials: 'same-origin' });
     if (!res.ok) throw new Error('Could not export.');
     const a = el('a', { href: URL.createObjectURL(await res.blob()), download: filename });
     a.click();
     URL.revokeObjectURL(a.getAttribute('href'));
+    measure(event);
   }
 
   /** @returns {void} */
@@ -2567,6 +2584,8 @@
       if (!res.ok) throw new Error((data && data.error) || 'Could not read the file (' + res.status + ').');
       // Entries came in that no screen of this tab knows about: what the tab keeps is no longer right.
       if (!dryRun) { copy.drop(); checkedAt = 0; }
+      // The preview writes nothing, so only the import itself is counted.
+      if (!dryRun) measure('import_create');
       return data;
     }
 
@@ -2635,8 +2654,8 @@
         el('h2', { text: 'Export' }),
         el('span', { class: 'muted', text: 'Your own entries in this workspace. The backup can be imported back here or into another account; the CSV opens in any spreadsheet.' }),
         el('div', { class: 'row' }, [
-          el('button', { type: 'button', text: 'Download backup (JSON)', onclick: safe(function () { return download('/backup.json', 'clockfolio-backup-' + dayKey(new Date()) + '.json'); }) }),
-          el('button', { type: 'button', class: 'btn-ghost', text: 'Download entries (CSV)', onclick: safe(function () { return download('/export.csv', 'clockfolio-' + dayKey(new Date()) + '.csv'); }) }),
+          el('button', { type: 'button', text: 'Download backup (JSON)', onclick: safe(function () { return download('/backup.json', 'clockfolio-backup-' + dayKey(new Date()) + '.json', 'backup_create'); }) }),
+          el('button', { type: 'button', class: 'btn-ghost', text: 'Download entries (CSV)', onclick: safe(function () { return download('/export.csv', 'clockfolio-' + dayKey(new Date()) + '.csv', 'export_create'); }) }),
         ]),
       ]),
       CAN_WRITE ? el('div', { class: 'card' }, [

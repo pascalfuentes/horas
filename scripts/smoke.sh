@@ -301,6 +301,10 @@ check "each person has THEIR OWN workspace"            '"n": 2'               "$
 echo; echo "$(c 1 'Workspace in the URL and isolation')"
 WS_ADMIN_SLUG="$(slug_of admin@exemplo.com)"
 WS_VIEWER_SLUG="$(slug_of leitor@exemplo.com)"
+# The slug is in the address of every page, which the usage analytics read by
+# themselves: it must not be made of the person's name or e-mail address.
+check "the personal workspace gets a neutral short name"  "yes yes"       "$(found_re '^personal(-[a-z0-9]{4})?$' "$WS_ADMIN_SLUG") $(found_re '^personal(-[a-z0-9]{4})?$' "$WS_VIEWER_SLUG")"
+check "and two people do not share it"                 "yes"              "$([[ "$WS_ADMIN_SLUG" != "$WS_VIEWER_SLUG" ]] && echo yes || echo no)"
 check "/dashboard leads to the last workspace used"    "/w/"              "$(get /dashboard "$ADMIN")"
 check "the owner opens their own workspace"            "200"              "$(get "/w/$WS_ADMIN_SLUG" "$ADMIN")"
 check "and its notes"                                  "200"              "$(get "/w/$WS_ADMIN_SLUG/notes" "$ADMIN")"

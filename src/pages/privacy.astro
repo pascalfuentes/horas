@@ -227,7 +227,10 @@ const workRows = [
                 <li>
                   <strong>What runs</strong>: Google Tag Manager, which loads {statsTools}. These tools set
                   their own cookies and receive your IP address, your browser and device, and the address
-                  of each page you open, which includes the short name of your workspace.
+                  of each page you open, which includes the short name of your workspace: the word after{" "}
+                  <code>/w/</code> in the address bar. The workspace that comes with a new account gets a
+                  neutral one, such as <code>personal-k3fd</code>; a workspace you create takes it from the
+                  name you give it.
                 </li>
                 <li>
                   <strong>What the app tells them</strong>: the name of an action, such as "timer started"
@@ -236,6 +239,12 @@ const workRows = [
                   also read the title of the browser tab, so while they run the title stops showing your
                   workspace, a project or what you are timing. They are never loaded on the password reset
                   page or on an invite page, whose addresses work like a key.
+                </li>
+                <li>
+                  <strong>Before you answer</strong>: nothing is sent. If you create your account or sign
+                  in while the notice is still open, this browser keeps a note of that one fact for up to
+                  an hour, in its local storage. Accepting within that hour reports it then; declining
+                  erases it. Nothing else you do before answering is ever reported.
                 </li>
                 <li>
                   <strong>Changing your mind</strong>:{" "}
