@@ -105,6 +105,19 @@ set_ws_role() { # set_ws_role <email> <slug> <role>
   sql "UPDATE member SET role='$3' WHERE userId=(SELECT id FROM user WHERE email='$1') AND organizationId=(SELECT id FROM organization WHERE slug='$2')" >/dev/null
 }
 id_of() { sql "SELECT id FROM user WHERE email='$1'" | python3 -c 'import sys,json;r=json.load(sys.stdin);print(r[0]["id"] if r else "")'; }
+# The sums the database keeps for the project list (`time_project_total`,
+# migration 0013) against what the entries add up to at this moment, in the
+# same unit. `"missing": 0, "extra": 0` when the two agree; `kept` is how many
+# rows of sums there are.
+totals_state() {
+  local ticks='COALESCE(CAST((julianday("end") - julianday("start")) * 2147483648.0 AS INTEGER), 0)'
+  sql "WITH fresh AS (
+         SELECT workspaceId, projectId, userId, COUNT(*), SUM(billable), SUM($ticks), SUM((billable = 1) * $ticks)
+           FROM time_entry WHERE projectId IS NOT NULL GROUP BY 1, 2, 3)
+       SELECT (SELECT COUNT(*) FROM (SELECT * FROM fresh EXCEPT SELECT * FROM time_project_total)) AS missing,
+              (SELECT COUNT(*) FROM (SELECT * FROM time_project_total EXCEPT SELECT * FROM fresh)) AS extra,
+              (SELECT COUNT(*) FROM time_project_total) AS kept"
+}
 # Deleting the D1 file does not work: the dev server keeps the old handle open
 # and the two start seeing different databases. And the last-admin trigger
 # blocks the DELETE. So we drop the triggers, clean up and recreate the
@@ -333,6 +346,17 @@ check "the only owner is not offered a way out"        "yes"                   "
 check "the dashboard carries the phone menu button"    "yes"                   "$(has /workspaces "$ADMIN" 'data-menu-toggle')"
 check "and the list that button opens"                 "yes"                   "$(has /workspaces "$ADMIN" 'id="nav-menu"')"
 
+# The time screens keep a copy of the person's own lists in the tab, so they do
+# not read the database again on every page (public/app/horas.js). A signed-in
+# page says whose copy it is, and the script that empties the copy is on the
+# pages of both sides of a sign-out.
+check "a signed-in page says whose tab copy it is"     "yes"                   "$(has /workspaces "$ADMIN" "data-person=\"$ADMIN_ID\"")"
+check "and loads what empties that copy on sign-out"   "yes"                   "$(has /workspaces "$ADMIN" '/app/forget.js')"
+LOGIN_PAGE="$(curl -s "$BASE/login")"
+check "the login page empties it too"                  "yes"                   "$(found '/app/forget.js' "$LOGIN_PAGE")"
+check "and names no person"                            "no"                    "$(found 'data-person' "$LOGIN_PAGE")"
+check "the script that empties it is served"           "200"                   "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/app/forget.js")"
+
 # The Security page lists the sessions of the account. Better Auth's own list
 # refuses a session older than `freshAge` (15 minutes) and the page used to die
 # with it, a quarter of an hour after every login: the session is aged here.
@@ -430,6 +454,129 @@ check "and the workspace still has a single owner"     '"n": 1'                "
 TOKEN_SMOKE="$(curl -s -b "$ADMIN" -X POST "$BASE/api/w/$WS/tokens" -H "Origin: $BASE" -H 'Content-Type: application/json' -d '{"action":"create","name":"smoke"}' | python3 -c 'import sys,json;print(json.load(sys.stdin).get("token",""))')"
 check "a member creates a personal token"              '"n": 1'                "$(sql "SELECT COUNT(*) AS n FROM api_token WHERE userId='$ADMIN_ID'")"
 check "the token API answers a DELETE with no Content-Type"  "404"             "$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$BASE/api/v1/entries/999999" -H "Authorization: Bearer $TOKEN_SMOKE")"
+
+# The time API behind that token. The project list comes with the sums of the
+# entries, or without them for whoever only needs the projects themselves, a
+# picker or a filter. And the screen that checks every minute compares one
+# mark instead of loading everything again.
+tk() { curl -s "$BASE/api/v1$1" -H "Authorization: Bearer $TOKEN_SMOKE" ${2:+-X "$2"} ${3:+-H 'Content-Type: application/json' -d "$3"}; }
+field() { python3 -c 'import sys,json;print(json.load(sys.stdin).get(sys.argv[1],""))' "$1"; }
+PROJECT_ID="$(tk /projects POST '{"name":"Smoke project"}' | field id)"
+MARK_BEFORE="$(tk /status | field revision)"
+check "an entry goes on a project by its id"            '"project":"Smoke project"'  "$(tk /entries POST "{\"project_id\":$PROJECT_ID,\"duration_minutes\":30,\"tags\":[\"smoke-tag\"]}")"
+check "a project that does not exist is refused"        "404"                   "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/v1/entries" -H "Authorization: Bearer $TOKEN_SMOKE" -H 'Content-Type: application/json' -d '{"project_id":999999,"duration_minutes":5}')"
+MARK_AFTER="$(tk /status | field revision)"
+check "the status mark changes when an entry does"      "changed"               "$([[ -n "$MARK_AFTER" && "$MARK_AFTER" != "$MARK_BEFORE" ]] && echo changed || echo same)"
+check "and stays the same while nothing changes"        "same"                  "$([[ "$(tk /status | field revision)" == "$MARK_AFTER" ]] && echo same || echo changed)"
+check "the project list carries the sums of the entries"  '"total_seconds":1800'  "$(tk /projects)"
+PLAIN_LIST="$(tk '/projects?totals=0')"
+check "and comes without them when asked"               "plain"                 "$([[ "$PLAIN_LIST" == *'"name":"Smoke project"'* && "$PLAIN_LIST" != *total_seconds* ]] && echo plain || echo "with sums")"
+check "one project answers with its own sums"           '"entries":1'           "$(tk "/projects/$PROJECT_ID")"
+check "a timer starts on a project by its id"           '"project":"Smoke project"'  "$(tk /timer/start POST "{\"project_id\":$PROJECT_ID}")"
+check "and stops"                                       '"running":false'       "$(tk /timer/stop POST '{}')"
+check "the tag list has the tag that was used"          '"tag":"smoke-tag"'     "$(tk /tags)"
+
+# The sums of a project. They are not added up from the entries on every read
+# (that read one row per entry of the workspace, and the database limits the
+# rows read): the database keeps them per project and person, and triggers
+# move them with every change of an entry (migration 0013). So here two people
+# work on the same project and an entry goes through everything that can
+# happen to one, and each answer has to be what the entries add up to.
+TOKEN_OTHER="$(curl -s -b "$VIEWER" -X POST "$BASE/api/w/$WS/tokens" -H "Origin: $BASE" -H 'Content-Type: application/json' -d '{"action":"create","name":"smoke"}' | python3 -c 'import sys,json;print(json.load(sys.stdin).get("token",""))')"
+tk2() { curl -s "$BASE/api/v1$1" -H "Authorization: Bearer $TOKEN_OTHER" ${2:+-X "$2"} ${3:+-H 'Content-Type: application/json' -d "$3"}; }
+sums() { # sums: the five numbers of a project that come from the entries, read from its JSON
+  python3 -c 'import sys,json;p=json.load(sys.stdin);print("seconds=%s entries=%s billable=%s hours=%s amount=%s;" % (p["total_seconds"], p["entries"], p["billable_entries"], p["spent_hours"], p["spent_amount"]))'
+}
+ONE="$(tk /projects POST '{"name":"Totals one","hourly_rate":100,"budget_hours":10}' | field id)"
+TWO="$(tk /projects POST '{"name":"Totals two","hourly_rate":60}' | field id)"
+ENTRY="$(tk /entries POST "{\"project_id\":$ONE,\"start\":\"2026-11-02T09:00:00Z\",\"end\":\"2026-11-02T10:00:00Z\",\"billable\":true}" | field id)"
+tk2 /entries POST "{\"project_id\":$ONE,\"start\":\"2026-11-02T09:00:00Z\",\"end\":\"2026-11-02T09:30:00Z\"}" >/dev/null
+check "a project has this person's time and everybody's spending"  "seconds=3600 entries=1 billable=1 hours=1.5 amount=100;"  "$(tk "/projects/$ONE" | sums)"
+check "the other person sees their own time, the same spending"  "seconds=1800 entries=1 billable=0 hours=1.5 amount=100;"  "$(tk2 "/projects/$ONE" | sums)"
+check "the list answers the same as the project alone"  "same"  "$(python3 -c 'import sys,json;one=json.loads(sys.argv[2]);print("same" if [p for p in json.loads(sys.argv[1]) if p["id"]==one["id"]]==[one] else "different")' "$(tk /projects)" "$(tk "/projects/$ONE")")"
+tk "/entries/$ENTRY" PATCH '{"end":"2026-11-02T11:00:00Z"}' >/dev/null
+check "an entry made longer counts for its new time"    "seconds=7200 entries=1 billable=1 hours=2.5 amount=200;"  "$(tk "/projects/$ONE" | sums)"
+tk "/entries/$ENTRY" PATCH '{"billable":false}' >/dev/null
+check "and costs nothing once it is not billable"       "seconds=7200 entries=1 billable=0 hours=2.5 amount=0;"    "$(tk "/projects/$ONE" | sums)"
+tk "/entries/$ENTRY" PATCH "{\"project_id\":$TWO,\"billable\":true}" >/dev/null
+check "moved, an entry leaves one project"              "seconds=0 entries=0 billable=0 hours=0.5 amount=0;"       "$(tk "/projects/$ONE" | sums)"
+check "and enters the other"                            "seconds=7200 entries=1 billable=1 hours=2 amount=120;"    "$(tk "/projects/$TWO" | sums)"
+# A running timer is an entry already, and its time is added when someone asks.
+tk /timer/start POST "{\"project_id\":$TWO,\"start\":\"2026-11-02T12:00:00Z\"}" >/dev/null
+RUNNING="$(tk "/projects/$TWO")"
+check "a running timer counts as an entry"              '"entries":2'  "$RUNNING"
+check "with the time it has so far"                     "yes"          "$(python3 -c 'import sys,json;print("yes" if json.loads(sys.argv[1])["total_seconds"] > 7200 + 86400 else "no")' "$RUNNING")"
+tk /timer/stop POST '{"end":"2026-11-02T12:10:00Z"}' >/dev/null
+check "stopped, it counts for exactly its time"         "seconds=7800 entries=2 billable=1 hours=2.17 amount=120;" "$(tk "/projects/$TWO" | sums)"
+# "Billable by default", applied to the entries that exist. The answer counts
+# the entries: the database's own count of changed rows also includes the row
+# of sums a trigger updates for each of them, and said twice as many.
+APPLIED="$(tk "/projects/$TWO" PATCH '{"billable":true,"apply_to_entries":true}')"
+check "applying billable to old entries counts the entries"  '"entries_updated":1'  "$APPLIED"
+check "and the sums follow"                             "seconds=7800 entries=2 billable=2 hours=2.17 amount=130;" "$(printf '%s' "$APPLIED" | sums)"
+# An import adds the sums of a whole batch at once, not entry by entry.
+printf '%s\n' 'description,project,start,end,billable' \
+  'from a file,Totals two,2026-11-03T09:00:00Z,2026-11-03T09:15:00Z,yes' \
+  'on a new project,Totals imported,2026-11-03T10:00:00Z,2026-11-03T10:20:00Z,no' \
+  'on no project,,2026-11-03T11:00:00Z,2026-11-03T11:05:00Z,no' > "$TMP/import.csv"
+check "a file is imported"                              '"imported":3'  "$(curl -s -X POST "$BASE/api/v1/import" -H "Authorization: Bearer $TOKEN_SMOKE" -H 'Content-Type: text/csv' --data-binary @"$TMP/import.csv")"
+check "its entries are in the sums of their project"    "seconds=8700 entries=3 billable=3 hours=2.42 amount=145;" "$(tk "/projects/$TWO" | sums)"
+IMPORTED="$(tk '/projects?totals=0' | python3 -c 'import sys,json;print([p["id"] for p in json.load(sys.stdin) if p["name"]=="Totals imported"][0])')"
+check "and a project the file created has its own"      "seconds=1200 entries=1 billable=0 hours=0.33 amount=0;"   "$(tk "/projects/$IMPORTED" | sums)"
+tk "/entries/$ENTRY" DELETE >/dev/null
+check "a deleted entry leaves the sums"                 "seconds=1500 entries=2 billable=2 hours=0.42 amount=25;"  "$(tk "/projects/$TWO" | sums)"
+check "what the database keeps is what the entries add up to"  '"missing": 0, "extra": 0'  "$(totals_state)"
+tk "/projects/$TWO" DELETE >/dev/null
+check "a deleted project leaves its entries, without a project"  '"n": 3'  "$(sql "SELECT COUNT(*) AS n FROM time_entry e JOIN organization o ON o.id = e.workspaceId WHERE o.slug = '$WS' AND e.projectId IS NULL")"
+check "and takes its sums along, and only its own"      '"missing": 0, "extra": 0'  "$(totals_state)"
+check "the other project still answers as before"       "seconds=0 entries=0 billable=0 hours=0.5 amount=0;"       "$(tk "/projects/$ONE" | sums)"
+# When a project goes, the database itself looks for the entries that point to
+# it, by the project alone. Without an index that begins with the project it
+# walked through every entry of every workspace to find them, twice, even for
+# a project with no entries (migration 0014).
+PLAN="$(sql "EXPLAIN QUERY PLAN DELETE FROM time_project WHERE id = $ONE")"
+check "deleting a project finds its entries through an index"  "time_entry_project_owner_start_idx (projectId=?)"  "$PLAN"
+check "and does not walk through all the entries"       "no"            "$(found 'SCAN time_entry' "$PLAN")"
+
+# Importing again. A row of a file repeats a stored entry when the start, the
+# end and the description are all the same, for the same person, and such a
+# row is skipped. The stored entries are no longer read from the first to the
+# last date of the file whatever lies in between (two rows years apart made
+# that the person's whole history). They are read between those dates only
+# while that is no more than the file has rows, and start by start otherwise.
+# Both ways have to tell the same duplicates.
+imp() { curl -s -X POST "$BASE/api/v1/import${2:-}" -H "Authorization: Bearer ${3:-$TOKEN_SMOKE}" -H 'Content-Type: text/csv' --data-binary @"$1"; }
+# Three entries are stored between 09:00 and 11:00 and this file has two
+# starts: they are looked up start by start.
+printf '%s\n' 'description,project,start,end,billable' \
+  'from a file,,2026-11-03T09:00:00Z,2026-11-03T09:15:00Z,yes' \
+  'from a file,,2026-11-03T09:00:00Z,2026-11-03T09:16:00Z,yes' \
+  'from another file,,2026-11-03T09:00:00Z,2026-11-03T09:15:00Z,yes' \
+  'from a file,,2026-11-03T09:00:00Z,2026-11-03T09:16:00Z,yes' \
+  'on no project,,2026-11-03T11:00:00Z,2026-11-03T11:05:00Z,no' > "$TMP/again.csv"
+AGAIN="$(imp "$TMP/again.csv" '?dry_run=1')"
+check "the same start with another end or description is a new entry"  '"to_import":2'  "$AGAIN"
+check "a stored entry and a row repeated in the file are duplicates"   '"duplicates":3' "$AGAIN"
+check "for another person none of it is stored"         '"to_import":4'  "$(imp "$TMP/again.csv" '?dry_run=1' "$TOKEN_OTHER")"
+# This one has four starts for the same three entries: one read of the stretch.
+printf '%s\n' 'description,project,start,end,billable' \
+  'from a file,,2026-11-03T09:00:00Z,2026-11-03T09:15:00Z,yes' \
+  'on a new project,,2026-11-03T10:00:00Z,2026-11-03T10:20:00Z,no' \
+  'on no project,,2026-11-03T11:00:00Z,2026-11-03T11:05:00Z,no' \
+  'later that day,,2026-11-03T12:00:00Z,2026-11-03T12:05:00Z,no' > "$TMP/stretch.csv"
+STRETCH="$(imp "$TMP/stretch.csv" '?dry_run=1')"
+check "a file that covers one stretch tells the same duplicates"  '"duplicates":3'  "$STRETCH"
+check "and what is new in it"                           '"to_import":1'  "$STRETCH"
+check "the new rows are imported"                       '"imported":2'   "$(imp "$TMP/again.csv")"
+check "and are duplicates from then on"                 '"duplicates":5' "$(imp "$TMP/again.csv")"
+# An import refuses to take a workspace past its limit of entries. It counts
+# them without walking through them all: the ones on a project are in the
+# sums the database keeps, the ones on no project come from the index.
+check "the count an import uses is the number of entries"  '"differ": 0'  "$(sql "SELECT COUNT(*) AS differ FROM organization o
+         WHERE (SELECT COUNT(*) FROM time_entry e WHERE e.workspaceId = o.id)
+            != (SELECT COALESCE(SUM(entries), 0) FROM time_project_total t WHERE t.workspaceId = o.id)
+             + (SELECT COUNT(*) FROM time_entry e WHERE e.workspaceId = o.id AND e.projectId IS NULL)")"
+
 check "now the former owner can leave"                 "ok=ok_left"            "$(post "$ADMIN" "/api/w/$WS/members" action=leave)"
 check "and loses access immediately"                   "404"                   "$(get "/w/$WS" "$ADMIN")"
 check "and their token for it is gone"                 '"n": 0'                "$(sql "SELECT COUNT(*) AS n FROM api_token WHERE userId='$ADMIN_ID'")"
@@ -626,6 +773,8 @@ check "deleting with the wrong password"               "e=current_password"     
 check "and the wrong password destroyed nothing"       "$OWNED"                   "$(sql "SELECT COUNT(*) AS n FROM member WHERE userId='$(id_of leitor@exemplo.com)' AND role='owner'")"
 check "deleting with everything right"                 "ok=ok_account_deleted" "$(post "$LGPD" /api/account/delete confirmation=leitor@exemplo.com password=senha-final-do-leitor)"
 check "the account is gone from the database"          "[]"                  "$(sql "SELECT id FROM user WHERE email='leitor@exemplo.com'")"
+# The workspace with the time entries above was theirs alone by now, and went with the account.
+check "the project sums went with the account and its workspaces"  '"missing": 0, "extra": 0, "kept": 0'  "$(totals_state)"
 check "the audit trail became dissociated"             "account removed"      "$(sql "SELECT actorEmail FROM audit_log WHERE actorEmail='[account removed]' LIMIT 1")"
 check "and none of their IPs was left in the trail"    "[]"                  "$(sql "SELECT ip FROM audit_log WHERE targetEmail='[account removed]' AND actorEmail IS NULL AND ip IS NOT NULL")"
 

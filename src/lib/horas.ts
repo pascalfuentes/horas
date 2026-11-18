@@ -66,6 +66,9 @@ export type Project = {
   billable_entries: number;
 };
 
+/** A project without the sums of its entries: all a picker or a filter needs. */
+export type ProjectInfo = Omit<Project, "spent_amount" | "spent_hours" | "total_seconds" | "entries" | "billable_entries">;
+
 /** An amount of money in one currency. A period can add up to several. */
 export type Amount = { currency: string; amount: number };
 
@@ -268,6 +271,37 @@ function shapeEntry(row: EntryRow | null, settings: Settings): Entry | null {
   };
 }
 
+/** How many of a person's latest tagged entries the tag list counts. */
+const TAGGED_ENTRIES = 3000;
+
+/** Rows read by one query from which it is logged as heavy. */
+const HEAVY_READ = 5000;
+
+/**
+ * The time of an entry in ticks of 1/2^31 of a day, as a whole number: the
+ * unit `time_project_total` adds up (migration 0013 says why). Zero when the
+ * end is NULL, a running timer. `start` and `end` are SQL expressions. The
+ * triggers of that migration write the same formula out, and the two must
+ * stay the same.
+ */
+const ticksOf = (start: string, end: string) => `COALESCE(CAST((julianday(${end}) - julianday(${start})) * 2147483648.0 AS INTEGER), 0)`;
+
+/** The time a running timer has so far, in the same ticks. */
+const RUNNING_TICKS = `CAST((julianday('now') - julianday("start")) * 2147483648.0 AS INTEGER)`;
+
+/**
+ * Ticks to seconds. Written in this order on purpose: it gives the very number
+ * that adding up `(julianday(end) - julianday(start)) * 86400` over the
+ * entries gives, down to the last bit, so nothing rounds differently.
+ */
+const ticksToSeconds = (ticks: number) => (ticks * 86400) / 2147483648;
+
+/** FNV-1a over a string, continuing from `hash`: a cheap mark of "the same rows as before". */
+function fnv(hash: number, value: string): number {
+  for (let i = 0; i < value.length; i++) hash = Math.imul(hash ^ value.charCodeAt(i), 16777619);
+  return hash >>> 0;
+}
+
 const ENTRY_SELECT = `
   SELECT e.*, p."name" AS project_name, p."color" AS project_color, p."client" AS project_client, p."hourlyRate" AS project_rate, p."currency" AS project_currency
   FROM "time_entry" e LEFT JOIN "time_project" p ON p."id" = e."projectId"`;
@@ -282,9 +316,20 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
   const { workspaceId: ws, userId: uid } = ctx;
   const tz = isValidTz(ctx.tz) ? ctx.tz : DEFAULT_TZ;
 
-  const all = async <T>(sql: string, ...args: unknown[]) => (await db.prepare(sql).bind(...args).all<T>()).results ?? [];
+  const all = async <T>(sql: string, ...args: unknown[]) => {
+    const res = await db.prepare(sql).bind(...args).all<T>();
+    // D1 bills and limits by rows READ, not rows returned. A query that walks
+    // through thousands of rows to answer is worth knowing about before the
+    // daily quota does the telling (the log shows up in Workers observability).
+    const rows = res.meta?.rows_read ?? 0;
+    if (rows >= HEAVY_READ) console.warn(`horas: ${rows} rows read by: ${sql.replace(/\s+/g, " ").trim().slice(0, 120)}`);
+    return res.results ?? [];
+  };
   const first = <T>(sql: string, ...args: unknown[]) => db.prepare(sql).bind(...args).first<T>();
   const run = async (sql: string, ...args: unknown[]) => (await db.prepare(sql).bind(...args).run()).meta;
+  /** Several statements as one transaction: all of them happen, or none. */
+  const transaction = (...statements: Array<[sql: string, ...args: unknown[]]>) =>
+    db.batch(statements.map(([sql, ...args]) => db.prepare(sql).bind(...args)));
   const nowIso = () => new Date().toISOString();
 
   /* ----- Workspace settings (currency and default rate) ----- */
@@ -327,58 +372,121 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
   
   /* ----- Projects (of the workspace; totals only cover this person's hours) ----- */
 
-  async function listProjects({ includeArchived = false }: { includeArchived?: boolean } = {}): Promise<Project[]> {
-    const rows = await all<{ id: number; name: string; client: string; color: string; archived: number; billable: number; hourlyRate: number | null; currency: string | null; budgetAmount: number | null; budgetHours: number | null; total: number; entries: number; billableEntries: number; allSeconds: number; allBillableSeconds: number }>(
-      // The entries are added up ONCE, per project, and only then joined to the
-      // projects. Joining first made the database go through the entries again
-      // for every project (rows read = projects x entries).
-      `SELECT p.*,
-              COALESCE(e."total", 0) AS total,
-              COALESCE(e."entries", 0) AS entries,
-              COALESCE(e."billableEntries", 0) AS billableEntries,
-              COALESCE(e."allSeconds", 0) AS allSeconds,
-              COALESCE(e."allBillableSeconds", 0) AS allBillableSeconds
-         FROM "time_project" p
-         LEFT JOIN (
-           SELECT t."projectId" AS projectId,
-                  SUM(CASE WHEN t."userId" = ?2 THEN (julianday(COALESCE(t."end", 'now')) - julianday(t."start")) * 86400 END) AS total,
-                  COUNT(CASE WHEN t."userId" = ?2 THEN t."id" END) AS entries,
-                  SUM(CASE WHEN t."userId" = ?2 THEN t."billable" END) AS billableEntries,
-                  SUM((julianday(COALESCE(t."end", 'now')) - julianday(t."start")) * 86400) AS allSeconds,
-                  SUM(CASE WHEN t."billable" = 1 THEN (julianday(COALESCE(t."end", 'now')) - julianday(t."start")) * 86400 END) AS allBillableSeconds
-             FROM "time_entry" t
-            WHERE t."workspaceId" = ?1 AND t."projectId" IS NOT NULL
-            GROUP BY t."projectId"
-         ) e ON e.projectId = p."id"
-        WHERE p."workspaceId" = ?1 ${includeArchived ? "" : 'AND p."archived" = 0'}
-        ORDER BY p."archived", p."name"`,
-      ws,
-      uid,
-    );
-    const { default_rate: defaultRate } = await getSettings();
-    return rows.map((r) => ({
-      id: r.id,
-      name: r.name,
-      client: r.client,
-      color: r.color,
-      archived: !!r.archived,
-      billable: !!r.billable,
-      hourly_rate: r.hourlyRate,
-      currency: r.currency,
-      budget_amount: r.budgetAmount,
-      budget_hours: r.budgetHours,
-      spent_amount: cents((r.allBillableSeconds / 3600) * (r.hourlyRate ?? defaultRate)),
-      spent_hours: Math.round((r.allSeconds / 3600) * 100) / 100,
-      total_seconds: Math.round(r.total),
-      entries: r.entries,
-      billable_entries: r.billableEntries,
-    }));
+  type ProjectRow = { id: number; name: string; client: string; color: string; archived: number; billable: number; hourlyRate: number | null; currency: string | null; budgetAmount: number | null; budgetHours: number | null };
+  /**
+   * What one person has on one project, as `time_project_total` keeps it. A
+   * timer running right now comes as a row of its own: no entry to count (the
+   * totals already count it), and the time it has so far.
+   */
+  type SumRow = { projectId: number; userId: string; entries: number; billableEntries: number; ticks: number | null; billableTicks: number | null };
+
+  const projectInfo = (r: ProjectRow): ProjectInfo => ({
+    id: r.id,
+    name: r.name,
+    client: r.client,
+    color: r.color,
+    archived: !!r.archived,
+    billable: !!r.billable,
+    hourly_rate: r.hourlyRate,
+    currency: r.currency,
+    budget_amount: r.budgetAmount,
+    budget_hours: r.budgetHours,
+  });
+
+  /**
+   * The sums of the entries, per project and person, WITHOUT reading the
+   * entries: `time_project_total` holds them, kept by the triggers of
+   * migration 0013. Adding them up from the entries read one row per entry of
+   * the workspace on every list; this reads one row per project and person,
+   * plus the timers running right now, whose time is still growing.
+   *
+   * `one` narrows it to a single project (bound as ?2).
+   *
+   * The running timers are read through the index that holds nothing else
+   * (`time_entry_one_running_idx`), by name, so that the choice does not
+   * depend on which other indexes there are: with the index by project as it
+   * was before migration 0014, the database preferred that one and walked
+   * through every entry to find them.
+   */
+  const projectSumsSql = (one: boolean) => `
+       SELECT "projectId", "userId", "entries", "billableEntries", "ticks", "billableTicks"
+         FROM "time_project_total"
+        WHERE "workspaceId" = ?1 ${one ? 'AND "projectId" = ?2' : ""}
+       UNION ALL
+       SELECT "projectId", "userId", 0, 0, ${RUNNING_TICKS}, ("billable" = 1) * ${RUNNING_TICKS}
+         FROM "time_entry" INDEXED BY "time_entry_one_running_idx"
+        WHERE "workspaceId" = ?1 AND "end" IS NULL AND "projectId" ${one ? "= ?2" : "IS NOT NULL"}`;
+
+  /**
+   * Puts the sums on the projects: this person's own time and entries, and
+   * what the whole workspace spent of the budget.
+   */
+  function withTotals(rows: ProjectRow[], sums: SumRow[], defaultRate: number): Project[] {
+    type Sum = { mine: number; entries: number; billableEntries: number; all: number; allBillable: number };
+    const byProject = new Map<number, Sum>();
+    for (const s of sums) {
+      const sum = byProject.get(s.projectId) ?? { mine: 0, entries: 0, billableEntries: 0, all: 0, allBillable: 0 };
+      if (s.userId === uid) {
+        sum.mine += s.ticks ?? 0;
+        sum.entries += s.entries;
+        sum.billableEntries += s.billableEntries;
+      }
+      sum.all += s.ticks ?? 0;
+      sum.allBillable += s.billableTicks ?? 0;
+      byProject.set(s.projectId, sum);
+    }
+    return rows.map((r) => {
+      const sum = byProject.get(r.id);
+      return {
+        ...projectInfo(r),
+        spent_amount: cents((ticksToSeconds(sum?.allBillable ?? 0) / 3600) * (r.hourlyRate ?? defaultRate)),
+        spent_hours: Math.round((ticksToSeconds(sum?.all ?? 0) / 3600) * 100) / 100,
+        total_seconds: Math.round(ticksToSeconds(sum?.mine ?? 0)),
+        entries: sum?.entries ?? 0,
+        billable_entries: sum?.billableEntries ?? 0,
+      };
+    });
   }
 
+  /** The project rows of the workspace, archived ones last. */
+  const readProjects = (includeArchived: boolean) =>
+    all<ProjectRow>(`SELECT * FROM "time_project" WHERE "workspaceId" = ?1 ${includeArchived ? "" : 'AND "archived" = 0'} ORDER BY "archived", "name"`, ws);
+
+  /** Every project with the sums of its entries, read from the totals the database keeps: see `projectSumsSql`. */
+  async function listProjects({ includeArchived = false }: { includeArchived?: boolean } = {}): Promise<Project[]> {
+    const [rows, sums, settings] = await Promise.all([readProjects(includeArchived), all<SumRow>(projectSumsSql(false), ws), getSettings()]);
+    return withTotals(rows, sums, settings.default_rate);
+  }
+
+  /** The projects themselves, without their sums: for pickers, filters and backups. */
+  async function listProjectInfo({ includeArchived = false }: { includeArchived?: boolean } = {}): Promise<ProjectInfo[]> {
+    return (await readProjects(includeArchived)).map(projectInfo);
+  }
+
+  /** A project id as a number, or a 404 for anything that cannot be one. */
+  function asProjectId(id: number | string): number {
+    const n = Number(id);
+    if (!Number.isSafeInteger(n) || n <= 0) throw new HorasError(`Project ${id} not found.`, 404);
+    return n;
+  }
+
+  /** One project with the sums of its own entries. */
   async function getProject(id: number | string): Promise<Project> {
-    const p = (await listProjects({ includeArchived: true })).find((x) => x.id === Number(id));
-    if (!p) throw new HorasError(`Project ${id} not found.`, 404);
-    return p;
+    const projectId = asProjectId(id);
+    const [row, sums, settings] = await Promise.all([
+      first<ProjectRow>('SELECT * FROM "time_project" WHERE "id" = ?1 AND "workspaceId" = ?2', projectId, ws),
+      all<SumRow>(projectSumsSql(true), ws, projectId),
+      getSettings(),
+    ]);
+    if (!row) throw new HorasError(`Project ${id} not found.`, 404);
+    return withTotals([row], sums, settings.default_rate)[0];
+  }
+
+  /** One project without its sums: enough to check it exists or to edit it. */
+  async function getProjectInfo(id: number | string): Promise<ProjectInfo> {
+    const row = await first<ProjectRow>('SELECT * FROM "time_project" WHERE "id" = ?1 AND "workspaceId" = ?2', asProjectId(id), ws);
+    if (!row) throw new HorasError(`Project ${id} not found.`, 404);
+    return projectInfo(row);
   }
 
   /**
@@ -432,7 +540,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     id: number | string,
     patch: { name?: string; client?: string; color?: string; archived?: boolean; hourly_rate?: unknown; billable?: unknown; currency?: unknown; apply_to_entries?: unknown; budget_amount?: unknown; budget_hours?: unknown } = {},
   ): Promise<Project & { entries_updated?: number }> {
-    const cur = await getProject(id);
+    const cur = await getProjectInfo(id);
     const name = patch.name !== undefined ? text(patch.name, 80) : cur.name;
     if (!name) throw new HorasError("The project needs a name.");
     if (await first('SELECT 1 AS x FROM "time_project" WHERE "workspaceId" = ?1 AND "name" = ?2 AND "id" != ?3', ws, name, cur.id)) {
@@ -464,23 +572,34 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     // "Billable by default" only reaches new entries. On request, this person's
     // existing entries on the project follow it too (never another member's).
     if (readBoolean(patch.apply_to_entries) === true) {
-      const meta = await run(
-        'UPDATE "time_entry" SET "billable" = ?1 WHERE "projectId" = ?2 AND "workspaceId" = ?3 AND "userId" = ?4 AND "billable" != ?1',
+      // The entries are counted as they come back, not by `meta.changes`: that
+      // number also counts the row of totals a trigger updates for each entry.
+      const updated = await all<{ id: number }>(
+        'UPDATE "time_entry" SET "billable" = ?1 WHERE "projectId" = ?2 AND "workspaceId" = ?3 AND "userId" = ?4 AND "billable" != ?1 RETURNING "id"',
         newBillable ? 1 : 0,
         cur.id,
         ws,
         uid,
       );
-      return { ...(await getProject(cur.id)), entries_updated: meta.changes ?? 0 };
+      return { ...(await getProject(cur.id)), entries_updated: updated.length };
     }
     return getProject(cur.id);
   }
 
-  /** Deletes the project. The entries (of every member) remain, without a project. */
+  /**
+   * Deletes the project. The entries (of every member) remain, without a project.
+   *
+   * The project's totals go first: with them gone, taking each entry off the
+   * project finds no total to subtract from, and writes nothing more than the
+   * entry itself. One transaction, so the totals never go without the rest.
+   */
   async function deleteProject(id: number | string): Promise<{ deleted: true; id: number }> {
-    const cur = await getProject(id);
-    await run('UPDATE "time_entry" SET "projectId" = NULL WHERE "projectId" = ?1 AND "workspaceId" = ?2', cur.id, ws);
-    await run('DELETE FROM "time_project" WHERE "id" = ?1 AND "workspaceId" = ?2', cur.id, ws);
+    const cur = await getProjectInfo(id);
+    await transaction(
+      ['DELETE FROM "time_project_total" WHERE "workspaceId" = ?2 AND "projectId" = ?1', cur.id, ws],
+      ['UPDATE "time_entry" SET "projectId" = NULL WHERE "projectId" = ?1 AND "workspaceId" = ?2', cur.id, ws],
+      ['DELETE FROM "time_project" WHERE "id" = ?1 AND "workspaceId" = ?2', cur.id, ws],
+    );
     return { deleted: true, id: cur.id };
   }
 
@@ -492,7 +611,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
   async function resolveProject(ref: { project_id?: number | string | null; project?: string | null }): Promise<number | null | undefined> {
     if (ref.project_id !== undefined) {
       if (ref.project_id === null || ref.project_id === "" || Number(ref.project_id) === 0) return null;
-      return (await getProject(ref.project_id)).id;
+      return (await getProjectInfo(ref.project_id)).id;
     }
     if (ref.project === undefined) return undefined;
     const name = text(ref.project, 80);
@@ -670,10 +789,17 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     return rows.map((r) => shapeEntry(r, settings)!);
   }
 
-  /** Tags the person has already used in this workspace, most used first. */
+  /**
+   * Tags the person has already used in this workspace, most used first,
+   * counted over their latest tagged entries.
+   *
+   * The condition is written exactly like the one of the index
+   * `time_entry_tagged_idx`, which holds only the tagged entries: the answer
+   * comes from that index, without walking through the untagged ones.
+   */
   async function listTags(): Promise<Array<{ tag: string; entries: number }>> {
     const rows = await all<{ tags: string }>(
-      `SELECT "tags" FROM "time_entry" WHERE "workspaceId" = ?1 AND "userId" = ?2 AND "tags" != '[]' ORDER BY "start" DESC LIMIT 3000`,
+      `SELECT "tags" FROM "time_entry" WHERE "workspaceId" = ?1 AND "userId" = ?2 AND "tags" != '[]' ORDER BY "start" DESC LIMIT ${TAGGED_ENTRIES}`,
       ws,
       uid,
     );
@@ -757,20 +883,45 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     };
   }
 
-  /** Current status: running timer and totals for today and the week (Monday to Sunday). */
+  /**
+   * Current status: running timer and totals for today and the week (Monday
+   * to Sunday). The screen asks for this every minute, so it reads this week's
+   * entries and nothing else: no project, no join.
+   *
+   * `revision` only changes when one of this week's entries does (created,
+   * edited, removed, stopped). Whoever polls compares it with the last one and
+   * loads the rest again only when it differs.
+   */
   async function status() {
     const today = localDay(Date.now(), tz);
     const [y, m, d] = today.split("-").map(Number);
     const weekday = (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7;
     const monday = new Date(Date.UTC(y, m - 1, d - weekday)).toISOString().slice(0, 10);
-    const week = await summary({ from: monday });
+    const rows = await all<{ id: number; description: string; projectId: number | null; tags: string; billable: number; start: string; end: string | null }>(
+      `SELECT "id", "description", "projectId", "tags", "billable", "start", "end" FROM "time_entry"
+        WHERE "workspaceId" = ?1 AND "userId" = ?2 AND "start" >= ?3 ORDER BY "start", "id"`,
+      ws,
+      uid,
+      rangeBound(monday, false, tz),
+    );
+    const now = Date.now();
+    let weekSeconds = 0;
+    let todaySeconds = 0;
+    let mark = 2166136261;
+    for (const r of rows) {
+      const seconds = Math.max(0, Math.round(((r.end ? Date.parse(r.end) : now) - Date.parse(r.start)) / 1000));
+      weekSeconds += seconds;
+      if (localDay(r.start, tz) === today) todaySeconds += seconds;
+      mark = fnv(mark, `${r.id}|${r.start}|${r.end}|${r.projectId}|${r.billable}|${r.description}|${r.tags}\n`);
+    }
     return {
       now: nowIso(),
       timezone: tz,
       today,
       running: await getRunning(),
-      today_seconds: week.by_day.find((x) => x.day === today)?.seconds ?? 0,
-      week_seconds: week.total_seconds,
+      today_seconds: todaySeconds,
+      week_seconds: weekSeconds,
+      revision: `${rows.length}-${mark.toString(36)}`,
     };
   }
 
@@ -784,7 +935,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
   async function exportBackup() {
     const [settings, projects, rows] = await Promise.all([
       getSettings(),
-      listProjects({ includeArchived: true }),
+      listProjectInfo({ includeArchived: true }),
       all<{ description: string; project: string | null; tags: string; billable: number; start: string; end: string }>(
         `SELECT e."description", p."name" AS project, e."tags", e."billable", e."start", e."end"
            FROM "time_entry" e LEFT JOIN "time_project" p ON p."id" = e."projectId"
@@ -810,6 +961,67 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
         end: r.end,
       })),
     };
+  }
+
+  /**
+   * This person's entries that start at one of the given instants (sorted,
+   * none repeated): the only stored entries a row of an imported file can be
+   * a duplicate of, since a duplicate has the same start.
+   *
+   * A file usually covers one stretch of time, and then everything stored
+   * between its first and its last start is what it has rows for, or less:
+   * one read of that stretch answers, and it reads nothing when the stretch
+   * is new. But a file can also hold a few rows years apart, and the stretch
+   * between them is the person's whole history (17,600 rows read to check a
+   * file of 600). So that read stops as soon as it has more entries than the
+   * file has starts, and then the entries are fetched start by start instead.
+   * Either way the rows read are bounded by the size of the file, not by what
+   * is stored. (The second way is not the only one because the list of starts
+   * is itself counted as rows read, one per start, before anything is found.)
+   */
+  async function entriesStartingAt(starts: string[]) {
+    type Stored = { start: string; end: string | null; description: string };
+    const between = await all<Stored>(
+      `SELECT "start", "end", "description" FROM "time_entry"
+        WHERE "workspaceId" = ?1 AND "userId" = ?2 AND "start" >= ?3 AND "start" <= ?4
+        LIMIT ?5`,
+      ws,
+      uid,
+      starts[0],
+      starts[starts.length - 1],
+      starts.length + 1,
+    );
+    if (between.length <= starts.length) return between;
+    return all<Stored>(
+      `SELECT e."start", e."end", e."description"
+         FROM json_each(?3) s CROSS JOIN "time_entry" e
+        WHERE e."workspaceId" = ?1 AND e."userId" = ?2 AND e."start" = s.value`,
+      ws,
+      uid,
+      JSON.stringify(starts),
+    );
+  }
+
+  /**
+   * How many entries the workspace holds, of every member, without walking
+   * through them all. Those on a project are already counted, per project and
+   * person, in `time_project_total` (a running timer included). Those on no
+   * project are counted from the index by project, where they sit together
+   * (migration 0014). So this reads one row per project and person plus one
+   * per entry WITHOUT a project, instead of one per entry.
+   *
+   * A count kept for the entries on no project as well would make this a
+   * fixed handful of rows, at the price of one more row written for each of
+   * those entries. Rows written are the tighter limit, and this is only
+   * asked when a file is imported.
+   */
+  async function countEntries(): Promise<number> {
+    const [held] = await all<{ n: number }>(
+      `SELECT (SELECT COALESCE(SUM("entries"), 0) FROM "time_project_total" WHERE "workspaceId" = ?1)
+            + (SELECT COUNT(*) FROM "time_entry" WHERE "workspaceId" = ?1 AND "projectId" IS NULL) AS n`,
+      ws,
+    );
+    return held?.n ?? 0;
   }
 
   /**
@@ -848,16 +1060,8 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     // Duplicates: against what is already stored, and within the file itself.
     const seen = new Set<string>();
     if (ready.length) {
-      const starts = ready.map((r) => r.start).sort();
-      const existing = await all<{ start: string; end: string | null; description: string }>(
-        `SELECT "start", "end", "description" FROM "time_entry"
-          WHERE "workspaceId" = ?1 AND "userId" = ?2 AND "start" >= ?3 AND "start" <= ?4`,
-        ws,
-        uid,
-        starts[0],
-        starts[starts.length - 1],
-      );
-      for (const e of existing) seen.add(`${e.start}|${e.end}|${e.description}`);
+      const starts = [...new Set(ready.map((r) => r.start))].sort();
+      for (const e of await entriesStartingAt(starts)) seen.add(`${e.start}|${e.end}|${e.description}`);
     }
     const fresh = ready.filter((r) => {
       const key = `${r.start}|${r.end}|${r.description}`;
@@ -886,8 +1090,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     if (existingProjects.length + wanted.size > MAX_PROJECTS) {
       throw new HorasError(`This import would exceed the limit of ${MAX_PROJECTS} projects per workspace.`);
     }
-    const held = await first<{ n: number }>('SELECT COUNT(*) AS n FROM "time_entry" WHERE "workspaceId" = ?1', ws);
-    if ((held?.n ?? 0) + fresh.length > MAX_ENTRIES) {
+    if ((await countEntries()) + fresh.length > MAX_ENTRIES) {
       throw new HorasError(`This import would exceed the limit of ${MAX_ENTRIES.toLocaleString("en-US")} entries per workspace.`);
     }
 
@@ -929,24 +1132,56 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     const projectId = new Map(existingProjects.map((p) => [p.name.toLowerCase(), p.id]));
 
     // Entries go in chunks, same JSON-parameter technique.
+    //
+    // The project totals (`time_project_total`) are normally kept by a trigger,
+    // entry by entry: one more row written for each entry, and an import is
+    // what comes closest to D1's daily limit of rows written. So each chunk is
+    // one transaction that holds that trigger back (`time_total_hold`), inserts
+    // the entries, adds their sums to the totals in a single statement (one row
+    // written per project in the chunk instead of one per entry) and lets the
+    // trigger go again. All of it happens or none does, and nothing else runs
+    // in between.
+    const ticks = ticksOf("json_extract(value, '$.s')", "json_extract(value, '$.e')");
     for (let i = 0; i < fresh.length; i += 400) {
-      const chunk = fresh.slice(i, i + 400).map((r) => ({
-        d: r.description,
-        p: r.project ? (projectId.get(r.project.toLowerCase()) ?? null) : null,
-        t: r.tags,
-        b: r.billable,
-        s: r.start,
-        e: r.end,
-      }));
-      await run(
-        `INSERT INTO "time_entry" ("workspaceId", "userId", "description", "projectId", "tags", "billable", "start", "end", "createdAt")
-         SELECT ?1, ?2, json_extract(value, '$.d'), json_extract(value, '$.p'), json_extract(value, '$.t'),
-                json_extract(value, '$.b'), json_extract(value, '$.s'), json_extract(value, '$.e'), ?3
-           FROM json_each(?4)`,
-        ws,
-        uid,
-        now,
-        JSON.stringify(chunk),
+      const chunk = JSON.stringify(
+        fresh.slice(i, i + 400).map((r) => ({
+          d: r.description,
+          p: r.project ? (projectId.get(r.project.toLowerCase()) ?? null) : null,
+          t: r.tags,
+          b: r.billable,
+          s: r.start,
+          e: r.end,
+        })),
+      );
+      await transaction(
+        ['INSERT INTO "time_total_hold" ("workspaceId") VALUES (?1)', ws],
+        [
+          `INSERT INTO "time_entry" ("workspaceId", "userId", "description", "projectId", "tags", "billable", "start", "end", "createdAt")
+           SELECT ?1, ?2, json_extract(value, '$.d'), json_extract(value, '$.p'), json_extract(value, '$.t'),
+                  json_extract(value, '$.b'), json_extract(value, '$.s'), json_extract(value, '$.e'), ?3
+             FROM json_each(?4)`,
+          ws,
+          uid,
+          now,
+          chunk,
+        ],
+        [
+          `INSERT INTO "time_project_total" ("workspaceId", "projectId", "userId", "entries", "billableEntries", "ticks", "billableTicks")
+           SELECT ?1, json_extract(value, '$.p'), ?2, COUNT(*), SUM(json_extract(value, '$.b')),
+                  SUM(${ticks}), SUM((json_extract(value, '$.b') = 1) * ${ticks})
+             FROM json_each(?3)
+            WHERE json_extract(value, '$.p') IS NOT NULL
+            GROUP BY json_extract(value, '$.p')
+           ON CONFLICT ("workspaceId", "projectId", "userId") DO UPDATE SET
+             "entries" = "entries" + excluded."entries",
+             "billableEntries" = "billableEntries" + excluded."billableEntries",
+             "ticks" = "ticks" + excluded."ticks",
+             "billableTicks" = "billableTicks" + excluded."billableTicks"`,
+          ws,
+          uid,
+          chunk,
+        ],
+        ['DELETE FROM "time_total_hold" WHERE "workspaceId" = ?1', ws],
       );
     }
     result.imported = fresh.length;
@@ -968,6 +1203,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     updateSettings,
     listTags,
     listProjects,
+    listProjectInfo,
     getProject,
     createProject,
     updateProject,

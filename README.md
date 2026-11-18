@@ -74,12 +74,12 @@ curl https://YOUR-DOMAIN/api/v1/status -H "Authorization: Bearer hrs_…"
 
 | Method | Route | |
 |---|---|---|
-| GET | `/status` | running timer, totals for today and for the week |
+| GET | `/status` | running timer, totals for today and for the week, and `revision`, which only changes when one of this week's entries does (compare it before loading anything else again) |
 | POST | `/timer/start` · `/timer/stop` | optional body: `description`, `project`, `tags`, `billable`, `start`/`end` |
 | GET · POST | `/entries` | filters: `from`, `to`, `project`, `project_id`, `client`, `tag`, `billable`, `q`, `limit` |
 | GET · PATCH · DELETE | `/entries/:id` | |
-| GET · POST | `/projects` | `?archived=1` includes archived ones |
-| PATCH · DELETE | `/projects/:id` | |
+| GET · POST | `/projects` | `?archived=1` includes archived ones; `?totals=0` leaves out the sums of the entries, for a picker or a filter that has no use for them |
+| GET · PATCH · DELETE | `/projects/:id` | one project, with the sums of its own entries |
 | GET | `/summary` | same filters as `/entries`; returns totals, amount and groups by project, client, tag, day and description |
 | GET | `/tags` | tags already used |
 | GET · PATCH | `/settings` | the workspace's `currency` and `default_rate` |
@@ -162,6 +162,8 @@ Three things change once this is on:
 ```
 migrations/0006_horas.sql         tables time_project, time_entry, api_token
 migrations/0007_faturamento.sql   project hourly rate and workspace settings
+migrations/0013_project_totals.sql  the sums the project list shows, kept by triggers on time_entry
+migrations/0014_entry_project_first_index.sql  the index of entries by project, beginning with the project
 src/lib/horas.ts                  core: every time rule, tied to (workspace, person)
 src/lib/horas-api.ts              JSON router, the same for web and token
 src/lib/horas-import.ts           reads backup JSON and CSV files (Clockfolio and Clockify) for import
@@ -172,6 +174,7 @@ src/pages/api/v1/                 token API
 src/pages/mcp/                    MCP server
 src/pages/w/[slug]/               time · reports · projects · integrations
 public/app/horas.js               interface, no build and no dependencies
+public/app/forget.js              empties the copy the time screens keep in the tab, on sign-out
 src/pages/index.astro             landing page
 ```
 
@@ -191,6 +194,14 @@ Decisions worth knowing:
   what was already logged.
 - **Stateless MCP.** Each request builds the server and answers in JSON; there
   is no session to keep, which is what a Worker wants.
+- **The screens read as little as they can.** D1 bills and limits by rows
+  read, so each tab keeps a copy of the person's own lists (entries of the
+  period on show, projects, tags, reports) in `sessionStorage`, for ten minutes
+  at most. A page asks only for `/status` and compares its mark; the lists are
+  read again when the mark shows a change made elsewhere. A change made on the
+  Time screen is applied to the copy from the server's own answer, and any
+  other change throws the copy away. It is separate per person and workspace
+  and emptied on sign-out (`public/app/forget.js`).
 
 ## What's not there yet
 

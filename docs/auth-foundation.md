@@ -539,7 +539,7 @@ Left out on purpose, for you to add when you need it:
 |---|---|
 | `npm run new-project` | turns a clone into a new project |
 | `npm run dev` | local server with D1 and real workerd secrets |
-| `npm run smoke` | suite of 135 end-to-end checks |
+| `npm run smoke` | suite of 262 end-to-end checks |
 | `npm run check` | typecheck (`astro check`) |
 | `npm run build` | production build |
 | `npm run deploy` | build + deploy |
