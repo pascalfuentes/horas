@@ -146,15 +146,18 @@
     /**
      * Compares the server's mark with the one the copy was kept under. A
      * different one means that something changed which this tab did not do:
-     * the copy is thrown away.
+     * the copy is thrown away. With no mark at all nothing was kept from
+     * before (a change made here empties the copy, mark included), so what is
+     * here has just come from the server and stays.
      * @param {string} mark See `markOf`.
-     * @returns {void}
+     * @returns {boolean} Whether the copy was thrown away.
      */
     function check(mark) {
       const rec = record('mark');
-      if (rec && rec.data === mark) return;
-      drop();
+      if (rec && rec.data === mark) return false;
+      if (rec) drop();
       put('mark', mark);
+      return !!rec;
     }
 
     /**
@@ -267,14 +270,33 @@
   }
 
   /**
-   * Compares the copy with the server before a screen uses it: one request
-   * for the status, at most once a minute.
-   * @returns {Promise<void>}
+   * Compares the copy with the server: one request for the status, at most
+   * once a minute.
+   * @returns {Promise<boolean>} Whether the copy was thrown away.
    */
   async function recheck() {
-    if (Date.now() - checkedAt < 60000) return;
-    copy.check(markOf(await api('/status')));
+    if (Date.now() - checkedAt < 60000) return false;
+    const before = checkedAt;
     checkedAt = Date.now();
+    try {
+      return copy.check(markOf(await api('/status')));
+    } catch (err) {
+      checkedAt = before;
+      throw err;
+    }
+  }
+
+  /**
+   * Fills a screen from what the tab keeps without waiting for the server to
+   * confirm it: the check runs at the same time (a request takes its time,
+   * and the copy is right far more often than not). When the check says the
+   * copy was not what the server has, the screen is filled again.
+   * @param {function(): Promise<void>} fill Reads through `kept` and paints.
+   * @returns {Promise<void>}
+   */
+  async function refill(fill) {
+    const both = await Promise.all([recheck(), fill()]);
+    if (both[0]) await fill();
   }
 
   /**
@@ -1469,6 +1491,17 @@
     }
 
     /**
+     * @returns {Promise<any[]>} The projects, the entries of the period on show and the tags, through the copy.
+     */
+    function lists() {
+      return Promise.all([
+        kept('projects', '/projects?totals=0'),
+        kept(entriesKey(), '/entries?from=' + dayKey(day(1 - windowDays)) + '&limit=2000'),
+        keptTags(),
+      ]);
+    }
+
+    /**
      * Fills the screen. What the tab keeps is shown at once; the server is
      * asked for the status, and for the lists only when the status shows that
      * the copy is not what the server has, when it is too old, or when there
@@ -1490,14 +1523,15 @@
           paintList();
         }
       }
-      const status = known || await api('/status');
-      copy.check(markOf(status));
+      // The status and whatever the tab does not keep are asked for at the
+      // same time: neither waits for the other.
+      if (known) copy.check(markOf(known));
+      const both = await Promise.all([lists(), known || api('/status')]);
+      let got = both[0];
+      const status = both[1];
+      // The copy was not what the server has: the lists are read again.
+      if (!known && copy.check(markOf(status))) got = await lists();
       checkedAt = Date.now();
-      const got = await Promise.all([
-        kept('projects', '/projects?totals=0'),
-        kept(entriesKey(), '/entries?from=' + dayKey(day(1 - windowDays)) + '&limit=2000'),
-        keptTags(),
-      ]);
       if (!copy.on) filledAt = Date.now();
       state.projects = got[0];
       state.entries = got[1];
@@ -1570,7 +1604,6 @@
       description: { label: 'Description', key: 'by_description', name: function (g) { return g.project ? g.description + ' · ' + g.project : g.description; } },
     };
 
-    await recheck();
     const got = await Promise.all([kept('projects-all', '/projects?archived=1&totals=0'), keptTags()]);
     const projects = got[0];
     const tags = got[1];
@@ -1844,7 +1877,6 @@
 
     /** @returns {Promise<void>} */
     async function loadSummary() {
-      await recheck();
       const s = await kept('report:sum:' + query(), '/summary' + query());
       const g = groups[groupBy.value];
       out.replaceChildren(
@@ -1865,7 +1897,6 @@
 
     /** @returns {Promise<void>} */
     async function loadDetailed() {
-      await recheck();
       const got2 = await Promise.all([kept('report:sum:' + query(), '/summary' + query()), kept('report:det:' + query(), '/entries' + query() + '&limit=1000')]);
       const s = got2[0];
       const entries = got2[1];
@@ -1894,8 +1925,7 @@
       if (!out.children.length) waiting(out, 'Loading your report…');
       out.setAttribute('aria-busy', 'true');
       try {
-        if (mode === 'summary') await loadSummary();
-        else await loadDetailed();
+        await refill(function () { return mode === 'summary' ? loadSummary() : loadDetailed(); });
       } finally {
         out.removeAttribute('aria-busy');
       }
@@ -2126,8 +2156,13 @@
     }
 
     /** @returns {Promise<void>} */
-    async function load() {
-      await recheck();
+    function load() { return refill(fill); }
+
+    /**
+     * Reads the projects and the settings through the copy and paints the screen.
+     * @returns {Promise<void>}
+     */
+    async function fill() {
       const got = await Promise.all([kept('projects-sums', '/projects?archived=1'), kept('settings', '/settings')]);
       projects = got[0];
       settings = got[1];
@@ -2319,7 +2354,8 @@
     const back = root.dataset.back || '';
     // This project with its sums (only its own entries are read), and the
     // plain list of the others, for the client suggestions.
-    await recheck();
+    // The project itself always comes from the server; the check of the copy does not hold the page back.
+    recheck().catch(function () {});
     const got = await Promise.all([
       api('/projects/' + id).catch(function (err) { if (err.status === 404) return null; throw err; }),
       kept('settings', '/settings'),
