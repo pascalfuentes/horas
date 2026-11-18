@@ -16,6 +16,176 @@
   /** A read-only role hides everything that writes (the server blocks it anyway). */
   const CAN_WRITE = root.dataset.write === '1';
   const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  /** Who is signed in, as the layout says it: what keeps one person's copy apart from another's. */
+  const PERSON = (function () {
+    const holder = /** @type {HTMLElement|null} */ (document.querySelector('[data-person]'));
+    return holder ? holder.dataset.person || '' : '';
+  })();
+
+  /* ------------------------------------------------------------------ */
+  /* The copy kept in the tab                                           */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * Answers of the API that are kept in this tab, so that a screen does not
+   * ask the database again for what the tab already has. The database bills
+   * and limits by rows READ, and the lists a screen needs are the same from
+   * one page to the next: reading them on every page and after every change
+   * was most of what the app read.
+   *
+   * It lives in `sessionStorage`: it goes away with the tab, never reaches
+   * another one, and is separate for each person and each workspace
+   * (`forget.js` empties it when the person signs out). An answer is kept for
+   * ten minutes at most, and the whole copy is thrown away as soon as the
+   * server's status shows a change that was not made here (see `check`).
+   * With the storage blocked, or with no person to tell apart, nothing is
+   * kept and every screen reads from the server.
+   */
+  const copy = (function () {
+    /** Every name kept in the tab starts with this; `forget.js` knows it too. */
+    const PREFIX = 'clockfolio.copy:';
+    const MAX_AGE = 10 * 60 * 1000;
+    /** How many answers of the reports are kept at once: each can be large. */
+    const MAX_REPORTS = 8;
+    const scope = PERSON && BASE ? PREFIX + PERSON + ':' + BASE + ':' : '';
+    /** @type {Storage|null} */
+    let store = null;
+    try {
+      store = window.sessionStorage;
+      store.getItem(PREFIX);
+    } catch (e) { store = null; /* storage blocked: nothing is kept */ }
+    if (!scope) store = null;
+
+    /**
+     * @param {string} start
+     * @returns {string[]} The names in the storage that begin with `start`.
+     */
+    function keys(start) {
+      /** @type {string[]} */
+      const found = [];
+      if (!store) return found;
+      for (let i = 0; i < store.length; i++) {
+        const key = store.key(i);
+        if (key && key.indexOf(start) === 0) found.push(key);
+      }
+      return found;
+    }
+
+    /**
+     * @param {string} name
+     * @returns {{at: number, data: any}|null} What is stored under a name, whatever its age.
+     */
+    function record(name) {
+      if (!store) return null;
+      try {
+        const rec = JSON.parse(store.getItem(scope + name) || 'null');
+        return rec && typeof rec.at === 'number' ? rec : null;
+      } catch (e) { return null; }
+    }
+
+    /**
+     * Throws away what is kept for this person and workspace.
+     * @param {string} [start] Only the names that begin with this; everything without it.
+     * @returns {void}
+     */
+    function drop(start) {
+      keys(scope + (start || '')).forEach(function (key) { if (store) store.removeItem(key); });
+    }
+
+    /**
+     * @param {string} name
+     * @param {number} at When the answer came from the server.
+     * @param {any} data
+     * @returns {void}
+     */
+    function save(name, at, data) {
+      if (!store) return;
+      const text = JSON.stringify({ at: at, data: data });
+      try {
+        store.setItem(scope + name, text);
+      } catch (e) {
+        // Full: the reports are the large part, and the least needed.
+        drop('report:');
+        try { store.setItem(scope + name, text); } catch (again) { /* still full: this one is not kept */ }
+      }
+    }
+
+    /**
+     * @param {string} name
+     * @returns {any} What is kept under a name; null when nothing is, or when it is too old.
+     */
+    function get(name) {
+      const rec = record(name);
+      return rec && Date.now() - rec.at < MAX_AGE ? rec.data : null;
+    }
+
+    /**
+     * Keeps an answer that has just come from the server.
+     * @param {string} name
+     * @param {any} data
+     * @returns {void}
+     */
+    function put(name, data) {
+      if (name.indexOf('report:') === 0 && keys(scope + 'report:').length >= MAX_REPORTS) drop('report:');
+      save(name, Date.now(), data);
+    }
+
+    /**
+     * Replaces what is kept under a name with the same thing after a change
+     * made here. Its age stays that of the last time it came from the server,
+     * so it still gets old and is read again.
+     * @param {string} name
+     * @param {any} data
+     * @returns {void}
+     */
+    function update(name, data) {
+      const rec = record(name);
+      if (rec && Date.now() - rec.at < MAX_AGE) save(name, rec.at, data);
+    }
+
+    /**
+     * Compares the server's mark with the one the copy was kept under. A
+     * different one means that something changed which this tab did not do:
+     * the copy is thrown away.
+     * @param {string} mark See `markOf`.
+     * @returns {void}
+     */
+    function check(mark) {
+      const rec = record('mark');
+      if (rec && rec.data === mark) return;
+      drop();
+      put('mark', mark);
+    }
+
+    /**
+     * Takes a new mark as the copy's own, after a change made on a screen that
+     * has already applied it to what it keeps. What is worked out from the
+     * entries (reports, the sums of the projects) is thrown away.
+     * @param {string} mark
+     * @returns {void}
+     */
+    function accept(mark) {
+      drop('report:');
+      drop('projects-sums');
+      put('mark', mark);
+    }
+
+    // Someone else used this tab before: their copy has no business here.
+    keys(PREFIX).forEach(function (key) { if (store && key.indexOf(PREFIX + PERSON + ':') !== 0) store.removeItem(key); });
+
+    return { on: !!store, get: get, put: put, update: update, drop: drop, check: check, accept: accept };
+  })();
+
+  /**
+   * What the screen on show does with a change that went through, when it can
+   * apply the answer to what it keeps instead of reading everything again.
+   * Returns false for a change it does not know. See `api`.
+   * @type {(function(string, string, any): boolean)|null}
+   */
+  let absorb = null;
+
+  /** When the copy was last compared with the server. See `recheck`. */
+  let checkedAt = 0;
 
   /* ------------------------------------------------------------------ */
   /* Utilities                                                          */
@@ -48,7 +218,63 @@
       throw failure;
     }
     usage(method, path);
+    // A change that the screen on show does not apply itself makes the copy
+    // wrong: it is thrown away, and compared with the server before it is used again.
+    if (method && method !== 'GET' && base === undefined && !(absorb && absorb(method, path.split('?')[0], data))) {
+      copy.drop();
+      checkedAt = 0;
+    }
     return data;
+  }
+
+  /**
+   * What `/status` says, reduced to one string: it only changes when the
+   * day, the timer or one of this week's entries does.
+   * @param {object|null} status Answer of `/status`.
+   * @returns {string}
+   */
+  function markOf(status) {
+    if (!status) return '';
+    const r = status.running;
+    return [status.today, status.revision, r ? [r.id, r.start, r.description, r.project_id, r.billable, r.tags.join(',')].join('|') : ''].join('#');
+  }
+
+  /**
+   * An answer of the API that the tab keeps: taken from the copy while it is
+   * good, asked to the server otherwise and kept for the next time.
+   * @param {string} name Name it is kept under.
+   * @param {string} path Path to ask the server for.
+   * @returns {Promise<any>}
+   */
+  async function kept(name, path) {
+    const have = copy.get(name);
+    if (have !== null) return have;
+    const data = await api(path);
+    copy.put(name, data);
+    return data;
+  }
+
+  /**
+   * The person's tags, most used first, kept as plain names.
+   * @returns {Promise<string[]>}
+   */
+  async function keptTags() {
+    const have = copy.get('tags');
+    if (have !== null) return have;
+    const names = (await api('/tags')).map(function (t) { return t.tag; });
+    copy.put('tags', names);
+    return names;
+  }
+
+  /**
+   * Compares the copy with the server before a screen uses it: one request
+   * for the status, at most once a minute.
+   * @returns {Promise<void>}
+   */
+  async function recheck() {
+    if (Date.now() - checkedAt < 60000) return;
+    copy.check(markOf(await api('/status')));
+    checkedAt = Date.now();
   }
 
   /**
@@ -781,6 +1007,9 @@
         project_id: barProject(),
         billable: bill.checked,
       });
+      // The change moved the server's mark: take the new one, or the next check
+      // would see a difference and read everything again.
+      await settle(true);
     }
 
     /** @returns {void} */
@@ -928,12 +1157,12 @@
      */
     async function continueEntry(e) {
       await api('/timer/start', 'POST', { description: e.description, project_id: e.project_id || 0, tags: e.tags, billable: e.billable });
-      await load();
+      await settle();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     /**
-     * Reads everything again after an entry changed, and opens the task that
+     * Paints the list again after an entry changed, and opens the task that
      * entry is part of now.
      * @param {number} id The entry.
      * @returns {Promise<void>}
@@ -941,7 +1170,7 @@
     async function reload(id) {
       reveal = id;
       try {
-        await load();
+        await settle();
       } finally {
         reveal = 0;
       }
@@ -1090,7 +1319,7 @@
                   if (!confirm('Delete this entry? This cannot be undone.')) return;
                   await api('/entries/' + e.id, 'DELETE');
                   close();
-                  await load();
+                  await settle();
                 }) }),
               ]);
             });
@@ -1111,7 +1340,7 @@
         projects: state.projects,
         tags: state.tags,
         defaults: { description: desc.value, project_id: barProject() || null },
-        onDone: load,
+        onDone: function () { return settle(); },
       });
     }
 
@@ -1131,7 +1360,7 @@
         ev.preventDefault();
         await api('/entries/' + r.id, 'PATCH', { start: new Date(date.value + 'T' + time.value).toISOString() });
         close();
-        await load();
+        await settle();
       }) }, [
         el('h2', { text: 'When did you start?' }),
         el('div', { class: 'hr-grid2' }, [
@@ -1149,47 +1378,133 @@
       dlg.showModal();
     }
 
+    /** When the lists last came from the server, for when the tab cannot keep a copy. */
+    let filledAt = 0;
+    /** How long the screen goes without reading everything again, whatever the status says. */
+    const REFILL_AFTER = 10 * 60 * 1000;
+
+    /** @returns {string} Name the entries of the period on show are kept under. */
+    function entriesKey() { return 'entries:' + windowDays; }
+
     /**
-     * What `/status` says, reduced to one string: it only changes when the
-     * day, the timer or one of this week's entries does.
-     * @param {object|null} status Answer of `/status`.
-     * @returns {string}
+     * Puts an entry the server has just answered with into the list: in the
+     * place of the one it replaces, in order, and only while it is inside the
+     * period on show. Its tags join the suggestions.
+     * @param {object} entry
+     * @returns {void}
      */
-    function mark(status) {
-      if (!status) return '';
-      const r = status.running;
-      return [status.today, status.revision, r ? [r.id, r.start, r.description, r.project_id, r.billable, r.tags.join(',')].join('|') : ''].join('#');
+    function place(entry) {
+      const rest = state.entries.filter(function (e) { return e.id !== entry.id; });
+      if (new Date(entry.start) >= day(1 - windowDays)) rest.push(entry);
+      rest.sort(function (a, b) { return a.start < b.start ? 1 : a.start > b.start ? -1 : b.id - a.id; });
+      state.entries = rest;
+      entry.tags.forEach(function (tag) { if (state.tags.indexOf(tag) === -1) state.tags.push(tag); });
+    }
+
+    // What this screen does with the answer to a change made on it: the list
+    // takes the entry as the server left it, and nothing is read again.
+    absorb = function (method, path, data) {
+      const parts = path.split('/').filter(Boolean);
+      if (parts[0] === 'entries' && method === 'DELETE') {
+        state.entries = state.entries.filter(function (e) { return e.id !== Number(parts[1]); });
+        return true;
+      }
+      if (parts[0] === 'entries' && data && data.id) { place(data); return true; }
+      if (parts[0] === 'timer' && data) {
+        if (data.stopped) place(data.stopped);
+        if (data.entry) place(data.entry);
+        return true;
+      }
+      // A project created in a picker: the picker adds it to the list on show,
+      // and here it joins the kept one. The other lists of projects the tab
+      // keeps (with the archived ones, with the sums) are read again.
+      if (parts[0] === 'projects' && parts.length === 1 && method === 'POST' && data && data.id) {
+        const held = copy.get('projects');
+        if (held) copy.update('projects', held.concat([data]));
+        copy.drop('projects-');
+        return true;
+      }
+      return false;
+    };
+
+    /**
+     * After a change made on this screen. The change itself is already in the
+     * list (see `absorb`), so the server is only asked for the status: the
+     * totals, the timer and the mark the copy is kept under from now on.
+     * @param {boolean} [quiet] Leaves what is on screen as it is (a field of the timer bar is being edited).
+     * @returns {Promise<void>}
+     */
+    async function settle(quiet) {
+      const status = await api('/status');
+      state.status = status;
+      state.running = status.running;
+      copy.accept(markOf(status));
+      checkedAt = Date.now();
+      copy.put('status', status);
+      copy.update('projects', state.projects);
+      copy.update('tags', state.tags);
+      copy.update(entriesKey(), state.entries);
+      if (quiet) return;
+      paintBar();
+      paintList();
     }
 
     /**
      * The check that runs every minute and when the tab comes back: one small
-     * request. The screen is only loaded again when that answer shows that
-     * something changed somewhere else (another tab, the phone, the AI).
-     * Loading everything every minute read the person's whole history each
-     * time, and an open tab alone could use up the database's daily quota.
+     * request. The lists are only read again when that answer shows that
+     * something changed somewhere else (another tab, the phone, the AI), or
+     * when they are ten minutes old. Reading everything every minute read the
+     * person's whole history each time, and an open tab alone could use up
+     * the database's daily quota.
      * @returns {Promise<void>}
      */
     async function sync() {
       const status = await api('/status');
-      if (mark(status) !== mark(state.status)) { await load(); return; }
+      const old = copy.on ? copy.get(entriesKey()) === null : Date.now() - filledAt > REFILL_AFTER;
+      if (old || markOf(status) !== markOf(state.status)) { await load(status); return; }
       // Nothing changed: only the totals move on, while a timer runs.
       state.status = status;
+      copy.put('status', status);
       paintList();
     }
 
-    /** @returns {Promise<void>} */
-    async function load() {
+    /**
+     * Fills the screen. What the tab keeps is shown at once; the server is
+     * asked for the status, and for the lists only when the status shows that
+     * the copy is not what the server has, when it is too old, or when there
+     * is none.
+     * @param {object} [known] The status, when it has just been asked for.
+     * @returns {Promise<void>}
+     */
+    async function load(known) {
+      if (!state.status) {
+        // The page has just opened: show what the tab keeps while the server answers.
+        const held = [copy.get('projects'), copy.get(entriesKey()), copy.get('tags'), copy.get('status')];
+        if (held.every(function (x) { return x !== null; })) {
+          state.projects = held[0];
+          state.entries = held[1];
+          state.tags = held[2];
+          state.status = held[3];
+          state.running = held[3].running;
+          paintBar();
+          paintList();
+        }
+      }
+      const status = known || await api('/status');
+      copy.check(markOf(status));
+      checkedAt = Date.now();
       const got = await Promise.all([
-        api('/projects?totals=0'),
-        api('/status'),
-        api('/entries?from=' + dayKey(day(1 - windowDays)) + '&limit=2000'),
-        api('/tags'),
+        kept('projects', '/projects?totals=0'),
+        kept(entriesKey(), '/entries?from=' + dayKey(day(1 - windowDays)) + '&limit=2000'),
+        keptTags(),
       ]);
+      if (!copy.on) filledAt = Date.now();
       state.projects = got[0];
-      state.status = got[1];
-      state.running = got[1].running;
-      state.entries = got[2];
-      state.tags = got[3].map(function (t) { return t.tag; });
+      state.entries = got[1];
+      state.tags = got[2];
+      state.status = status;
+      state.running = status.running;
+      copy.put('status', status);
       paintBar();
       paintList();
     }
@@ -1198,7 +1513,7 @@
       if (state.running) await api('/timer/stop', 'POST', {});
       else await api('/timer/start', 'POST', { description: desc.value, project_id: barProject(), billable: bill.checked });
       if (state.running) desc.value = '';
-      await load();
+      await settle();
     }));
     desc.addEventListener('change', safe(patchRunning));
     desc.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' && !state.running) btn.click(); });
@@ -1255,9 +1570,10 @@
       description: { label: 'Description', key: 'by_description', name: function (g) { return g.project ? g.description + ' · ' + g.project : g.description; } },
     };
 
-    const got = await Promise.all([api('/projects?archived=1&totals=0'), api('/tags')]);
+    await recheck();
+    const got = await Promise.all([kept('projects-all', '/projects?archived=1&totals=0'), keptTags()]);
     const projects = got[0];
-    const tags = got[1].map(function (t) { return t.tag; });
+    const tags = got[1];
     const clients = projects.map(function (p) { return p.client; }).filter(function (c, i, a) { return c && a.indexOf(c) === i; }).sort();
 
     /**
@@ -1528,7 +1844,8 @@
 
     /** @returns {Promise<void>} */
     async function loadSummary() {
-      const s = await api('/summary' + query());
+      await recheck();
+      const s = await kept('report:sum:' + query(), '/summary' + query());
       const g = groups[groupBy.value];
       out.replaceChildren(
         stats(s),
@@ -1548,7 +1865,8 @@
 
     /** @returns {Promise<void>} */
     async function loadDetailed() {
-      const got2 = await Promise.all([api('/summary' + query()), api('/entries' + query() + '&limit=1000')]);
+      await recheck();
+      const got2 = await Promise.all([kept('report:sum:' + query(), '/summary' + query()), kept('report:det:' + query(), '/entries' + query() + '&limit=1000')]);
       const s = got2[0];
       const entries = got2[1];
       out.replaceChildren(
@@ -1809,7 +2127,8 @@
 
     /** @returns {Promise<void>} */
     async function load() {
-      const got = await Promise.all([api('/projects?archived=1'), api('/settings')]);
+      await recheck();
+      const got = await Promise.all([kept('projects-sums', '/projects?archived=1'), kept('settings', '/settings')]);
       projects = got[0];
       settings = got[1];
       if (!currency.querySelector('option[value="' + settings.currency + '"]')) currency.appendChild(el('option', { value: settings.currency, text: settings.currency }));
@@ -2000,10 +2319,11 @@
     const back = root.dataset.back || '';
     // This project with its sums (only its own entries are read), and the
     // plain list of the others, for the client suggestions.
+    await recheck();
     const got = await Promise.all([
       api('/projects/' + id).catch(function (err) { if (err.status === 404) return null; throw err; }),
-      api('/settings'),
-      api('/projects?archived=1&totals=0'),
+      kept('settings', '/settings'),
+      kept('projects-all', '/projects?archived=1&totals=0'),
     ]);
     const settings = got[1];
     let p = got[0];
@@ -2245,6 +2565,8 @@
       });
       const data = await res.json().catch(function () { return null; });
       if (!res.ok) throw new Error((data && data.error) || 'Could not read the file (' + res.status + ').');
+      // Entries came in that no screen of this tab knows about: what the tab keeps is no longer right.
+      if (!dryRun) { copy.drop(); checkedAt = 0; }
       return data;
     }
 

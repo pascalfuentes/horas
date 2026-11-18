@@ -174,6 +174,7 @@ src/pages/api/v1/                 token API
 src/pages/mcp/                    MCP server
 src/pages/w/[slug]/               time · reports · projects · integrations
 public/app/horas.js               interface, no build and no dependencies
+public/app/forget.js              empties the copy the time screens keep in the tab, on sign-out
 src/pages/index.astro             landing page
 ```
 
@@ -193,6 +194,14 @@ Decisions worth knowing:
   what was already logged.
 - **Stateless MCP.** Each request builds the server and answers in JSON; there
   is no session to keep, which is what a Worker wants.
+- **The screens read as little as they can.** D1 bills and limits by rows
+  read, so each tab keeps a copy of the person's own lists (entries of the
+  period on show, projects, tags, reports) in `sessionStorage`, for ten minutes
+  at most. A page asks only for `/status` and compares its mark; the lists are
+  read again when the mark shows a change made elsewhere. A change made on the
+  Time screen is applied to the copy from the server's own answer, and any
+  other change throws the copy away. It is separate per person and workspace
+  and emptied on sign-out (`public/app/forget.js`).
 
 ## What's not there yet
 

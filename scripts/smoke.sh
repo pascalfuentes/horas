@@ -342,6 +342,17 @@ check "the only owner is not offered a way out"        "yes"                   "
 check "the dashboard carries the phone menu button"    "yes"                   "$(has /workspaces "$ADMIN" 'data-menu-toggle')"
 check "and the list that button opens"                 "yes"                   "$(has /workspaces "$ADMIN" 'id="nav-menu"')"
 
+# The time screens keep a copy of the person's own lists in the tab, so they do
+# not read the database again on every page (public/app/horas.js). A signed-in
+# page says whose copy it is, and the script that empties the copy is on the
+# pages of both sides of a sign-out.
+check "a signed-in page says whose tab copy it is"     "yes"                   "$(has /workspaces "$ADMIN" "data-person=\"$ADMIN_ID\"")"
+check "and loads what empties that copy on sign-out"   "yes"                   "$(has /workspaces "$ADMIN" '/app/forget.js')"
+LOGIN_PAGE="$(curl -s "$BASE/login")"
+check "the login page empties it too"                  "yes"                   "$(found '/app/forget.js' "$LOGIN_PAGE")"
+check "and names no person"                            "no"                    "$(found 'data-person' "$LOGIN_PAGE")"
+check "the script that empties it is served"           "200"                   "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/app/forget.js")"
+
 # The Security page lists the sessions of the account. Better Auth's own list
 # refuses a session older than `freshAge` (15 minutes) and the page used to die
 # with it, a quarter of an hour after every login: the session is aged here.

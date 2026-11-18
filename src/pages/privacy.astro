@@ -28,7 +28,7 @@ const env = Astro.locals.env;
 const OPERATOR = operator(env);
 /** Without `OPERATOR_NAME` the fallback is the product name, which would read "Clockfolio runs Clockfolio". */
 const named = OPERATOR.name !== APP_NAME;
-const updated = "November 16, 2026";
+const updated = "November 18, 2026";
 const signedIn = Boolean(Astro.locals.user);
 
 const SOCIAL_NAMES = { google: "Google", github: "GitHub" } as const;
@@ -202,6 +202,12 @@ const workRows = [
               <li>
                 <strong>Preferences</strong>: the light or dark theme, the collapsed menu and the order
                 of the project list are saved in your browser's local storage. They never leave your device.
+              </li>
+              <li>
+                <strong>A copy of your own lists, in the tab</strong>: so that a screen does not ask
+                the server again for what it has just shown, the tab you are using keeps your recent
+                entries, projects, tags and reports for up to ten minutes. It stays in that tab, goes
+                away when you close it or sign out, and is never sent anywhere.
               </li>
               <li>
                 <strong>Fonts and scripts</strong> are served by this site itself, not by a third party
