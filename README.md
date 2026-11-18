@@ -78,7 +78,7 @@ curl https://YOUR-DOMAIN/api/v1/status -H "Authorization: Bearer hrs_…"
 | POST | `/timer/start` · `/timer/stop` | optional body: `description`, `project`, `tags`, `billable`, `start`/`end` |
 | GET · POST | `/entries` | filters: `from`, `to`, `project`, `project_id`, `client`, `tag`, `billable`, `q`, `limit` |
 | GET · PATCH · DELETE | `/entries/:id` | |
-| GET · POST | `/projects` | `?archived=1` includes archived ones; `?totals=0` leaves out the sums of the entries (the list with sums reads every entry of the workspace: ask for it only where it is shown) |
+| GET · POST | `/projects` | `?archived=1` includes archived ones; `?totals=0` leaves out the sums of the entries, for a picker or a filter that has no use for them |
 | GET · PATCH · DELETE | `/projects/:id` | one project, with the sums of its own entries |
 | GET | `/summary` | same filters as `/entries`; returns totals, amount and groups by project, client, tag, day and description |
 | GET | `/tags` | tags already used |
@@ -162,6 +162,7 @@ Three things change once this is on:
 ```
 migrations/0006_horas.sql         tables time_project, time_entry, api_token
 migrations/0007_faturamento.sql   project hourly rate and workspace settings
+migrations/0013_project_totals.sql  the sums the project list shows, kept by triggers on time_entry
 src/lib/horas.ts                  core: every time rule, tied to (workspace, person)
 src/lib/horas-api.ts              JSON router, the same for web and token
 src/lib/horas-import.ts           reads backup JSON and CSV files (Clockfolio and Clockify) for import

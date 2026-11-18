@@ -1,4 +1,4 @@
-import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 /**
  * Drizzle mirror of the SQL migrations in `migrations/`.
@@ -297,6 +297,32 @@ export const timeEntry = sqliteTable(
   },
   (t) => [index("time_entry_owner_start_idx").on(t.workspaceId, t.userId, t.start)],
 );
+
+/**
+ * The sums the project list shows, one row per project and person, kept equal
+ * to the entries by triggers — see migration 0013, which also explains the
+ * unit (`ticks` of 1/2^31 of a day) and why only the workspace is a foreign key.
+ */
+export const timeProjectTotal = sqliteTable(
+  "time_project_total",
+  {
+    workspaceId: text("workspaceId").notNull().references(() => organization.id, { onDelete: "cascade" }),
+    projectId: integer("projectId").notNull(),
+    userId: text("userId").notNull(),
+    /** Entries of this person on this project, running timer included. */
+    entries: integer("entries").notNull().default(0),
+    billableEntries: integer("billableEntries").notNull().default(0),
+    /** Time of the finished entries, and of the billable ones among them. */
+    ticks: integer("ticks").notNull().default(0),
+    billableTicks: integer("billableTicks").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.workspaceId, t.projectId, t.userId] })],
+);
+
+/** Holds the per-entry trigger back while an import adds a whole chunk at once — see migration 0013. */
+export const timeTotalHold = sqliteTable("time_total_hold", {
+  workspaceId: text("workspaceId").primaryKey().references(() => organization.id, { onDelete: "cascade" }),
+});
 
 export const apiToken = sqliteTable(
   "api_token",
