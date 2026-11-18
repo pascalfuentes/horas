@@ -1,0 +1,44 @@
+-- Deleting a project made the database walk through every entry it holds,
+-- twice, whatever the workspace: 40,000 rows read to delete an EMPTY project
+-- in a database of 20,000 entries, and 20,000 more for each project of a
+-- workspace being deleted. D1 limits the rows READ per day, and this cost
+-- grew with the entries of everybody, not with those of whoever deleted.
+--
+-- The cause is the foreign key `time_entry.projectId` (ON DELETE SET NULL).
+-- When a project goes, the database itself looks for the entries that point
+-- to it, by `projectId` alone: once to check, once to clear them. The only
+-- index with the project in it began with the workspace (`workspaceId,
+-- projectId`, migration 0011), which is of no use to a search that does not
+-- say the workspace, so both searches read the whole table.
+--
+-- This index begins with the project and replaces that one. A project
+-- belongs to one workspace, so whatever asked the old index for "this project
+-- in this workspace" is served just the same. And an entry still writes the
+-- same number of rows: it is the same index in another order, not one more.
+-- One more index would be one more row written for every entry, and D1
+-- limits the rows WRITTEN per day more tightly than the rows read.
+--
+-- The person and the start come after the workspace, in the order the lists
+-- ask for them ("this person's entries on this project, newest first"). So a
+-- list or a report filtered by project reads the entries of that project
+-- instead of walking through the person's whole history to find them: 18,000
+-- rows read became 800 for a project with 400 entries, and the answer comes
+-- in the same order as before.
+--
+-- The entries on no project are in the index as well, together (`projectId`
+-- NULL, then the workspace). That is what lets an import count them without
+-- reading the others: see `importData` in src/lib/horas.ts.
+--
+-- What migration 0011 built the old index for, adding up the entries of
+-- every project of a workspace, is no longer done: migration 0013 keeps those
+-- sums. The version of the code from before 0013 still runs on this index,
+-- but its list of projects reads twice as many rows.
+--
+-- COST, once: building an index reads every entry twice and writes one row
+-- per entry (measured: 41,013 rows read and 20,007 written for 20,006
+-- entries). With the day's write quota nearly spent, wait for the reset.
+--
+-- The new one is created before the old one is dropped, so there is no moment
+-- without an index by project, and nothing is lost if the creation fails.
+CREATE INDEX "time_entry_project_owner_start_idx" ON "time_entry" ("projectId", "workspaceId", "userId", "start");
+DROP INDEX "time_entry_project_idx";

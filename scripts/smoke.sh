@@ -515,6 +515,52 @@ tk "/projects/$TWO" DELETE >/dev/null
 check "a deleted project leaves its entries, without a project"  '"n": 3'  "$(sql "SELECT COUNT(*) AS n FROM time_entry e JOIN organization o ON o.id = e.workspaceId WHERE o.slug = '$WS' AND e.projectId IS NULL")"
 check "and takes its sums along, and only its own"      '"missing": 0, "extra": 0'  "$(totals_state)"
 check "the other project still answers as before"       "seconds=0 entries=0 billable=0 hours=0.5 amount=0;"       "$(tk "/projects/$ONE" | sums)"
+# When a project goes, the database itself looks for the entries that point to
+# it, by the project alone. Without an index that begins with the project it
+# walked through every entry of every workspace to find them, twice, even for
+# a project with no entries (migration 0014).
+PLAN="$(sql "EXPLAIN QUERY PLAN DELETE FROM time_project WHERE id = $ONE")"
+check "deleting a project finds its entries through an index"  "time_entry_project_owner_start_idx (projectId=?)"  "$PLAN"
+check "and does not walk through all the entries"       "no"            "$(found 'SCAN time_entry' "$PLAN")"
+
+# Importing again. A row of a file repeats a stored entry when the start, the
+# end and the description are all the same, for the same person, and such a
+# row is skipped. The stored entries are no longer read from the first to the
+# last date of the file whatever lies in between (two rows years apart made
+# that the person's whole history). They are read between those dates only
+# while that is no more than the file has rows, and start by start otherwise.
+# Both ways have to tell the same duplicates.
+imp() { curl -s -X POST "$BASE/api/v1/import${2:-}" -H "Authorization: Bearer ${3:-$TOKEN_SMOKE}" -H 'Content-Type: text/csv' --data-binary @"$1"; }
+# Three entries are stored between 09:00 and 11:00 and this file has two
+# starts: they are looked up start by start.
+printf '%s\n' 'description,project,start,end,billable' \
+  'from a file,,2026-11-03T09:00:00Z,2026-11-03T09:15:00Z,yes' \
+  'from a file,,2026-11-03T09:00:00Z,2026-11-03T09:16:00Z,yes' \
+  'from another file,,2026-11-03T09:00:00Z,2026-11-03T09:15:00Z,yes' \
+  'from a file,,2026-11-03T09:00:00Z,2026-11-03T09:16:00Z,yes' \
+  'on no project,,2026-11-03T11:00:00Z,2026-11-03T11:05:00Z,no' > "$TMP/again.csv"
+AGAIN="$(imp "$TMP/again.csv" '?dry_run=1')"
+check "the same start with another end or description is a new entry"  '"to_import":2'  "$AGAIN"
+check "a stored entry and a row repeated in the file are duplicates"   '"duplicates":3' "$AGAIN"
+check "for another person none of it is stored"         '"to_import":4'  "$(imp "$TMP/again.csv" '?dry_run=1' "$TOKEN_OTHER")"
+# This one has four starts for the same three entries: one read of the stretch.
+printf '%s\n' 'description,project,start,end,billable' \
+  'from a file,,2026-11-03T09:00:00Z,2026-11-03T09:15:00Z,yes' \
+  'on a new project,,2026-11-03T10:00:00Z,2026-11-03T10:20:00Z,no' \
+  'on no project,,2026-11-03T11:00:00Z,2026-11-03T11:05:00Z,no' \
+  'later that day,,2026-11-03T12:00:00Z,2026-11-03T12:05:00Z,no' > "$TMP/stretch.csv"
+STRETCH="$(imp "$TMP/stretch.csv" '?dry_run=1')"
+check "a file that covers one stretch tells the same duplicates"  '"duplicates":3'  "$STRETCH"
+check "and what is new in it"                           '"to_import":1'  "$STRETCH"
+check "the new rows are imported"                       '"imported":2'   "$(imp "$TMP/again.csv")"
+check "and are duplicates from then on"                 '"duplicates":5' "$(imp "$TMP/again.csv")"
+# An import refuses to take a workspace past its limit of entries. It counts
+# them without walking through them all: the ones on a project are in the
+# sums the database keeps, the ones on no project come from the index.
+check "the count an import uses is the number of entries"  '"differ": 0'  "$(sql "SELECT COUNT(*) AS differ FROM organization o
+         WHERE (SELECT COUNT(*) FROM time_entry e WHERE e.workspaceId = o.id)
+            != (SELECT COALESCE(SUM(entries), 0) FROM time_project_total t WHERE t.workspaceId = o.id)
+             + (SELECT COUNT(*) FROM time_entry e WHERE e.workspaceId = o.id AND e.projectId IS NULL)")"
 
 check "now the former owner can leave"                 "ok=ok_left"            "$(post "$ADMIN" "/api/w/$WS/members" action=leave)"
 check "and loses access immediately"                   "404"                   "$(get "/w/$WS" "$ADMIN")"

@@ -163,6 +163,7 @@ Three things change once this is on:
 migrations/0006_horas.sql         tables time_project, time_entry, api_token
 migrations/0007_faturamento.sql   project hourly rate and workspace settings
 migrations/0013_project_totals.sql  the sums the project list shows, kept by triggers on time_entry
+migrations/0014_entry_project_first_index.sql  the index of entries by project, beginning with the project
 src/lib/horas.ts                  core: every time rule, tied to (workspace, person)
 src/lib/horas-api.ts              JSON router, the same for web and token
 src/lib/horas-import.ts           reads backup JSON and CSV files (Clockfolio and Clockify) for import

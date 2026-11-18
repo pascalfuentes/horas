@@ -403,8 +403,10 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
    * `one` narrows it to a single project (bound as ?2).
    *
    * The running timers are read through the index that holds nothing else
-   * (`time_entry_one_running_idx`), by name: left to choose, the database
-   * prefers the index by project and walks through every entry to find them.
+   * (`time_entry_one_running_idx`), by name, so that the choice does not
+   * depend on which other indexes there are: with the index by project as it
+   * was before migration 0014, the database preferred that one and walked
+   * through every entry to find them.
    */
   const projectSumsSql = (one: boolean) => `
        SELECT "projectId", "userId", "entries", "billableEntries", "ticks", "billableTicks"
@@ -962,6 +964,67 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
   }
 
   /**
+   * This person's entries that start at one of the given instants (sorted,
+   * none repeated): the only stored entries a row of an imported file can be
+   * a duplicate of, since a duplicate has the same start.
+   *
+   * A file usually covers one stretch of time, and then everything stored
+   * between its first and its last start is what it has rows for, or less:
+   * one read of that stretch answers, and it reads nothing when the stretch
+   * is new. But a file can also hold a few rows years apart, and the stretch
+   * between them is the person's whole history (17,600 rows read to check a
+   * file of 600). So that read stops as soon as it has more entries than the
+   * file has starts, and then the entries are fetched start by start instead.
+   * Either way the rows read are bounded by the size of the file, not by what
+   * is stored. (The second way is not the only one because the list of starts
+   * is itself counted as rows read, one per start, before anything is found.)
+   */
+  async function entriesStartingAt(starts: string[]) {
+    type Stored = { start: string; end: string | null; description: string };
+    const between = await all<Stored>(
+      `SELECT "start", "end", "description" FROM "time_entry"
+        WHERE "workspaceId" = ?1 AND "userId" = ?2 AND "start" >= ?3 AND "start" <= ?4
+        LIMIT ?5`,
+      ws,
+      uid,
+      starts[0],
+      starts[starts.length - 1],
+      starts.length + 1,
+    );
+    if (between.length <= starts.length) return between;
+    return all<Stored>(
+      `SELECT e."start", e."end", e."description"
+         FROM json_each(?3) s CROSS JOIN "time_entry" e
+        WHERE e."workspaceId" = ?1 AND e."userId" = ?2 AND e."start" = s.value`,
+      ws,
+      uid,
+      JSON.stringify(starts),
+    );
+  }
+
+  /**
+   * How many entries the workspace holds, of every member, without walking
+   * through them all. Those on a project are already counted, per project and
+   * person, in `time_project_total` (a running timer included). Those on no
+   * project are counted from the index by project, where they sit together
+   * (migration 0014). So this reads one row per project and person plus one
+   * per entry WITHOUT a project, instead of one per entry.
+   *
+   * A count kept for the entries on no project as well would make this a
+   * fixed handful of rows, at the price of one more row written for each of
+   * those entries. Rows written are the tighter limit, and this is only
+   * asked when a file is imported.
+   */
+  async function countEntries(): Promise<number> {
+    const [held] = await all<{ n: number }>(
+      `SELECT (SELECT COALESCE(SUM("entries"), 0) FROM "time_project_total" WHERE "workspaceId" = ?1)
+            + (SELECT COUNT(*) FROM "time_entry" WHERE "workspaceId" = ?1 AND "projectId" IS NULL) AS n`,
+      ws,
+    );
+    return held?.n ?? 0;
+  }
+
+  /**
    * Imports a parsed file. With `dryRun`, nothing is written and the result
    * says what WOULD happen — that is what the preview on screen shows.
    *
@@ -997,16 +1060,8 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     // Duplicates: against what is already stored, and within the file itself.
     const seen = new Set<string>();
     if (ready.length) {
-      const starts = ready.map((r) => r.start).sort();
-      const existing = await all<{ start: string; end: string | null; description: string }>(
-        `SELECT "start", "end", "description" FROM "time_entry"
-          WHERE "workspaceId" = ?1 AND "userId" = ?2 AND "start" >= ?3 AND "start" <= ?4`,
-        ws,
-        uid,
-        starts[0],
-        starts[starts.length - 1],
-      );
-      for (const e of existing) seen.add(`${e.start}|${e.end}|${e.description}`);
+      const starts = [...new Set(ready.map((r) => r.start))].sort();
+      for (const e of await entriesStartingAt(starts)) seen.add(`${e.start}|${e.end}|${e.description}`);
     }
     const fresh = ready.filter((r) => {
       const key = `${r.start}|${r.end}|${r.description}`;
@@ -1035,8 +1090,7 @@ export function createStore(db: D1Database, ctx: { workspaceId: string; userId: 
     if (existingProjects.length + wanted.size > MAX_PROJECTS) {
       throw new HorasError(`This import would exceed the limit of ${MAX_PROJECTS} projects per workspace.`);
     }
-    const held = await first<{ n: number }>('SELECT COUNT(*) AS n FROM "time_entry" WHERE "workspaceId" = ?1', ws);
-    if ((held?.n ?? 0) + fresh.length > MAX_ENTRIES) {
+    if ((await countEntries()) + fresh.length > MAX_ENTRIES) {
       throw new HorasError(`This import would exceed the limit of ${MAX_ENTRIES.toLocaleString("en-US")} entries per workspace.`);
     }
 
